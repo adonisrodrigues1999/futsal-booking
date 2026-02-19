@@ -1,0 +1,193 @@
+{% extends 'base/base.html' %}
+{% block title %}Create Ground{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-xl-10">
+    <div class="page-shell">
+      <div class="page-header mb-2">
+        <div>
+          <h4>Create Ground for {{ owner.name }}</h4>
+          <p class="page-subtitle">Set base schedule and optional custom slot pricing blocks.</p>
+        </div>
+      </div>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="post" id="create-ground-form">
+        {% csrf_token %}
+
+        <div class="panel-soft mb-3">
+          <h6 class="panel-title">Ground Details</h6>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="{{ form.name.id_for_label }}" class="form-label">Ground Name</label>
+              {{ form.name }}
+              {% if form.name.errors %}<div class="text-danger small">{% for error in form.name.errors %}{{ error }}{% endfor %}</div>{% endif %}
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="{{ form.location.id_for_label }}" class="form-label">Location</label>
+              {{ form.location }}
+              {% if form.location.errors %}<div class="text-danger small">{% for error in form.location.errors %}{{ error }}{% endfor %}</div>{% endif %}
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="{{ form.day_price.id_for_label }}" class="form-label">Day Price (₹)</label>
+              {{ form.day_price }}
+              {% if form.day_price.errors %}<div class="text-danger small">{% for error in form.day_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              <div class="form-text">Used for daytime slots (example: 6 AM - 6 PM).</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="{{ form.night_price.id_for_label }}" class="form-label">Night Price (₹)</label>
+              {{ form.night_price }}
+              {% if form.night_price.errors %}<div class="text-danger small">{% for error in form.night_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              <div class="form-text">Used for nighttime slots (example: 6 PM - 1 AM).</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-soft mb-3">
+          <h6 class="panel-title">Operating Hours</h6>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Opening Time</label>
+              <div class="time-select-row">
+                <select class="form-select time-hour" data-target="opening_time_hour">
+                  <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                  <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+                  <option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                </select>
+                <select class="form-select time-minute" data-target="opening_time_min"><option value="00">:00</option><option value="30">:30</option></select>
+                <select class="form-select time-ampm" data-target="opening_time_ampm"><option value="AM">AM</option><option value="PM">PM</option></select>
+              </div>
+              <input type="hidden" name="opening_time" id="opening_time_hidden" />
+            </div>
+
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Closing Time</label>
+              <div class="time-select-row">
+                <select class="form-select time-hour" data-target="closing_time_hour">
+                  <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                  <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+                  <option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                </select>
+                <select class="form-select time-minute" data-target="closing_time_min"><option value="00">:00</option><option value="30">:30</option></select>
+                <select class="form-select time-ampm" data-target="closing_time_ampm"><option value="AM">AM</option><option value="PM">PM</option></select>
+              </div>
+              <input type="hidden" name="closing_time" id="closing_time_hidden" />
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-soft mb-3">
+          <h6 class="panel-title">Optional Slot Ranges</h6>
+          <p class="text-muted mb-3">Leave defaults if you do not need custom slot ranges.</p>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Slot 1 Start</label>
+              <div class="time-select-row">
+                <select class="form-select" id="slot1_start_hour"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select>
+                <select class="form-select" id="slot1_start_min"><option value="00">:00</option><option value="30">:30</option></select>
+                <select class="form-select" id="slot1_start_ampm"><option>AM</option><option>PM</option></select>
+              </div>
+              <input type="hidden" name="slot_1_start" id="slot_1_start_hidden" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Slot 1 End</label>
+              <div class="time-select-row">
+                <select class="form-select" id="slot1_end_hour"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select>
+                <select class="form-select" id="slot1_end_min"><option value="00">:00</option><option value="30">:30</option></select>
+                <select class="form-select" id="slot1_end_ampm"><option>AM</option><option>PM</option></select>
+              </div>
+              <input type="hidden" name="slot_1_end" id="slot_1_end_hidden" />
+            </div>
+          </div>
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Slot 1 Price</label>
+              {{ form.slot_1_price }}
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Slot 2 Start</label>
+              <div class="time-select-row">
+                <select class="form-select" id="slot2_start_hour"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select>
+                <select class="form-select" id="slot2_start_min"><option value="00">:00</option><option value="30">:30</option></select>
+                <select class="form-select" id="slot2_start_ampm"><option>AM</option><option>PM</option></select>
+              </div>
+              <input type="hidden" name="slot_2_start" id="slot_2_start_hidden" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Slot 2 End</label>
+              <div class="time-select-row">
+                <select class="form-select" id="slot2_end_hour"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select>
+                <select class="form-select" id="slot2_end_min"><option value="00">:00</option><option value="30">:30</option></select>
+                <select class="form-select" id="slot2_end_ampm"><option>AM</option><option>PM</option></select>
+              </div>
+              <input type="hidden" name="slot_2_end" id="slot_2_end_hidden" />
+            </div>
+          </div>
+          <div class="row mb-1">
+            <div class="col-md-6">
+              <label class="form-label">Slot 2 Price</label>
+              {{ form.slot_2_price }}
+            </div>
+          </div>
+        </div>
+
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">{% for error in form.non_field_errors %}{{ error }}{% endfor %}</div>
+        {% endif %}
+
+        <div class="d-flex flex-wrap gap-2 justify-content-between">
+          <a href="{% url 'admin_dashboard' %}" class="btn btn-outline-secondary">Back to Dashboard</a>
+          <button type="submit" class="btn btn-success">Create Ground</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function to24(hour, minute, ampm) {
+  hour = parseInt(hour, 10);
+  if (ampm === 'AM') {
+    if (hour === 12) hour = 0;
+  } else if (hour !== 12) {
+    hour += 12;
+  }
+  return hour.toString().padStart(2, '0') + ':' + minute;
+}
+
+function fillGroundTimeHiddenFields() {
+  const oh = document.querySelector('select[data-target="opening_time_hour"]').value;
+  const om = document.querySelector('select[data-target="opening_time_min"]').value;
+  const oa = document.querySelector('select[data-target="opening_time_ampm"]').value;
+  document.getElementById('opening_time_hidden').value = to24(oh, om, oa);
+
+  const ch = document.querySelector('select[data-target="closing_time_hour"]').value;
+  const cm = document.querySelector('select[data-target="closing_time_min"]').value;
+  const ca = document.querySelector('select[data-target="closing_time_ampm"]').value;
+  document.getElementById('closing_time_hidden').value = to24(ch, cm, ca);
+
+  document.getElementById('slot_1_start_hidden').value = to24(document.getElementById('slot1_start_hour').value, document.getElementById('slot1_start_min').value, document.getElementById('slot1_start_ampm').value);
+  document.getElementById('slot_1_end_hidden').value = to24(document.getElementById('slot1_end_hour').value, document.getElementById('slot1_end_min').value, document.getElementById('slot1_end_ampm').value);
+  document.getElementById('slot_2_start_hidden').value = to24(document.getElementById('slot2_start_hour').value, document.getElementById('slot2_start_min').value, document.getElementById('slot2_start_ampm').value);
+  document.getElementById('slot_2_end_hidden').value = to24(document.getElementById('slot2_end_hour').value, document.getElementById('slot2_end_min').value, document.getElementById('slot2_end_ampm').value);
+}
+
+document.getElementById('create-ground-form').addEventListener('submit', fillGroundTimeHiddenFields);
+</script>
+{% endblock %}

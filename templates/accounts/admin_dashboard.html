@@ -1,0 +1,116 @@
+{% extends 'base/base.html' %}
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+  <div class="page-header">
+    <h2>Admin Dashboard</h2>
+    <a href="{% url 'create_ground_owner' %}" class="btn btn-success">Create Ground Owner</a>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card metric-card h-100">
+        <div class="card-body">
+          <h6 class="text-muted mb-2">Ground Owners</h6>
+          <h2 class="mb-0">{{ total_owners }}</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card metric-card h-100">
+        <div class="card-body">
+          <h6 class="text-muted mb-2">Total Grounds</h6>
+          <h2 class="mb-0">{{ total_grounds }}</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card metric-card h-100">
+        <div class="card-body">
+          <h6 class="text-muted mb-2">Customers</h6>
+          <h2 class="mb-0">{{ total_customers }}</h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="mb-3">Ground Owners</h5>
+      <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Grounds</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for owner in ground_owners %}
+            <tr>
+              <td>{{ owner.name }}</td>
+              <td>{{ owner.email }}</td>
+              <td>{{ owner.phone_number }}</td>
+              <td>{{ owner.ground_set.count }}</td>
+              <td>
+                <a href="{% url 'create_ground' owner.id %}" class="btn btn-sm btn-success">Create Ground</a>
+                <a href="#" class="btn btn-sm btn-outline-primary">View Grounds</a>
+                <a href="#" class="btn btn-sm btn-outline-secondary">Edit</a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-center">No ground owners yet</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <h5 class="mb-3">All Grounds</h5>
+      <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Location</th>
+              <th>Owner</th>
+              <th>Price/Hour</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ground in grounds %}
+            <tr>
+              <td>{{ ground.name }}</td>
+              <td>{{ ground.location }}</td>
+              <td>{{ ground.owner.name }}</td>
+              <td>${{ ground.price_per_hour }}</td>
+              <td>
+                {% if ground.is_available %}
+                  <span class="badge bg-success">Available</span>
+                {% else %}
+                  <span class="badge bg-danger">Unavailable</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-center">No grounds yet</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

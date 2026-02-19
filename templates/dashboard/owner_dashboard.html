@@ -1,0 +1,245 @@
+{% extends 'base/base.html' %}
+{% block content %}
+
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h3 class="mb-0">Owner Dashboard</h3>
+      <p class="page-subtitle">Overview of activity across your grounds</p>
+    </div>
+    <a href="/owner/manual-booking/" class="btn btn-primary">Manual Booking</a>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-md-3">
+      <div class="card p-3 shadow-sm metric-card">
+        <div class="d-flex align-items-center justify-content-between">
+          <div>
+            <div class="small text-muted">Bookings (month)</div>
+            <div class="h3 mb-0" data-count>{{ stats.total_bookings }}</div>
+          </div>
+          <div class="ms-3 metric-icon">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+              <rect x="3" y="5" width="18" height="16" rx="2" stroke="#15803d" stroke-width="1.5"/>
+              <path d="M16 3v4M8 3v4" stroke="#15803d" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-md-3">
+      <div class="card p-3 shadow-sm metric-card">
+        <div class="d-flex align-items-center justify-content-between">
+          <div>
+            <div class="small text-muted">Revenue</div>
+            <div class="h3 mb-0" data-count>₹{{ stats.revenue }}</div>
+          </div>
+          <div class="ms-3 metric-icon">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+              <rect x="2" y="7" width="20" height="10" rx="2" stroke="#15803d" stroke-width="1.5"/>
+              <circle cx="12" cy="12" r="2.2" stroke="#f59e0b" stroke-width="1.5"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-md-3">
+      <div class="card p-3 shadow-sm metric-card">
+        <div class="d-flex align-items-center justify-content-between">
+          <div>
+            <div class="small text-muted">Peak hour</div>
+            <div class="h3 mb-0">{{ stats.peak_hour }}</div>
+          </div>
+          <div class="ms-3 metric-icon">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="8" stroke="#f59e0b" stroke-width="1.5"/>
+              <path d="M12 8v5l3 2" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-md-3">
+      <div class="card p-3 shadow-sm metric-card">
+        <div class="d-flex align-items-center justify-content-between">
+          <div>
+            <div class="small text-muted">Active grounds</div>
+            <div class="h3 mb-0">{{ owner_bookings|length }}</div>
+          </div>
+          <div class="ms-3 metric-icon">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 17h3v-7" stroke="#15803d" stroke-width="1.6" stroke-linecap="round"/>
+              <path d="M10 17h3v-4" stroke="#15803d" stroke-width="1.6" stroke-linecap="round"/>
+              <path d="M17 17h3v-10" stroke="#15803d" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="card p-3 shadow-sm">
+        <h6>Bookings (Last 14 days)</h6>
+        <canvas id="bookingsChart" height="180"></canvas>
+      </div>
+
+      <div class="card p-3 shadow-sm mt-3">
+        <h6 class="mb-3">Recent Bookings</h6>
+        <div class="list-group list-group-flush">
+          {% for booking in owner_bookings %}
+            <div class="list-group-item d-flex justify-content-between align-items-start gap-3">
+              <div>
+                <div class="fw-semibold">{{ booking.slot.ground.name }}</div>
+                <div class="small text-muted">{{ booking.slot.date }} • {{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</div>
+                <div class="small mt-1">Customer: <strong>{{ booking.customer_name }}</strong> • {{ booking.customer_phone }}</div>
+              </div>
+              <div class="text-end">
+                <div class="small text-muted">₹{{ booking.total_amount }}</div>
+                <a href="/owner/cancel/{{ booking.id }}/" class="btn btn-sm btn-outline-danger mt-2">Cancel</a>
+              </div>
+            </div>
+          {% empty %}
+            <div class="p-3 text-center text-muted">No recent bookings.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card p-3 shadow-sm mb-3">
+        <h6>Peak Hours Heatmap</h6>
+        <canvas id="heatmapChart" height="200"></canvas>
+      </div>
+
+      <div class="card p-3 shadow-sm">
+        <h6>Quick Actions</h6>
+        <div class="d-grid gap-2">
+          <a href="/owner/manual-booking/" class="btn btn-outline-primary">Create manual booking</a>
+          <a href="/grounds/" class="btn btn-outline-secondary">Manage Grounds</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const labels = {{ chart_labels|safe }};
+  const data = {{ chart_data|safe }};
+  const heatLabels = {{ heatmap_labels|safe }};
+  const heatData = {{ heatmap_data|safe }};
+
+  function getChartFonts() {
+    const vw = Math.max(window.innerWidth || 1024, 320);
+    const base = Math.min(16, Math.max(11, Math.round(vw / 100)));
+    const ratio = window.devicePixelRatio || 1;
+    return {
+      tick: Math.round(base * 0.95 * ratio),
+      tooltipTitle: Math.round(base * ratio),
+      tooltipBody: Math.round(base * 0.95 * ratio)
+    };
+  }
+
+  const bookingsCtx = document.getElementById('bookingsChart').getContext('2d');
+  const heatCtx = document.getElementById('heatmapChart').getContext('2d');
+
+  function createGrad(ctx) {
+    const g = ctx.createLinearGradient(0, 0, 0, 220);
+    g.addColorStop(0, 'rgba(22, 163, 74, 0.28)');
+    g.addColorStop(1, 'rgba(22, 163, 74, 0.04)');
+    return g;
+  }
+
+  let fonts = getChartFonts();
+
+  const bookingsChart = new Chart(bookingsCtx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Bookings',
+        data: data,
+        borderColor: '#15803d',
+        backgroundColor: createGrad(bookingsCtx),
+        tension: 0.35,
+        fill: true,
+        pointRadius: 4,
+        pointBackgroundColor: '#f59e0b'
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(20, 34, 23, 0.95)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          padding: 10,
+          titleFont: { size: fonts.tooltipTitle },
+          bodyFont: { size: fonts.tooltipBody },
+          callbacks: { label: function(context) { return ' ' + context.parsed.y + ' bookings'; } }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#4e6152', maxRotation: 0, font: { size: fonts.tick } }, grid: { color: 'rgba(20, 34, 23, 0.08)' } },
+        y: { beginAtZero: true, ticks: { color: '#4e6152', font: { size: fonts.tick } }, grid: { color: 'rgba(20, 34, 23, 0.08)' } }
+      }
+    }
+  });
+
+  const heatChart = new Chart(heatCtx, {
+    type: 'bar',
+    data: {
+      labels: heatLabels,
+      datasets: [{
+        label: 'Bookings per hour',
+        data: heatData,
+        backgroundColor: heatData.map(v => v > 0 ? '#15803d' : '#cbdccf')
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(20, 34, 23, 0.95)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          titleFont: { size: fonts.tooltipTitle },
+          bodyFont: { size: fonts.tooltipBody }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#4e6152', font: { size: fonts.tick } } },
+        y: { beginAtZero: true, ticks: { color: '#4e6152', font: { size: fonts.tick } } }
+      }
+    }
+  });
+
+  let resizeTimer = null;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function() {
+      fonts = getChartFonts();
+      bookingsChart.options.scales.x.ticks.font.size = fonts.tick;
+      bookingsChart.options.scales.y.ticks.font.size = fonts.tick;
+      bookingsChart.options.plugins.tooltip.titleFont.size = fonts.tooltipTitle;
+      bookingsChart.options.plugins.tooltip.bodyFont.size = fonts.tooltipBody;
+      bookingsChart.update();
+
+      heatChart.options.scales.x.ticks.font.size = fonts.tick;
+      heatChart.options.scales.y.ticks.font.size = fonts.tick;
+      heatChart.options.plugins.tooltip.titleFont.size = fonts.tooltipTitle;
+      heatChart.options.plugins.tooltip.bodyFont.size = fonts.tooltipBody;
+      heatChart.update();
+    }, 120);
+  });
+</script>
+
+{% endblock %}

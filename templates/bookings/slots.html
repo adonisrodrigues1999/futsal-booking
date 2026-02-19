@@ -1,0 +1,105 @@
+{% extends 'base/base.html' %}
+{% block content %}
+
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h4>{{ ground.name }} Slots</h4>
+      <p class="page-subtitle">Choose a time window and confirm your booking in one tap.</p>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      {% if prev_date %}<a class="btn btn-sm btn-outline-primary" href="?date={{ prev_date|date:'Y-m-d' }}">Prev</a>{% endif %}
+      <span class="fw-semibold">{{ selected_date }}</span>
+      <a class="btn btn-sm btn-outline-primary" href="?date={{ next_date|date:'Y-m-d' }}">Next</a>
+    </div>
+  </div>
+
+  <div class="slot-livebar mb-3">
+    <div class="live-chip">Available <span id="live-available-count">0</span></div>
+    <div class="live-chip">Booked <span id="live-booked-count">0</span></div>
+    <div class="live-chip">Your Slots <span id="live-your-count">0</span></div>
+  </div>
+
+  <div class="slots-grid">
+    {% for obj in slots %}
+      {% with slot=obj.slot is_past=obj.is_past %}
+      <div class="slot-wrap">
+        <div class="slot-card" role="group" aria-label="Slot {{ slot.id }}" data-slot-id="{{ slot.id }}">
+          <div class="slot-meta">
+            <div class="slot-time">{{ slot.start_time|time:"g:i A" }} to {{ slot.end_time|time:"g:i A" }}</div>
+            <div class="slot-price">₹{{ obj.price }}</div>
+          </div>
+
+          {% if slot.is_booked %}
+            <div class="slot-body muted">
+              {% if obj.booking and obj.user_booking %}
+                <div class="slot-status">
+                  <span class="d-none" data-slot-state="your">your</span>
+                  Your booking
+                  {% if obj.cancel_no_refund %}
+                    <span class="d-block text-danger small mt-1">Cancel now: amount will not be refunded.</span>
+                  {% endif %}
+                </div>
+                {% if obj.can_cancel %}
+                  {% if obj.cancel_no_refund %}
+                    <a href="{% url 'cancel_booking' obj.booking.id %}" class="btn btn-outline-danger slot-action" data-confirm-message="This cancellation is within 4 hours of slot time. Amount will not be refunded.">Cancel</a>
+                  {% else %}
+                    <a href="{% url 'cancel_booking' obj.booking.id %}" class="btn btn-outline-danger slot-action" data-confirm-message="Cancel this booking?">Cancel</a>
+                  {% endif %}
+                {% else %}
+                  <button class="btn btn-outline-secondary slot-action" disabled aria-disabled="true">Past booking</button>
+                {% endif %}
+              {% else %}
+                <div class="slot-status"><span data-slot-state="booked">Booked</span></div>
+                <button class="btn btn-outline-secondary slot-action" disabled aria-disabled="true">Booked</button>
+              {% endif %}
+            </div>
+          {% else %}
+            {% if is_past %}
+              <div class="slot-body muted">
+                <div class="slot-status"><span data-slot-state="past">Past</span></div>
+                <button class="btn btn-outline-secondary slot-action" disabled aria-disabled="true">Past</button>
+              </div>
+            {% else %}
+              <div class="slot-body">
+                <div class="slot-status text-success"><span data-slot-state="available">Available</span></div>
+                <button class="btn btn-primary slot-action" onclick="showConfirmModal({{ slot.id }}, '{{ slot.start_time|time:"g:i A" }}', '{{ slot.end_time|time:"g:i A" }}', {{ obj.price }})">Book</button>
+              </div>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+      {% endwith %}
+    {% empty %}
+      <div class="col-12"><p class="text-muted mb-0">No slots available for this date.</p></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="ad-shell text-center mt-4">Sponsor Slot: mobile footer</div>
+
+<div class="modal fade" id="confirmModalGlobal" tabindex="-1" aria-labelledby="confirmModalGlobalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmModalGlobalLabel">Confirm Booking</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p id="cm-slot-time"></p>
+        <p id="cm-ground"></p>
+        <p id="cm-price"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="cm-confirm-btn">Confirm Booking</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.currentGroundName = {{ ground.name|escapejs|default:'""' }};
+</script>
+
+{% endblock %}

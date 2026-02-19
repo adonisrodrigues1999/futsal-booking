@@ -1,0 +1,96 @@
+{% extends 'base/base.html' %}
+{% block title %}Manual Booking{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h2>Manual Booking</h2>
+      <p class="page-subtitle">Create an on-call booking for walk-in customers.</p>
+    </div>
+  </div>
+
+  <div class="panel-soft mb-3">
+    <h6 class="panel-title">Find Available Slots</h6>
+    <form method="get">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-6">
+          <label for="ground" class="form-label">Select Ground</label>
+          <select name="ground" id="ground" class="form-select">
+            <option value="">Choose ground...</option>
+            {% for g in grounds %}
+              <option value="{{ g.id }}" {% if selected_ground and g.id == selected_ground.id %}selected{% endif %}>{{ g.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label for="date" class="form-label">Select Date</label>
+          <input type="date" name="date" id="date" class="form-control" value="{% if selected_date %}{{ selected_date|date:'Y-m-d' }}{% endif %}">
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-outline-primary w-100">Check Slots</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  {% if selected_ground and selected_date %}
+    <div class="panel-soft mb-4">
+      <h6 class="panel-title">Create Booking</h6>
+      <form method="post">
+        {% csrf_token %}
+        <div class="row g-3 align-items-end">
+          <div class="col-md-5">
+            <label for="slot" class="form-label">Select Slot</label>
+            <select name="slot" id="slot" class="form-select" required>
+              <option value="">Choose a slot...</option>
+              {% for obj in slots %}
+                {% with slot=obj.slot %}
+                <option value="{{ slot.id }}">{{ slot.start_time }} - {{ slot.end_time }} (₹{{ obj.price }})</option>
+                {% endwith %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label for="name" class="form-label">Customer Name</label>
+            <input type="text" name="name" id="name" class="form-control" required>
+          </div>
+          <div class="col-md-3">
+            <label for="phone" class="form-label">Phone Number</label>
+            <input type="tel" name="phone" id="phone" class="form-control" required>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary mt-3">Create Manual Booking</button>
+      </form>
+    </div>
+  {% else %}
+    <div class="alert alert-info">Select a ground and date to create a manual booking.</div>
+  {% endif %}
+
+  <div>
+    <h5 class="mb-3">Available Slots</h5>
+    <div class="row g-3">
+      {% for obj in slots %}
+        <div class="col-md-6 col-lg-4">
+          <div class="card h-100">
+            <div class="card-body">
+              {% with slot=obj.slot %}
+                <h6 class="card-title mb-2">{{ slot.ground.name }}</h6>
+                <p class="card-text mb-0">
+                  <strong>Date:</strong> {{ slot.date }}<br>
+                  <strong>Time:</strong> {{ slot.start_time }} - {{ slot.end_time }}<br>
+                  <strong>Price:</strong> ₹{{ obj.price }}
+                </p>
+              {% endwith %}
+            </div>
+          </div>
+        </div>
+      {% empty %}
+        <div class="col-12">
+          <p class="text-muted mb-0">No slots found for the selected criteria.</p>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

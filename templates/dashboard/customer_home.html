@@ -1,0 +1,35 @@
+{% extends 'base/base.html' %}
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="hero-card p-4 p-md-5 mb-4">
+  <div class="row align-items-center g-4">
+    <div class="col-lg-8">
+      <h2 class="mb-2">Play under lights, not under stress.</h2>
+      <p class="text-muted mb-3">Browse local grounds, lock a slot instantly, and keep all your bookings in one place.</p>
+      <div class="d-flex flex-wrap gap-2">
+        <a href="/grounds/" class="btn btn-primary btn-lg">Book a Ground</a>
+        <a href="/my-bookings/" class="btn btn-outline-light btn-lg">My Bookings</a>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="hero-inline-stats">
+        <div class="hero-stat">
+          <div class="label">Booking Time</div>
+          <div class="value">30 sec</div>
+        </div>
+        <div class="hero-stat">
+          <div class="label">Support</div>
+          <div class="value">24x7</div>
+        </div>
+        <div class="hero-stat">
+          <div class="label">Reschedule</div>
+          <div class="value">Easy</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ad-shell text-center">Sponsor Slot: bottom banner</div>
+{% endblock %}
