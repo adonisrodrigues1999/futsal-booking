@@ -13,7 +13,7 @@ urlpatterns = [
     path('my-bookings/', views.my_bookings),
 
     path('dashboard/owner/', views.owner_dashboard, name='owner_dashboard'),
-    path('owner/cancel/<int:booking_id>/', views.owner_cancel_booking),
+    path('owner/cancel/<uuid:booking_id>/', views.owner_cancel_booking, name='owner_cancel_booking'),
     path('owner/manual/', views.owner_manual_booking, name='owner_manual_booking'),
     path('owner/manual-booking/', views.owner_manual_booking, name='owner_manual_booking_alias'),
 

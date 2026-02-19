@@ -67,7 +67,7 @@
         <div class="d-flex align-items-center justify-content-between">
           <div>
             <div class="small text-muted">Active grounds</div>
-            <div class="h3 mb-0">{{ owner_bookings|length }}</div>
+            <div class="h3 mb-0">{{ stats.active_grounds }}</div>
           </div>
           <div class="ms-3 metric-icon">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -100,7 +100,11 @@
               </div>
               <div class="text-end">
                 <div class="small text-muted">₹{{ booking.total_amount }}</div>
-                <a href="/owner/cancel/{{ booking.id }}/" class="btn btn-sm btn-outline-danger mt-2">Cancel</a>
+                {% if booking.can_owner_cancel %}
+                  <a href="{% url 'owner_cancel_booking' booking.id %}" class="btn btn-sm btn-outline-danger mt-2" data-confirm-message="Delete this booking?">Delete</a>
+                {% else %}
+                  <button type="button" class="btn btn-sm btn-outline-secondary mt-2" disabled>Past booking</button>
+                {% endif %}
               </div>
             </div>
           {% empty %}
@@ -240,6 +244,16 @@
       heatChart.update();
     }, 120);
   });
+
+  {% if messages %}
+    window.addEventListener('load', function() {
+      {% for message in messages %}
+        if (typeof window.showAppToast === 'function') {
+          window.showAppToast({{ message|escapejs }}, '{{ message.tags|default:"info" }}', 4200);
+        }
+      {% endfor %}
+    });
+  {% endif %}
 </script>
 
 {% endblock %}

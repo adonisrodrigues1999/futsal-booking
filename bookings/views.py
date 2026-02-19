@@ -258,30 +258,42 @@ def owner_dashboard(request):
     labels = [d.strftime('%Y-%m-%d') for d in days]
     counts = [bookings.filter(slot__date=d).count() for d in days]
 
+    now_dt = timezone.localtime(timezone.now())
+    owner_bookings = bookings.order_by('-slot__date', '-slot__start_time')[:50]
+    for booking in owner_bookings:
+        booking.can_owner_cancel = _slot_start_datetime(booking.slot) > now_dt
+
     context = {
         'stats': {
             'total_bookings': bookings.count(),
             'revenue': bookings.count() * 1000,  # sample
-            'peak_hour': max(heatmap, key=heatmap.get) if heatmap else 'N/A'
+            'peak_hour': max(heatmap, key=heatmap.get) if heatmap else 'N/A',
+            'active_grounds': grounds.count(),
         },
         'heatmap': heatmap,
         'heatmap_labels': [i for i in range(24)],
         'heatmap_data': [heatmap.get(i, 0) for i in range(24)],
         'chart_labels': labels,
         'chart_data': counts,
-        'owner_bookings': bookings.order_by('-slot__date', '-slot__start_time')[:50],
+        'owner_bookings': owner_bookings,
     }
 
     return render(request, 'dashboard/owner_dashboard.html', context)
 
 
 def latest_notification(request):
-    last = ActivityLog.objects.filter(action='BOOKED').order_by('-timestamp').first()
+    last = (
+        ActivityLog.objects
+        .filter(action__in=['BOOKED', 'MANUAL_BOOKING'], slot__isnull=False)
+        .order_by('-timestamp')
+        .first()
+    )
 
     if not last:
         return JsonResponse(None, safe=False)
 
     return JsonResponse({
+        'event_id': str(last.id),
         'ground': last.slot.ground.name,
         'time': last.timestamp.strftime('%H:%M')
     })
@@ -421,6 +433,15 @@ def owner_cancel_booking(request, booking_id):
         return redirect('/')
 
     slot = booking.slot
+    slot_start = _slot_start_datetime(slot)
+    if slot_start <= timezone.localtime(timezone.now()):
+        messages.error(
+            request,
+            f'Cannot cancel past booking: {slot.ground.name} on {slot.date} '
+            f'({slot.start_time.strftime("%I:%M %p")} - {slot.end_time.strftime("%I:%M %p")}).'
+        )
+        return redirect('/dashboard/owner/')
+
     booking.status = 'CANCELLED'
     booking.cancelled_at = timezone.now()
     booking.save()
@@ -433,6 +454,13 @@ def owner_cancel_booking(request, booking_id):
         action='OWNER_CANCELLED',
         booking=booking,
         slot=slot
+    )
+
+    messages.success(
+        request,
+        f'Booking deleted: {slot.ground.name} on {slot.date} '
+        f'({slot.start_time.strftime("%I:%M %p")} - {slot.end_time.strftime("%I:%M %p")}) '
+        f'for {booking.customer_name} ({booking.customer_phone}).'
     )
 
     return redirect('/dashboard/owner/')
