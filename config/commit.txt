@@ -1,3 +1,22 @@
 git add .
-git commit -m "fixed manual booking"
+git commit -m "added double booking fix"
 git push
+
+
+
+fix double booking issue on manual booking (if booked lready get messsage saying booked just now) Done
+
+remove i am the from login page
+
+on sending mail for register let the user  give big popup and redirect to login page
+add functionality to reset password
+add image for ground 
+
+hide  past bookings from slots page done
+
+change message for cancel now done
+
+send notification to both users and owner 30 minutes prior to the booking
+
+admin sould get how many bookings are done per groud with date filter option and ten per booking i should be able to charge them x rupees 
+example simpliz turf got 30 bookings per month then  if i say that iits 30 ruees per booking then i should bee able to charge them and  i should say per mnth wise have they paid or no and all additional features

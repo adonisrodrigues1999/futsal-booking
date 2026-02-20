@@ -74,9 +74,11 @@ def ground_slots(request, ground_id):
             if not (slot.start_time >= ground.opening_time or slot.start_time < ground.closing_time):
                 continue
 
-        # if selected date is today, hide slots that have already started
+        # Hide slots that have already started.
         slot_dt = timezone.make_aware(timezone.datetime.combine(selected_date, slot.start_time), timezone.get_current_timezone())
         is_past = slot_dt <= now_dt
+        if is_past:
+            continue
 
         # Check if there's an active booking for this slot
         booking = Booking.objects.filter(slot=slot, status='BOOKED').first()
@@ -311,7 +313,7 @@ def owner_manual_booking(request):
                 slot = Slot.objects.select_for_update().get(id=slot_id, ground__owner=owner)
 
                 if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
-                    messages.error(request, 'Slot already booked')
+                    messages.error(request, 'Slot was booked just now. Please pick another slot.')
                     return redirect('/dashboard/owner/')
 
                 # Calculate amount

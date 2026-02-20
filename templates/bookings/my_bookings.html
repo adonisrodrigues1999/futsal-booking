@@ -37,7 +37,7 @@
                     <div class="h6 mb-0">₹{{ booking.total_amount }}</div>
                     <div class="small text-muted">{{ booking.get_status_display }}</div>
                     {% if booking.cancel_no_refund %}
-                      <div class="small text-danger">Cancel now: amount will not be refunded.</div>
+                      <div class="small text-danger">if you Cancel now the amount will not be refunded.</div>
                     {% endif %}
                   </div>
                   {% if booking.status == 'BOOKED' and booking.booking_source == 'ONLINE' and booking.can_cancel %}

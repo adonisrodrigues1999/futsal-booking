@@ -1,4 +1,23 @@
 document.addEventListener('DOMContentLoaded', function() {
+  function getCookie(name) {
+    var match = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return match ? match.pop() : '';
+  }
+
+  // Keep form token aligned with latest CSRF cookie to avoid stale token posts.
+  function syncFormCsrfTokens() {
+    var csrftoken = getCookie('csrftoken');
+    if (!csrftoken) return;
+    document.querySelectorAll('form input[name="csrfmiddlewaretoken"]').forEach(function(input) {
+      input.value = csrftoken;
+    });
+  }
+
+  syncFormCsrfTokens();
+  document.querySelectorAll('form').forEach(function(form) {
+    form.addEventListener('submit', syncFormCsrfTokens);
+  });
+
   function showAppToast(message, type, delay) {
     var toastEl = document.getElementById('app-toast');
     if (!toastEl) return;
@@ -197,10 +216,6 @@ document.addEventListener('DOMContentLoaded', function() {
     var url = '/book/' + slotId + '/';
     var csrftoken = null;
     // try cookie
-    function getCookie(name) {
-      var v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-      return v ? v.pop() : '';
-    }
     csrftoken = getCookie('csrftoken');
 
     btn.disabled = true;
