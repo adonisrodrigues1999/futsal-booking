@@ -2,7 +2,6 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from .models import User
 from grounds.models import Ground
-from bookings.models import Slot
 
 
 class UserRegistrationForm(forms.ModelForm):
@@ -99,58 +98,6 @@ class GroundCreationForm(forms.ModelForm):
         if commit:
             ground.save()
         return ground
-
-    def save(self, commit=True):
-        ground = super().save(commit=False)
-        if self.owner:
-            ground.owner = self.owner
-        ground.is_available = True
-        if commit:
-            ground.save()
-            # Create slots based on the time configurations
-            self.create_slots(ground)
-        return ground
-
-    def create_slots(self, ground):
-        """Create time slots for the ground based on the form data"""
-        from datetime import datetime, timedelta
-
-        # Helper to create hourly slots for a given start/end/time range
-        def _create_range(start_t, end_t, price):
-            if not start_t or not end_t or price is None:
-                return
-
-            today = datetime.today().date()
-            s_dt = datetime.combine(today, start_t)
-            e_dt = datetime.combine(today, end_t)
-            # handle cross-midnight
-            if e_dt <= s_dt:
-                e_dt += timedelta(days=1)
-
-            cur = s_dt
-            while cur < e_dt:
-                nxt = cur + timedelta(hours=1)
-                Slot.objects.get_or_create(
-                    ground=ground,
-                    date=cur.date(),
-                    start_time=cur.time(),
-                    defaults={
-                        'end_time': nxt.time(),
-                        'is_booked': False,
-                    }
-                )
-                cur = nxt
-
-        start_time_1 = self.cleaned_data.get('slot_1_start')
-        end_time_1 = self.cleaned_data.get('slot_1_end')
-        price_1 = self.cleaned_data.get('slot_1_price')
-
-        start_time_2 = self.cleaned_data.get('slot_2_start')
-        end_time_2 = self.cleaned_data.get('slot_2_end')
-        price_2 = self.cleaned_data.get('slot_2_price')
-
-        _create_range(start_time_1, end_time_1, price_1)
-        _create_range(start_time_2, end_time_2, price_2)
 
 
 class UserLoginForm(forms.Form):

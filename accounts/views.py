@@ -5,12 +5,12 @@ from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
 from django.conf import settings
 from django.urls import reverse
-from datetime import datetime, time, timedelta
+from django.utils import timezone
 from .models import User
 from bookings.models import EmailVerification
+from bookings.slot_generation import create_initial_slots_for_ground
 from .forms import UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm, GroundCreationForm
 from grounds.models import Ground
-from django.contrib.admin.views.decorators import staff_member_required
 
 
 def register(request):
@@ -175,70 +175,12 @@ def create_ground(request, owner_id):
         form = GroundCreationForm(request.POST, owner=owner)
         if form.is_valid():
             ground = form.save()
-
-            # create hourly slots for the configured ranges (handles cross-midnight ranges)
-            from datetime import datetime, timedelta
-            from bookings.models import Slot
-
-            def create_hourly_slots(start_t, end_t, price):
-                if start_t is None or end_t is None or price is None:
-                    return
-
-                today = datetime.today().date()
-                s_dt = datetime.combine(today, start_t)
-                e_dt = datetime.combine(today, end_t)
-                # if end <= start, assume crossing midnight
-                if e_dt <= s_dt:
-                    e_dt += timedelta(days=1)
-
-                cur = s_dt
-                while cur < e_dt:
-                    nxt = cur + timedelta(hours=1)
-                    Slot.objects.get_or_create(
-                        ground=ground,
-                        date=cur.date(),
-                        start_time=cur.time(),
-                        defaults={
-                            'end_time': nxt.time(),
-                            'is_booked': False,
-                        }
-                    )
-                    cur = nxt
-
-            cd = form.cleaned_data
-            # prefer explicit slot ranges if provided; fallback to day/night prices and opening/closing
-            create_hourly_slots(cd.get('slot_1_start'), cd.get('slot_1_end'), cd.get('slot_1_price'))
-            create_hourly_slots(cd.get('slot_2_start'), cd.get('slot_2_end'), cd.get('slot_2_price'))
-
-            # If no explicit slots provided, fall back to opening/closing + day/night pricing
-            # Only run fallback if opening_time and closing_time exist on the ground
-            if (not cd.get('slot_1_start') and not cd.get('slot_2_start') and
-                    getattr(ground, 'opening_time', None) and getattr(ground, 'closing_time', None)):
-                opening = ground.opening_time
-                closing = ground.closing_time
-                today = datetime.today().date()
-                s_dt = datetime.combine(today, opening)
-                e_dt = datetime.combine(today, closing)
-                if e_dt <= s_dt:
-                    e_dt += timedelta(days=1)
-                cur = s_dt
-                while cur < e_dt:
-                    nxt = cur + timedelta(hours=1)
-                    # choose price by daytime (6:00-18:00) vs night
-                    hour_time = cur.time()
-                    if hour_time >= datetime.strptime('06:00', '%H:%M').time() and hour_time < datetime.strptime('18:00', '%H:%M').time():
-                        price = ground.day_price
-                    else:
-                        price = ground.night_price
-
-                        Slot.objects.create(
-                            ground=ground,
-                            date=cur.date(),
-                            start_time=cur.time(),
-                            end_time=nxt.time(),
-                            is_booked=False,
-                        )
-                    cur = nxt
+            create_initial_slots_for_ground(
+                ground=ground,
+                days=14,
+                start_date=timezone.localdate(),
+                slot_config=form.cleaned_data,
+            )
 
             messages.success(request, f'Ground "{ground.name}" created successfully with slots for {owner.name}!')
             return redirect('admin_dashboard')

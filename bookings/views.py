@@ -10,6 +10,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 
 from .models import Ground, Slot, Booking, ActivityLog
+from .slot_generation import ensure_slots_for_ground_date
 
 
 def _slot_start_datetime(slot):
@@ -53,18 +54,8 @@ def ground_slots(request, ground_id):
     except Exception:
         selected_date = timezone.localdate()
 
-    # Create all slots for this date in the range
-    current = ground.opening_time
-    end_t = ground.closing_time
-    while current != end_t:
-        end_slot = (datetime.combine(selected_date, current) + timedelta(hours=1)).time()
-        Slot.objects.get_or_create(
-            ground=ground,
-            date=selected_date,
-            start_time=current,
-            defaults={'end_time': end_slot, 'is_booked': False}
-        )
-        current = end_slot
+    # Ensure slots exist for the selected date
+    ensure_slots_for_ground_date(ground=ground, slot_date=selected_date)
 
     # fetch slots for that date
     slots_qs = Slot.objects.filter(ground=ground, date=selected_date).order_by('start_time')
