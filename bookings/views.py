@@ -306,36 +306,41 @@ def owner_manual_booking(request):
         name = request.POST['name']
         phone = request.POST['phone']
 
-        slot = Slot.objects.select_for_update().get(id=slot_id)
+        try:
+            with transaction.atomic():
+                slot = Slot.objects.select_for_update().get(id=slot_id, ground__owner=owner)
 
-        if slot.is_booked:
-            messages.error(request, 'Slot already booked')
-            return redirect('/dashboard/owner/')
+                if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
+                    messages.error(request, 'Slot already booked')
+                    return redirect('/dashboard/owner/')
 
-        # Calculate amount
-        hour = slot.start_time.hour
-        price_per_hour = slot.ground.day_price if 6 <= hour < 18 else slot.ground.night_price
-        total_amount = price_per_hour
-        owner_payout = total_amount - 3
+                # Calculate amount
+                hour = slot.start_time.hour
+                price_per_hour = slot.ground.day_price if 6 <= hour < 18 else slot.ground.night_price
+                total_amount = price_per_hour
+                owner_payout = total_amount - 3
 
-        booking = Booking.objects.create(
-            slot=slot,
-            customer_name=name,
-            customer_phone=phone,
-            total_amount=total_amount,
-            owner_payout=owner_payout,
-            booking_source='MANUAL'
-        )
+                booking = Booking.objects.create(
+                    slot=slot,
+                    customer_name=name,
+                    customer_phone=phone,
+                    total_amount=total_amount,
+                    owner_payout=owner_payout,
+                    booking_source='MANUAL'
+                )
 
-        slot.is_booked = True
-        slot.save()
+                slot.is_booked = True
+                slot.save(update_fields=['is_booked'])
 
-        ActivityLog.objects.create(
-            user=request.user,
-            action='MANUAL_BOOKING',
-            booking=booking,
-            slot=slot
-        )
+                ActivityLog.objects.create(
+                    user=request.user,
+                    action='MANUAL_BOOKING',
+                    booking=booking,
+                    slot=slot
+                )
+        except Slot.DoesNotExist:
+            messages.error(request, 'Invalid slot selected.')
+            return redirect('/owner/manual-booking/')
 
         messages.success(request, 'Manual booking created')
         return redirect('/dashboard/owner/')
