@@ -150,7 +150,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = 'accounts.User'
 CSRF_TRUSTED_ORIGINS = [
-    "https://*.azurewebsites.net",
+    "https://*.azurewebsites.net",'https://futbook-d8c7cjhza8gfb8e6.centralindia-01.azurewebsites.net'
 ]
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
