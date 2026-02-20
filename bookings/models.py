@@ -39,6 +39,7 @@ class Booking(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    reminder_sent = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Booking {self.id} - {self.customer_name}"
@@ -65,6 +66,23 @@ class CommissionLedger(models.Model):
     commission_amount = models.DecimalField(max_digits=6, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
     is_paid = models.BooleanField(default=False)
+
+
+class GroundInvoice(models.Model):
+    ground = models.ForeignKey(Ground, on_delete=models.CASCADE)
+    period_start = models.DateField()
+    period_end = models.DateField()
+    bookings_count = models.PositiveIntegerField()
+    charge_per_booking = models.DecimalField(max_digits=8, decimal_places=2)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    is_paid = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-period_start', '-ground']
+
+    def __str__(self):
+        return f"Invoice {self.ground.name} {self.period_start} - {self.period_end}"
 
 
 class EmailVerification(models.Model):

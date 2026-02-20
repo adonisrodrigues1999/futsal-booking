@@ -97,4 +97,30 @@
     </div>
   </div>
 </div>
-{% endblock %}
+    {% if show_verification_popup %}
+      <div id="verificationModal" class="modal-overlay" role="dialog" aria-modal="true" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:1050;">
+        <div class="modal-card" style="background:#fff;border-radius:.5rem;max-width:520px;width:90%;box-shadow:0 10px 30px rgba(0,0,0,.3);">
+          <div class="modal-body p-4 text-center">
+            <h4 class="mb-3">Registration Successful</h4>
+            <p class="mb-3">{{ verification_message }}</p>
+            <div class="d-flex justify-content-center">
+              <button id="verify-ok" class="btn btn-primary">Go to Login</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <script>
+        (function(){
+          var btn = document.getElementById('verify-ok');
+          if(btn){
+            btn.addEventListener('click', function(){
+              window.location.href = "{% url 'login' %}";
+            });
+          }
+          // Auto-redirect after a short delay (6s)
+          setTimeout(function(){ window.location.href = "{% url 'login' %}"; }, 6000);
+        })();
+      </script>
+    {% endif %}
+
+    {% endblock %}

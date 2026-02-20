@@ -18,4 +18,11 @@ urlpatterns = [
     path('owner/manual-booking/', views.owner_manual_booking, name='owner_manual_booking_alias'),
 
     path('notifications/latest/', views.latest_notification),
+    path('dashboard/admin/invoices/', views.admin_invoices, name='admin_invoices'),
+    path('dashboard/admin/invoices/mark-paid/', views.mark_invoice_paid, name='mark_invoice_paid'),
+    path('dashboard/admin/invoices/mark-unpaid/', views.mark_invoice_unpaid, name='mark_invoice_unpaid'),
+    path('dashboard/admin/invoices/export/', views.export_invoices_csv, name='export_invoices_csv'),
+    path('dashboard/admin/invoices/export-bookings/', views.export_bookings_csv, name='export_bookings_csv'),
+    path('dashboard/admin/invoices/pay/<int:invoice_id>/', views.pay_invoice, name='pay_invoice'),
+    path('dashboard/admin/invoices/webhook/', views.stripe_webhook, name='stripe_webhook'),
 ]

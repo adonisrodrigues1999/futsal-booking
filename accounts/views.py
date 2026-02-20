@@ -6,6 +6,11 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.contrib.auth.forms import SetPasswordForm
+from django import forms
 from .models import User
 from bookings.models import EmailVerification
 from bookings.slot_generation import create_initial_slots_for_ground
@@ -39,8 +44,15 @@ def register(request):
                 fail_silently=False,
             )
 
-            messages.success(request, 'Registration successful! Please check your email to verify your account.')
-            return redirect('login')
+            # Instead of redirecting immediately, render the register page
+            # and set a flag so the frontend shows a prominent popup and
+            # then redirects the user to the login page.
+            form = UserRegistrationForm()
+            return render(request, 'accounts/register.html', {
+                'form': form,
+                'show_verification_popup': True,
+                'verification_message': 'Registration successful! Please check your email to verify your account.'
+            })
     else:
         form = UserRegistrationForm()
 
@@ -118,6 +130,78 @@ def verify_email(request, token):
         messages.error(request, 'Invalid verification link.')
 
     return redirect('login')
+
+
+class PasswordResetRequestForm(forms.Form):
+    email = forms.EmailField()
+
+
+def password_reset_request(request):
+    if request.method == 'POST':
+        form = PasswordResetRequestForm(request.POST)
+        if form.is_valid():
+            email = form.cleaned_data['email']
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                user = None
+
+            # Always show the done page for security
+            if user:
+                token = PasswordResetTokenGenerator().make_token(user)
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                reset_url = request.build_absolute_uri(
+                    reverse('password_reset_confirm', args=[uid, token])
+                )
+                subject = 'Reset your FootBook password'
+                body = (
+                    f'Hello {user.name},\n\n'
+                    f'You requested a password reset. Click the link below to reset your password:\n\n{reset_url}\n\n'
+                    'If you did not request this, you can ignore this email.\n\nRegards,\nFootBook'
+                )
+                from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
+                try:
+                    send_mail(subject, body, from_email, [user.email], fail_silently=False)
+                except Exception:
+                    # fail silently but continue to show success page
+                    pass
+
+            return redirect('password_reset_done')
+    else:
+        form = PasswordResetRequestForm()
+
+    return render(request, 'accounts/password_reset.html', {'form': form})
+
+
+def password_reset_done(request):
+    return render(request, 'accounts/password_reset_done.html')
+
+
+def password_reset_confirm(request, uidb64, token):
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except Exception:
+        user = None
+
+    if user is None or not PasswordResetTokenGenerator().check_token(user, token):
+        messages.error(request, 'Invalid or expired password reset link.')
+        return redirect('password_reset')
+
+    if request.method == 'POST':
+        form = SetPasswordForm(user=user, data=request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Password reset successful. You can now log in.')
+            return redirect('password_reset_complete')
+    else:
+        form = SetPasswordForm(user=user)
+
+    return render(request, 'accounts/password_reset_confirm.html', {'form': form})
+
+
+def password_reset_complete(request):
+    return render(request, 'accounts/password_reset_complete.html')
 
 
 @login_required

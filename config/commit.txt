@@ -1,22 +1,33 @@
 git add .
-git commit -m "added double booking fix"
+git commit -m "major changes"
 git push
 
 
-
+/home/statvalu/adonis/futbook/football_booking/config/settings.py
 fix double booking issue on manual booking (if booked lready get messsage saying booked just now) Done
 
-remove i am the from login page
+remove i am the from login page done
 
-on sending mail for register let the user  give big popup and redirect to login page
+on sending mail for register let the user  give big popup and redirect to login page done
+
+
 add functionality to reset password
 add image for ground 
+
+
 
 hide  past bookings from slots page done
 
 change message for cancel now done
 
-send notification to both users and owner 30 minutes prior to the booking
+send notification  email to both users and owner owner 45 minutes prior to the booking done 
 
 admin sould get how many bookings are done per groud with date filter option and ten per booking i should be able to charge them x rupees 
 example simpliz turf got 30 bookings per month then  if i say that iits 30 ruees per booking then i should bee able to charge them and  i should say per mnth wise have they paid or no and all additional features
+
+
+if a user is loggid in and he goes back from dasborard page mean he lans on login page now when he clicks on register he automatically comes on dasboard page
+we can give  fix that back from dashboard page means logout the user and give the user a warning that going back from dashoard page will log you out
+
+
+iphone login csrf issue

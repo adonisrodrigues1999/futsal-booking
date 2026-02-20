@@ -2,12 +2,21 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
+from django.http import HttpResponse
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction, OperationalError, IntegrityError
 import time
 from django.core.mail import send_mail
 from django.conf import settings
+import csv
+import io
+from decimal import Decimal
+
+try:
+    import stripe
+except Exception:
+    stripe = None
 
 from .models import Ground, Slot, Booking, ActivityLog
 from .slot_generation import ensure_slots_for_ground_date
@@ -289,6 +298,297 @@ def latest_notification(request):
         'event_id': str(last.id),
         'ground': last.slot.ground.name,
         'time': last.timestamp.strftime('%H:%M')
+    })
+
+
+@login_required
+def mark_invoice_paid(request):
+    # Mark invoice paid via AJAX POST
+    if request.method != 'POST' or request.user.role != 'admin':
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+    inv_id = request.POST.get('invoice_id')
+    if not inv_id:
+        return JsonResponse({'success': False, 'error': 'Missing invoice_id'}, status=400)
+
+    from .models import GroundInvoice
+    try:
+        inv = GroundInvoice.objects.get(id=inv_id)
+        inv.is_paid = True
+        inv.save(update_fields=['is_paid'])
+        return JsonResponse({'success': True, 'invoice_id': str(inv.id)})
+    except GroundInvoice.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Invoice not found'}, status=404)
+
+
+@login_required
+def mark_invoice_unpaid(request):
+    # Mark invoice unpaid via AJAX POST (undo)
+    if request.method != 'POST' or request.user.role != 'admin':
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+    inv_id = request.POST.get('invoice_id')
+    if not inv_id:
+        return JsonResponse({'success': False, 'error': 'Missing invoice_id'}, status=400)
+
+    from .models import GroundInvoice
+    try:
+        inv = GroundInvoice.objects.get(id=inv_id)
+        inv.is_paid = False
+        inv.save(update_fields=['is_paid'])
+        return JsonResponse({'success': True, 'invoice_id': str(inv.id)})
+    except GroundInvoice.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Invoice not found'}, status=404)
+
+
+@login_required
+def export_invoices_csv(request):
+    if request.user.role != 'admin':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+
+    start = request.GET.get('start')
+    end = request.GET.get('end')
+    qs = None
+    from .models import GroundInvoice
+    try:
+        if start and end:
+            qs = GroundInvoice.objects.filter(period_start__gte=start, period_end__lte=end)
+        else:
+            qs = GroundInvoice.objects.all()
+    except Exception:
+        qs = GroundInvoice.objects.all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Ground', 'Period Start', 'Period End', 'Bookings', 'Charge Per Booking', 'Total', 'Paid', 'Created At'])
+    for inv in qs.order_by('-created_at'):
+        writer.writerow([
+            inv.ground.name,
+            inv.period_start,
+            inv.period_end,
+            inv.bookings_count,
+            f"{inv.charge_per_booking}",
+            f"{inv.total_amount}",
+            'Yes' if inv.is_paid else 'No',
+            inv.created_at,
+        ])
+
+    resp = HttpResponse(output.getvalue(), content_type='text/csv')
+    resp['Content-Disposition'] = 'attachment; filename="ground_invoices.csv"'
+    return resp
+
+
+@login_required
+def export_bookings_csv(request):
+    # Export bookings CSV per-ground for a date range (admin only)
+    if request.user.role != 'admin':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+
+    ground_id = request.GET.get('ground_id')
+    start = request.GET.get('start')
+    end = request.GET.get('end')
+
+    qs = Booking.objects.select_related('slot__ground', 'user')
+    if ground_id:
+        qs = qs.filter(slot__ground__id=ground_id)
+    if start:
+        qs = qs.filter(slot__date__gte=start)
+    if end:
+        qs = qs.filter(slot__date__lte=end)
+
+    qs = qs.order_by('-slot__date', '-slot__start_time')
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Booking ID', 'Ground', 'Date', 'Start', 'End', 'Customer Name', 'Customer Phone', 'User Email', 'Amount', 'Status'])
+    for b in qs:
+        writer.writerow([
+            str(b.id),
+            b.slot.ground.name if b.slot and b.slot.ground else '',
+            b.slot.date if b.slot else '',
+            b.slot.start_time.strftime('%H:%M') if b.slot else '',
+            b.slot.end_time.strftime('%H:%M') if b.slot else '',
+            b.customer_name,
+            b.customer_phone,
+            b.user.email if b.user and getattr(b.user, 'email', None) else '',
+            f"{b.total_amount}",
+            b.status,
+        ])
+
+    resp = HttpResponse(output.getvalue(), content_type='text/csv')
+    resp['Content-Disposition'] = 'attachment; filename="bookings.csv"'
+    return resp
+
+
+@login_required
+def pay_invoice(request, invoice_id):
+    # Initiate Stripe Checkout for an invoice (if configured). Admin-only for now.
+    if request.user.role != 'admin':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+
+    from .models import GroundInvoice
+    inv = get_object_or_404(GroundInvoice, id=invoice_id)
+
+    if inv.is_paid:
+        messages.info(request, 'Invoice already paid.')
+        return redirect('admin_invoices')
+
+    # Require stripe and secret key
+    stripe_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
+    stripe_pub = getattr(settings, 'STRIPE_PUBLIC_KEY', None)
+    currency = getattr(settings, 'STRIPE_CURRENCY', 'inr')
+
+    if stripe is None or not stripe_key:
+        messages.error(request, 'Stripe is not configured. Configure STRIPE_SECRET_KEY to enable payments.')
+        return redirect('admin_invoices')
+
+    stripe.api_key = stripe_key
+
+    # Stripe requires amount in smallest currency unit (paise for INR)
+    amount = int((Decimal(inv.total_amount) * 100).quantize(Decimal('1')))
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': currency,
+                    'product_data': {'name': f'Invoice {inv.ground.name} {inv.period_start} - {inv.period_end}'},
+                    'unit_amount': amount,
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=request.build_absolute_uri('/') + '?paid=1',
+            cancel_url=request.build_absolute_uri('/') + '?paid=0',
+            metadata={'invoice_id': str(inv.id)}
+        )
+        return redirect(session.url)
+    except Exception as e:
+        messages.error(request, f'Failed to create Stripe session: {e}')
+        return redirect('admin_invoices')
+
+
+def stripe_webhook(request):
+    # Basic webhook handler to mark invoice paid when payment succeeds
+    stripe_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
+    webhook_secret = getattr(settings, 'STRIPE_WEBHOOK_SECRET', None)
+    if stripe is None or not stripe_key or not webhook_secret:
+        return HttpResponse(status=400)
+
+    payload = request.body
+    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+    except Exception:
+        return HttpResponse(status=400)
+
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        invoice_id = session.get('metadata', {}).get('invoice_id')
+        if invoice_id:
+            from .models import GroundInvoice
+            try:
+                inv = GroundInvoice.objects.get(id=invoice_id)
+                inv.is_paid = True
+                inv.save(update_fields=['is_paid'])
+            except GroundInvoice.DoesNotExist:
+                pass
+
+    return HttpResponse(status=200)
+
+
+
+@login_required
+def admin_invoices(request):
+    # Admin-only: show bookings per ground for a date range and create invoices
+    if request.user.role != 'admin':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+
+    from django.db.models import Count
+    from .models import GroundInvoice
+
+    # date range inputs
+    start_str = request.GET.get('start')
+    end_str = request.GET.get('end')
+
+    try:
+        if start_str:
+            start_date = timezone.datetime.strptime(start_str, '%Y-%m-%d').date()
+        else:
+            # default to first day of current month
+            today = timezone.localdate()
+            start_date = today.replace(day=1)
+    except Exception:
+        start_date = timezone.localdate().replace(day=1)
+
+    try:
+        if end_str:
+            end_date = timezone.datetime.strptime(end_str, '%Y-%m-%d').date()
+        else:
+            # default to today
+            end_date = timezone.localdate()
+    except Exception:
+        end_date = timezone.localdate()
+
+    # Aggregate bookings per ground where slot.date between start and end
+    qs = Booking.objects.filter(status='BOOKED', slot__date__gte=start_date, slot__date__lte=end_date)
+    counts = qs.values('slot__ground').annotate(count=Count('id')).order_by('-count')
+
+    # Map ground id -> count
+    ground_counts = {}
+    for row in counts:
+        ground_counts[row['slot__ground']] = row['count']
+
+    # Get all grounds referenced in the system
+    from grounds.models import Ground
+    grounds = Ground.objects.all().order_by('name')
+
+    # Prepare invoice creation
+    if request.method == 'POST':
+        ground_id = request.POST.get('ground_id')
+        charge = request.POST.get('charge_per_booking')
+        gstart = request.POST.get('period_start')
+        gend = request.POST.get('period_end')
+        try:
+            ground = Ground.objects.get(id=ground_id)
+            bookings_count = Booking.objects.filter(status='BOOKED', slot__ground=ground, slot__date__gte=gstart, slot__date__lte=gend).count()
+            charge_val = float(charge)
+            total = bookings_count * charge_val
+
+            inv = GroundInvoice.objects.create(
+                ground=ground,
+                period_start=gstart,
+                period_end=gend,
+                bookings_count=bookings_count,
+                charge_per_booking=charge_val,
+                total_amount=total,
+                is_paid=False
+            )
+            messages.success(request, f'Invoice created for {ground.name}: {bookings_count} bookings, total {total}')
+            return redirect('admin_invoices')
+        except Ground.DoesNotExist:
+            messages.error(request, 'Invalid ground selected.')
+
+    # Fetch existing invoices for display (last 50)
+    existing_invoices = GroundInvoice.objects.all()[:50]
+
+    rows = []
+    for g in grounds:
+        rows.append({
+            'ground': g,
+            'bookings_count': ground_counts.get(g.id, 0)
+        })
+
+    return render(request, 'dashboard/admin_invoices.html', {
+        'rows': rows,
+        'start_date': start_date,
+        'end_date': end_date,
+        'existing_invoices': existing_invoices,
     })
 
 

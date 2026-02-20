@@ -6,6 +6,7 @@ from .models import (
     BookingActivityLog,
     ActivityLog
 )
+from .models import GroundInvoice
 from grounds.models import Ground
 
 
@@ -109,3 +110,19 @@ class CommissionLedgerAdmin(admin.ModelAdmin):
     )
 
     list_filter = ('is_paid', 'ground')
+
+
+@admin.register(GroundInvoice)
+class GroundInvoiceAdmin(admin.ModelAdmin):
+    list_display = (
+        'ground',
+        'period_start',
+        'period_end',
+        'bookings_count',
+        'charge_per_booking',
+        'total_amount',
+        'is_paid',
+        'created_at'
+    )
+    list_filter = ('is_paid', 'ground')
+    search_fields = ('ground__name',)

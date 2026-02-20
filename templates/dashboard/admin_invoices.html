@@ -1,0 +1,145 @@
+{% extends 'base/base.html' %}
+{% block title %}Admin - Ground Invoices{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h3>Ground invoices / bookings report</h3>
+
+  <form class="row g-2 mb-3" method="get">
+    <div class="col-auto">
+      <label class="form-label">Start</label>
+      <input type="date" name="start" value="{{ start_date }}" class="form-control" />
+    </div>
+    <div class="col-auto">
+      <label class="form-label">End</label>
+      <input type="date" name="end" value="{{ end_date }}" class="form-control" />
+    </div>
+    <div class="col-auto align-self-end">
+      <button class="btn btn-primary">Filter</button>
+    </div>
+  </form>
+
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>Ground</th>
+        <th>Bookings</th>
+        <th>Create Invoice</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.ground.name }}</td>
+        <td>{{ row.bookings_count }}</td>
+        <td>
+          <form method="post" class="d-flex gap-2">
+            {% csrf_token %}
+            <input type="hidden" name="ground_id" value="{{ row.ground.id }}" />
+            <input type="hidden" name="period_start" value="{{ start_date }}" />
+            <input type="hidden" name="period_end" value="{{ end_date }}" />
+            <input name="charge_per_booking" type="number" step="0.01" placeholder="charge per booking" class="form-control" style="width:180px;" required />
+            <button class="btn btn-sm btn-success">Create</button>
+            <a href="{% url 'export_bookings_csv' %}?ground_id={{ row.ground.id }}&start={{ start_date }}&end={{ end_date }}" class="btn btn-sm btn-outline-secondary">Export Bookings</a>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h4>Recent invoices</h4>
+  <div class="mb-3 d-flex justify-content-between">
+    <div>
+      <a href="{% url 'export_invoices_csv' %}?start={{ start_date }}&end={{ end_date }}" class="btn btn-outline-secondary btn-sm">Export CSV</a>
+    </div>
+  </div>
+
+  <table class="table table-bordered">
+    <thead>
+      <tr>
+        <th>Ground</th>
+        <th>Period</th>
+        <th>Bookings</th>
+        <th>Charge/booking</th>
+        <th>Total</th>
+        <th>Paid</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inv in existing_invoices %}
+      <tr>
+        <td>{{ inv.ground.name }}</td>
+        <td>{{ inv.period_start }} to {{ inv.period_end }}</td>
+        <td>{{ inv.bookings_count }}</td>
+        <td>{{ inv.charge_per_booking }}</td>
+        <td>{{ inv.total_amount }}</td>
+        <td id="paid-{{ inv.id }}">{% if inv.is_paid %}Yes{% else %}No{% endif %}</td>
+        <td>
+          {% if not inv.is_paid %}
+            <button class="btn btn-sm btn-primary js-mark-paid" data-id="{{ inv.id }}">Mark Paid</button>
+            <a href="{% url 'pay_invoice' inv.id %}" class="btn btn-sm btn-warning">Pay</a>
+          {% else %}
+            <button class="btn btn-sm btn-outline-secondary js-mark-unpaid" data-id="{{ inv.id }}">Mark Unpaid</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">No invoices yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('.js-mark-paid').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var id = this.dataset.id;
+      fetch("{% url 'mark_invoice_paid' %}", {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]').value,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'invoice_id=' + encodeURIComponent(id)
+      }).then(function(r){ return r.json(); }).then(function(data){
+        if(data.success){
+          var td = document.getElementById('paid-' + id);
+          if(td) td.innerText = 'Yes';
+          btn.style.display = 'none';
+          // show unpaid button if present
+          var unpaidBtn = document.querySelector('.js-mark-unpaid[data-id="' + id + '"]');
+          if(unpaidBtn) unpaidBtn.style.display = 'inline-block';
+        } else {
+          alert('Failed: ' + (data.error || 'unknown'));
+        }
+      }).catch(function(){ alert('Network error'); });
+    });
+  });
+  document.querySelectorAll('.js-mark-unpaid').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var id = this.dataset.id;
+      fetch("{% url 'mark_invoice_unpaid' %}", {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]').value,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'invoice_id=' + encodeURIComponent(id)
+      }).then(function(r){ return r.json(); }).then(function(data){
+        if(data.success){
+          var td = document.getElementById('paid-' + id);
+          if(td) td.innerText = 'No';
+          btn.style.display = 'none';
+          var paidBtn = document.querySelector('.js-mark-paid[data-id="' + id + '"]');
+          if(paidBtn) paidBtn.style.display = 'inline-block';
+        } else {
+          alert('Failed: ' + (data.error || 'unknown'));
+        }
+      }).catch(function(){ alert('Network error'); });
+    });
+  });
+});
+</script>
+{% endblock %}
