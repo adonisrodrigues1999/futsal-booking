@@ -161,3 +161,12 @@ EMAIL_HOST_USER = 'adonistheas@gmail.com'
 EMAIL_HOST_PASSWORD = 'ynfg jrkg tyer xajr'
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# Improve cookie compatibility for mobile browsers (iOS Safari/WebViews)
+# Ensure cookies are marked secure and allow cross-site usage when needed.
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+# Allow cookies in cross-site contexts (set to 'None' when using HTTPS and third-party embedding)
+SESSION_COOKIE_SAMESITE = None
+CSRF_COOKIE_SAMESITE = None
+# If behind a proxy/load balancer that sets X-Forwarded-Proto, enable this so Django knows requests are secure
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

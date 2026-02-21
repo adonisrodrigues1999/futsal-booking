@@ -12,7 +12,7 @@ on sending mail for register let the user  give big popup and redirect to login 
 
 
 add functionality to reset password
-add image for ground 
+add image for ground  Done
 
 
 
@@ -22,8 +22,8 @@ change message for cancel now done
 
 send notification  email to both users and owner owner 45 minutes prior to the booking done 
 
-admin sould get how many bookings are done per groud with date filter option and ten per booking i should be able to charge them x rupees 
-example simpliz turf got 30 bookings per month then  if i say that iits 30 ruees per booking then i should bee able to charge them and  i should say per mnth wise have they paid or no and all additional features
+admin sould get how many bookings are done per groud with date filter option and ten per booking i should be able to charge them x rupees  Done
+example simpliz turf got 30 bookings per month then  if i say that iits 30 ruees per booking then i should bee able to charge them and  i should say per mnth wise have they paid or no and all additional features Done
 
 
 if a user is loggid in and he goes back from dasborard page mean he lans on login page now when he clicks on register he automatically comes on dasboard page

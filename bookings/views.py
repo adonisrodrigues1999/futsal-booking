@@ -20,6 +20,9 @@ except Exception:
 
 from .models import Ground, Slot, Booking, ActivityLog
 from .slot_generation import ensure_slots_for_ground_date
+import os
+from django.http import FileResponse, Http404
+from django.conf import settings as djsettings
 
 
 def _slot_start_datetime(slot):
@@ -28,6 +31,46 @@ def _slot_start_datetime(slot):
         datetime.combine(slot.date, slot.start_time),
         tz
     )
+
+
+def ground_image(request, ground_id):
+    # Serve a ground image from the project `groundsimages` folder if available.
+    try:
+        ground = Ground.objects.get(id=ground_id)
+    except Ground.DoesNotExist:
+        raise Http404()
+
+    # If ground.image is set and looks like a URL/path, try to serve it directly
+    if ground.image:
+        # If it's an absolute filesystem path, serve it
+        if os.path.isabs(ground.image) and os.path.exists(ground.image):
+            return FileResponse(open(ground.image, 'rb'))
+        # If it looks like a relative static path (starts with / or without scheme), try to serve from BASE_DIR
+        rel_path = os.path.join(djsettings.BASE_DIR, ground.image.lstrip('/'))
+        if os.path.exists(rel_path):
+            return FileResponse(open(rel_path, 'rb'))
+
+    # Special-case: look in project `groundsimages` directory for a matching file
+    images_dir = os.path.join(djsettings.BASE_DIR, 'groundsimages')
+    if os.path.isdir(images_dir):
+        # Try exact filename mapping for known grounds
+        special_map = {
+            'Simpliz Turf': 'simplisturf.webp',
+        }
+        fname = special_map.get(ground.name)
+        if fname:
+            full = os.path.join(images_dir, fname)
+            if os.path.exists(full):
+                return FileResponse(open(full, 'rb'))
+
+        # fallback: try any file in the folder that contains the ground name (normalized)
+        norm = ''.join(ch for ch in ground.name.lower() if ch.isalnum())
+        for f in os.listdir(images_dir):
+            if norm in ''.join(ch for ch in f.lower() if ch.isalnum()):
+                return FileResponse(open(os.path.join(images_dir, f), 'rb'))
+
+    # Not found
+    raise Http404()
 
 
 @login_required
@@ -548,6 +591,15 @@ def admin_invoices(request):
     from grounds.models import Ground
     grounds = Ground.objects.all().order_by('name')
 
+    # Pre-select ground if provided via GET (e.g. ?ground=3)
+    selected_ground = None
+    gparam = request.GET.get('ground')
+    if gparam:
+        try:
+            selected_ground = int(gparam)
+        except Exception:
+            selected_ground = None
+
     # Prepare invoice creation
     if request.method == 'POST':
         ground_id = request.POST.get('ground_id')
@@ -555,15 +607,36 @@ def admin_invoices(request):
         gstart = request.POST.get('period_start')
         gend = request.POST.get('period_end')
         try:
+            # parse posted start/end into date objects (accept ISO and common localized formats)
+            def _parse_date(s):
+                from datetime import datetime
+                if not s:
+                    return None
+                # Try ISO first
+                for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%b. %d, %Y', '%b %d, %Y', '%B %d, %Y'):
+                    try:
+                        return datetime.strptime(s, fmt).date()
+                    except Exception:
+                        continue
+                # Fallback: try to split and reconstruct if possible (e.g. 'Feb. 1, 2026')
+                try:
+                    return datetime.strptime(s.replace('.', ''), '%b %d, %Y').date()
+                except Exception:
+                    pass
+                raise ValueError(f'Unrecognized date format: {s}')
+
+            gstart_date = _parse_date(gstart) if gstart else start_date
+            gend_date = _parse_date(gend) if gend else end_date
+
             ground = Ground.objects.get(id=ground_id)
-            bookings_count = Booking.objects.filter(status='BOOKED', slot__ground=ground, slot__date__gte=gstart, slot__date__lte=gend).count()
+            bookings_count = Booking.objects.filter(status='BOOKED', slot__ground=ground, slot__date__gte=gstart_date, slot__date__lte=gend_date).count()
             charge_val = float(charge)
             total = bookings_count * charge_val
 
             inv = GroundInvoice.objects.create(
                 ground=ground,
-                period_start=gstart,
-                period_end=gend,
+                period_start=gstart_date,
+                period_end=gend_date,
                 bookings_count=bookings_count,
                 charge_per_booking=charge_val,
                 total_amount=total,
@@ -589,6 +662,7 @@ def admin_invoices(request):
         'start_date': start_date,
         'end_date': end_date,
         'existing_invoices': existing_invoices,
+        'selected_ground': selected_ground,
     })
 
 

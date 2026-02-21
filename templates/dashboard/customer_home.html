@@ -33,3 +33,20 @@
 
 <div class="ad-shell text-center">Sponsor Slot: bottom banner</div>
 {% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Warn and logout if user navigates back from dashboard
+  (function(){
+    try { history.pushState(null, null, location.href); } catch(e){}
+    window.addEventListener('popstate', function(){
+      var ok = confirm('Going back from the dashboard will log you out. Continue?');
+      if(ok){
+        window.location.href = "{% url 'logout' %}";
+      } else {
+        try { history.pushState(null, null, location.href); } catch(e){}
+      }
+    });
+  })();
+</script>
+{% endblock %}

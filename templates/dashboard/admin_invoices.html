@@ -29,7 +29,7 @@
     </thead>
     <tbody>
       {% for row in rows %}
-      <tr>
+      <tr class="{% if selected_ground and selected_ground == row.ground.id %}table-info highlight-ground{% endif %}">
         <td>{{ row.ground.name }}</td>
         <td>{{ row.bookings_count }}</td>
         <td>
@@ -38,7 +38,7 @@
             <input type="hidden" name="ground_id" value="{{ row.ground.id }}" />
             <input type="hidden" name="period_start" value="{{ start_date }}" />
             <input type="hidden" name="period_end" value="{{ end_date }}" />
-            <input name="charge_per_booking" type="number" step="0.01" placeholder="charge per booking" class="form-control" style="width:180px;" required />
+            <input name="charge_per_booking" type="number" step="0.01" placeholder="charge per booking" class="form-control" style="width:180px;" required {% if selected_ground and selected_ground == row.ground.id %}autofocus{% endif %} />
             <button class="btn btn-sm btn-success">Create</button>
             <a href="{% url 'export_bookings_csv' %}?ground_id={{ row.ground.id }}&start={{ start_date }}&end={{ end_date }}" class="btn btn-sm btn-outline-secondary">Export Bookings</a>
           </form>
@@ -140,6 +140,11 @@ document.addEventListener('DOMContentLoaded', function(){
       }).catch(function(){ alert('Network error'); });
     });
   });
+  // If a ground was requested via ?ground=, scroll it into view
+  var highlight = document.querySelector('.highlight-ground');
+  if(highlight){
+    highlight.scrollIntoView({behavior:'smooth', block:'center'});
+  }
 });
 </script>
 {% endblock %}

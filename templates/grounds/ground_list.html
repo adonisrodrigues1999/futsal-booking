@@ -17,7 +17,7 @@
             {% if ground.image %}
               <img src="{{ ground.image }}" class="card-img-top" alt="{{ ground.name }}">
             {% else %}
-              <img src="/static/images/ground_placeholder.svg" class="card-img-top" alt="{{ ground.name }}">
+              <img src="{% url 'ground_image' ground.id %}" class="card-img-top" alt="{{ ground.name }}" onerror="this.onerror=null;this.src='/static/images/ground_placeholder.svg'">
             {% endif %}
             <span class="ground-badge">Popular</span>
           </div>
@@ -26,7 +26,7 @@
             <p class="text-muted mb-3">{{ ground.location }}</p>
             <div class="d-flex justify-content-between align-items-center mb-3">
               <span class="badge text-bg-warning">High demand evenings</span>
-              <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#mapModal{{ ground.id }}">Map</button>
+              {% comment %} <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#mapModal{{ ground.id }}">Map</button> {% endcomment %}
             </div>
             <a href="/grounds/{{ ground.id }}/" class="btn btn-primary w-100 mt-auto">View Slots</a>
           </div>
