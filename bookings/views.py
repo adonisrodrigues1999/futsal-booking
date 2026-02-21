@@ -11,12 +11,19 @@ from django.core.mail import send_mail
 from django.conf import settings
 import csv
 import io
+import json
 from decimal import Decimal
+from django.views.decorators.csrf import csrf_exempt
 
 try:
     import stripe
 except Exception:
     stripe = None
+
+try:
+    import razorpay
+except Exception:
+    razorpay = None
 
 from .models import Ground, Slot, Booking, ActivityLog
 from .slot_generation import ensure_slots_for_ground_date
@@ -35,6 +42,54 @@ def _slot_start_datetime(slot):
 
 def _is_day_slot(slot_time):
     return 6 <= slot_time.hour < 18
+
+
+def _slot_price(ground, slot_time):
+    return ground.day_price if _is_day_slot(slot_time) else ground.night_price
+
+
+def _payment_amounts(total_amount, payment_mode):
+    if payment_mode == 'PARTIAL_99':
+        paid = 99
+        due = max(total_amount - paid, 0)
+        if due <= 0:
+            return total_amount, 0, 'FULL'
+        return paid, due, 'PARTIAL_99'
+    return total_amount, 0, 'FULL'
+
+
+def _owner_booking_email(booking):
+    owner = booking.slot.ground.owner if booking.slot and booking.slot.ground else None
+    if not owner or not owner.email:
+        return
+
+    payment_time = timezone.localtime(booking.payment_paid_at).strftime('%Y-%m-%d %I:%M %p') if booking.payment_paid_at else '-'
+    subject = f"New booking payment: {booking.slot.ground.name} on {booking.slot.date} {booking.slot.start_time.strftime('%I:%M %p')}"
+    body = (
+        f"Hello {owner.name},\n\n"
+        f"A new booking was confirmed for your ground {booking.slot.ground.name}.\n"
+        f"Date: {booking.slot.date}\n"
+        f"Time: {booking.slot.start_time.strftime('%I:%M %p')} - {booking.slot.end_time.strftime('%I:%M %p')}\n"
+        f"Customer: {booking.customer_name} ({booking.customer_phone})\n\n"
+        f"Payment details:\n"
+        f"- Mode: {booking.get_payment_mode_display()}\n"
+        f"- Status: {booking.get_payment_status_display()}\n"
+        f"- Paid: ₹{booking.paid_amount}\n"
+        f"- Due: ₹{booking.due_amount}\n"
+        f"- Payment Time: {payment_time}\n"
+        f"- Booking Policy: Non-refundable\n\n"
+        "Regards,\nFootBook"
+    )
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
+    send_mail(subject, body, from_email, [owner.email], fail_silently=True)
+
+
+def _razorpay_client():
+    key_id = getattr(settings, 'RAZORPAY_KEY_ID', None)
+    key_secret = getattr(settings, 'RAZORPAY_KEY_SECRET', None)
+    if not key_id or not key_secret or razorpay is None:
+        return None, key_id
+    return razorpay.Client(auth=(key_id, key_secret)), key_id
 
 
 def _operating_window_for_date(ground, target_date):
@@ -160,7 +215,7 @@ def ground_slots(request, ground_id):
         visible_slots.append({
             'slot': slot,
             'is_past': is_past,
-            'price': ground.day_price if _is_day_slot(slot.start_time) else ground.night_price,
+            'price': _slot_price(ground, slot.start_time),
             'time_icon': '☀️' if _is_day_slot(slot.start_time) else '🌙',
             'booking': booking,
             'user_booking': user_booking,
@@ -186,8 +241,33 @@ def ground_slots(request, ground_id):
 @login_required
 def book_slot(request, slot_id):
     slot = get_object_or_404(Slot, id=slot_id)
+    messages.info(request, 'Online slot booking now requires payment checkout. Please book from the slot payment modal.')
+    return redirect(f'/grounds/{slot.ground.id}/?date={slot.date}')
 
-    # Check daily booking limit per ground
+
+@login_required
+def create_razorpay_order(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        payload = {}
+
+    slot_id = payload.get('slot_id')
+    payment_mode = payload.get('payment_mode') or 'FULL'
+    if payment_mode not in {'FULL', 'PARTIAL_99'}:
+        return JsonResponse({'success': False, 'error': 'Invalid payment mode'}, status=400)
+
+    slot = get_object_or_404(Slot, id=slot_id)
+    now_dt = timezone.localtime(timezone.now())
+    if _slot_start_datetime(slot) <= now_dt:
+        return JsonResponse({'success': False, 'error': 'Slot has already started'}, status=400)
+
+    if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
+        return JsonResponse({'success': False, 'error': 'Slot is already booked'}, status=409)
+
     existing_bookings = Booking.objects.filter(
         user=request.user,
         slot__ground=slot.ground,
@@ -195,30 +275,122 @@ def book_slot(request, slot_id):
         status='BOOKED'
     ).count()
     if existing_bookings >= 5:
-        messages.error(request, 'You can only book up to 5 slots per day per ground.')
-        return redirect(f'/grounds/{slot.ground.id}/?date={slot.date}')
+        return JsonResponse({'success': False, 'error': 'You can only book up to 5 slots per day per ground.'}, status=400)
 
-    # perform booking inside a short transaction; retry on transient DB locks (SQLite)
+    total_amount = _slot_price(slot.ground, slot.start_time)
+    pay_now_amount, due_amount, resolved_mode = _payment_amounts(total_amount, payment_mode)
+
+    client, key_id = _razorpay_client()
+    if not client or not key_id:
+        return JsonResponse({'success': False, 'error': 'Razorpay is not configured on server'}, status=500)
+
+    try:
+        order = client.order.create({
+            'amount': pay_now_amount * 100,
+            'currency': 'INR',
+            'payment_capture': 1,
+            'notes': {
+                'slot_id': str(slot.id),
+                'user_id': str(request.user.id),
+                'payment_mode': resolved_mode,
+            }
+        })
+    except Exception:
+        return JsonResponse({'success': False, 'error': 'Unable to initialize payment right now'}, status=500)
+
+    return JsonResponse({
+        'success': True,
+        'order_id': order.get('id'),
+        'key_id': key_id,
+        'slot_id': slot.id,
+        'payment_mode': resolved_mode,
+        'total_amount': total_amount,
+        'pay_now_amount': pay_now_amount,
+        'due_amount': due_amount,
+        'currency': 'INR',
+        'non_refundable': True,
+        'prefill': {
+            'name': request.user.name,
+            'email': request.user.email or '',
+            'contact': request.user.phone_number or '',
+        },
+    })
+
+
+@login_required
+def verify_razorpay_payment_and_book(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        payload = {}
+
+    slot_id = payload.get('slot_id')
+    payment_mode = payload.get('payment_mode') or 'FULL'
+    razorpay_order_id = payload.get('razorpay_order_id')
+    razorpay_payment_id = payload.get('razorpay_payment_id')
+    razorpay_signature = payload.get('razorpay_signature')
+
+    if payment_mode not in {'FULL', 'PARTIAL_99'}:
+        return JsonResponse({'success': False, 'error': 'Invalid payment mode'}, status=400)
+    if not (slot_id and razorpay_order_id and razorpay_payment_id and razorpay_signature):
+        return JsonResponse({'success': False, 'error': 'Missing payment details'}, status=400)
+
+    client, _ = _razorpay_client()
+    if not client:
+        return JsonResponse({'success': False, 'error': 'Razorpay is not configured on server'}, status=500)
+
+    try:
+        client.utility.verify_payment_signature({
+            'razorpay_order_id': razorpay_order_id,
+            'razorpay_payment_id': razorpay_payment_id,
+            'razorpay_signature': razorpay_signature,
+        })
+        order = client.order.fetch(razorpay_order_id)
+        payment = client.payment.fetch(razorpay_payment_id)
+    except Exception:
+        return JsonResponse({'success': False, 'error': 'Payment verification failed'}, status=400)
+
+    if str(payment.get('order_id')) != str(razorpay_order_id):
+        return JsonResponse({'success': False, 'error': 'Payment/order mismatch'}, status=400)
+    if payment.get('status') not in {'captured', 'authorized'}:
+        return JsonResponse({'success': False, 'error': 'Payment is not captured'}, status=400)
+    order_notes = order.get('notes') or {}
+    if str(order_notes.get('slot_id')) != str(slot_id):
+        return JsonResponse({'success': False, 'error': 'Slot mismatch for payment'}, status=400)
+    if str(order_notes.get('user_id')) != str(request.user.id):
+        return JsonResponse({'success': False, 'error': 'User mismatch for payment'}, status=400)
+
     attempts = 3
     for attempt in range(attempts):
         try:
             with transaction.atomic():
                 slot = Slot.objects.select_for_update().get(id=slot_id)
-
                 if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
-                    messages.error(request, 'Slot is already booked.')
-                    return redirect(f'/grounds/{slot.ground.id}/?date={slot.date}')
+                    return JsonResponse({'success': False, 'error': 'Slot was booked by someone else. Payment is non-refundable; contact support.'}, status=409)
 
-                # Calculate total amount based on time of day
-                hour = slot.start_time.hour
-                if 6 <= hour < 18:  # Day pricing
-                    price_per_hour = slot.ground.day_price
-                else:  # Night pricing
-                    price_per_hour = slot.ground.night_price
+                if _slot_start_datetime(slot) <= timezone.localtime(timezone.now()):
+                    return JsonResponse({'success': False, 'error': 'Slot has already started'}, status=400)
 
-                total_amount = price_per_hour  # For 1 hour booking
-                owner_payout = total_amount - 3  # Platform fee is 3
+                existing_bookings = Booking.objects.filter(
+                    user=request.user,
+                    slot__ground=slot.ground,
+                    slot__date=slot.date,
+                    status='BOOKED'
+                ).count()
+                if existing_bookings >= 5:
+                    return JsonResponse({'success': False, 'error': 'You can only book up to 5 slots per day per ground.'}, status=400)
 
+                total_amount = _slot_price(slot.ground, slot.start_time)
+                paid_amount, due_amount, resolved_mode = _payment_amounts(total_amount, payment_mode)
+                expected_amount_paise = paid_amount * 100
+                if int(payment.get('amount') or 0) != expected_amount_paise:
+                    return JsonResponse({'success': False, 'error': 'Paid amount mismatch'}, status=400)
+
+                owner_payout = total_amount - 3
+                payment_status = 'PAID' if due_amount == 0 else 'PARTIALLY_PAID'
                 booking = Booking.objects.create(
                     user=request.user,
                     slot=slot,
@@ -226,11 +398,19 @@ def book_slot(request, slot_id):
                     customer_phone=request.user.phone_number,
                     total_amount=total_amount,
                     owner_payout=owner_payout,
-                    booking_source='ONLINE'
+                    booking_source='ONLINE',
+                    payment_mode=resolved_mode,
+                    payment_status=payment_status,
+                    paid_amount=paid_amount,
+                    due_amount=due_amount,
+                    payment_paid_at=timezone.now(),
+                    razorpay_order_id=razorpay_order_id,
+                    razorpay_payment_id=razorpay_payment_id,
+                    razorpay_signature=razorpay_signature,
                 )
 
                 slot.is_booked = True
-                slot.save()
+                slot.save(update_fields=['is_booked'])
 
                 ActivityLog.objects.create(
                     user=request.user,
@@ -239,40 +419,26 @@ def book_slot(request, slot_id):
                     slot=slot
                 )
 
-                # notify ground owner by email (non-blocking)
                 try:
-                    owner = slot.ground.owner
-                    if owner and owner.email:
-                        subject = f"New booking: {slot.ground.name} on {slot.date} {slot.start_time.strftime('%I:%M %p')}"
-                        body = (
-                            f"Hello {owner.name},\n\n"
-                            f"A new booking was made for your ground {slot.ground.name}.\n"
-                            f"Date: {slot.date}\n"
-                            f"Time: {slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}\n"
-                            f"Booked by: {request.user.name} ({request.user.email if request.user.email else request.user.phone_number})\n\n"
-                            "Regards,\nFootBook"
-                        )
-                        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
-                        send_mail(subject, body, from_email, [owner.email], fail_silently=True)
+                    _owner_booking_email(booking)
                 except Exception:
                     pass
 
-                messages.success(request, f'Slot booked successfully for {slot.start_time.strftime("%I:%M %p")} - {slot.end_time.strftime("%I:%M %p")} on {slot.date}.')
-
-                return redirect('/my-bookings/')
+                return JsonResponse({
+                    'success': True,
+                    'booking_id': str(booking.id),
+                    'redirect_url': '/my-bookings/',
+                    'message': 'Booking confirmed. Amount paid is non-refundable.',
+                })
         except OperationalError:
-            # retry on transient DB lock
             if attempt < attempts - 1:
                 time.sleep(0.1)
                 continue
-            messages.error(request, 'Database is busy, please try again.')
-            return redirect(f'/grounds/{slot.ground.id}/?date={slot.date}')
+            return JsonResponse({'success': False, 'error': 'Database busy, please retry.'}, status=500)
         except IntegrityError:
-            messages.error(request, 'Unable to create booking, please try again.')
-            return redirect(f'/grounds/{slot.ground.id}/?date={slot.date}')
+            return JsonResponse({'success': False, 'error': 'Unable to create booking, please retry.'}, status=500)
 
-    messages.error(request, 'Unable to book slot right now.')
-    return redirect('/grounds/')
+    return JsonResponse({'success': False, 'error': 'Unable to complete booking'}, status=500)
 
 
 @login_required
@@ -559,6 +725,58 @@ def stripe_webhook(request):
     return HttpResponse(status=200)
 
 
+@csrf_exempt
+def razorpay_webhook(request):
+    webhook_secret = getattr(settings, 'RAZORPAY_WEBHOOK_SECRET', None)
+    if request.method != 'POST' or not webhook_secret:
+        return HttpResponse(status=400)
+
+    signature = request.META.get('HTTP_X_RAZORPAY_SIGNATURE')
+    if not signature:
+        return HttpResponse(status=400)
+
+    client, _ = _razorpay_client()
+    if not client:
+        return HttpResponse(status=400)
+
+    payload = request.body.decode('utf-8')
+    try:
+        client.utility.verify_webhook_signature(payload, signature, webhook_secret)
+        event = json.loads(payload)
+    except Exception:
+        return HttpResponse(status=400)
+
+    event_name = event.get('event')
+    payment_entity = (event.get('payload') or {}).get('payment', {}).get('entity', {})
+    payment_id = payment_entity.get('id')
+    order_id = payment_entity.get('order_id')
+
+    if event_name in {'payment.captured', 'order.paid'} and payment_id:
+        booking = (
+            Booking.objects
+            .filter(razorpay_payment_id=payment_id)
+            .order_by('-created_at')
+            .first()
+        )
+        if not booking and order_id:
+            booking = (
+                Booking.objects
+                .filter(razorpay_order_id=order_id)
+                .order_by('-created_at')
+                .first()
+            )
+        if booking:
+            if booking.due_amount > 0:
+                booking.payment_status = 'PARTIALLY_PAID'
+            else:
+                booking.payment_status = 'PAID'
+            if not booking.payment_paid_at:
+                booking.payment_paid_at = timezone.now()
+            booking.save(update_fields=['payment_status', 'payment_paid_at'])
+
+    return HttpResponse(status=200)
+
+
 
 @login_required
 def admin_invoices(request):
@@ -706,9 +924,7 @@ def owner_manual_booking(request):
                     return redirect('/dashboard/owner/')
 
                 # Calculate amount
-                hour = slot.start_time.hour
-                price_per_hour = slot.ground.day_price if 6 <= hour < 18 else slot.ground.night_price
-                total_amount = price_per_hour
+                total_amount = _slot_price(slot.ground, slot.start_time)
                 owner_payout = total_amount - 3
 
                 booking = Booking.objects.create(
@@ -717,7 +933,12 @@ def owner_manual_booking(request):
                     customer_phone=phone,
                     total_amount=total_amount,
                     owner_payout=owner_payout,
-                    booking_source='MANUAL'
+                    booking_source='MANUAL',
+                    payment_mode='FULL',
+                    payment_status='PAID',
+                    paid_amount=total_amount,
+                    due_amount=0,
+                    payment_paid_at=timezone.now(),
                 )
 
                 slot.is_booked = True
@@ -754,13 +975,13 @@ def owner_manual_booking(request):
     if selected_ground and selected_date:
         slots_qs = Slot.objects.filter(ground=selected_ground, date=selected_date, is_booked=False).order_by('start_time')
         for s in slots_qs:
-            price = s.ground.day_price if 6 <= s.start_time.hour < 18 else s.ground.night_price
+            price = _slot_price(s.ground, s.start_time)
             slots.append({'slot': s, 'price': price})
     else:
         # default: show all available upcoming slots across grounds owned by this owner
         slots_qs = Slot.objects.filter(ground__in=grounds, is_booked=False, date__gte=timezone.localdate()).order_by('date', 'start_time')
         for s in slots_qs:
-            price = s.ground.day_price if 6 <= s.start_time.hour < 18 else s.ground.night_price
+            price = _slot_price(s.ground, s.start_time)
             slots.append({'slot': s, 'price': price})
 
     return render(request, 'owner/manual_booking.html', {

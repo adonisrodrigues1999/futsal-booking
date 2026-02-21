@@ -1,5 +1,5 @@
 git add .
-git commit -m "back button on dashboard fix,added image,and other sub features"
+git commit -m "ground booking page new feaures"
 git push
 
 
@@ -32,4 +32,4 @@ we can give  fix that back from dashboard page means logout the user and give th
 
 iphone login csrf issue
 
-on booking slots page show  day of the week with date,also show sun emohi if the booking slot is within 6am to 6 pm and for the rest show moon , then currently junk bookings are been shown like 3-4 am-4-5 nd 5-6 am remove that and make sure bookings are ony uptill ground open timings
+on booking slots page show  day of the week with date,also show sun emohi if the booking slot is within 6am to 6 pm and for the rest show moon , then currently junk bookings are been shown like 3-4 am-4-5 nd 5-6 am remove that and make sure bookings are ony uptill ground open timings Done

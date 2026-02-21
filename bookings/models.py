@@ -21,6 +21,13 @@ class Slot(models.Model):
 class Booking(models.Model):
     SOURCE = (('ONLINE','Online'), ('MANUAL','Manual'))
     STATUS = (('BOOKED','Booked'), ('CANCELLED','Cancelled'))
+    PAYMENT_MODE = (('FULL', 'Full Payment'), ('PARTIAL_99', 'Advance ₹99'))
+    PAYMENT_STATUS = (
+        ('PENDING', 'Pending'),
+        ('PARTIALLY_PAID', 'Partially Paid'),
+        ('PAID', 'Paid'),
+        ('FAILED', 'Failed'),
+    )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     slot = models.ForeignKey(Slot, on_delete=models.CASCADE)
@@ -36,6 +43,14 @@ class Booking(models.Model):
 
     booking_source = models.CharField(max_length=10, choices=SOURCE, default='ONLINE')
     status = models.CharField(max_length=10, choices=STATUS, default='BOOKED')
+    payment_mode = models.CharField(max_length=12, choices=PAYMENT_MODE, default='FULL')
+    payment_status = models.CharField(max_length=16, choices=PAYMENT_STATUS, default='PAID')
+    paid_amount = models.PositiveIntegerField(default=0)
+    due_amount = models.PositiveIntegerField(default=0)
+    payment_paid_at = models.DateTimeField(null=True, blank=True)
+    razorpay_order_id = models.CharField(max_length=100, blank=True, null=True)
+    razorpay_payment_id = models.CharField(max_length=100, blank=True, null=True)
+    razorpay_signature = models.CharField(max_length=200, blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)

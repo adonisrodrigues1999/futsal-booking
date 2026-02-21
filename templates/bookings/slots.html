@@ -89,10 +89,34 @@
         <p id="cm-slot-time"></p>
         <p id="cm-ground"></p>
         <p id="cm-price"></p>
+        <div class="mb-2">
+          <label class="form-label mb-1 fw-semibold">Payment option</label>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="cm-payment-mode" id="cm-payment-full" value="FULL" checked>
+            <label class="form-check-label" for="cm-payment-full">
+              Full payment
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="cm-payment-mode" id="cm-payment-partial" value="PARTIAL_99">
+            <label class="form-check-label" for="cm-payment-partial">
+              Pay ₹99 now (non-refundable), remaining at venue
+            </label>
+          </div>
+        </div>
+        <div class="alert alert-warning py-2 mb-2">
+          All online payments are non-refundable.
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" value="1" id="cm-non-refundable-ack">
+          <label class="form-check-label" for="cm-non-refundable-ack">
+            I understand and accept that this payment is non-refundable.
+          </label>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-success" id="cm-confirm-btn">Confirm Booking</button>
+        <button type="button" class="btn btn-success" id="cm-confirm-btn">Proceed to Pay</button>
       </div>
     </div>
   </div>
@@ -102,4 +126,8 @@
   window.currentGroundName = {{ ground.name|escapejs|default:'""' }};
 </script>
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 {% endblock %}

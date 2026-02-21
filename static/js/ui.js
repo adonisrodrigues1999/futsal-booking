@@ -211,45 +211,115 @@ document.addEventListener('DOMContentLoaded', function() {
     requestAnimationFrame(step);
   });
 
-  // Book slot via fetch (CSRF safe)
-  window.bookSlot = function(slotId, btn) {
-    var url = '/book/' + slotId + '/';
-    var csrftoken = null;
-    // try cookie
-    csrftoken = getCookie('csrftoken');
+  function getSelectedPaymentMode() {
+    var checked = document.querySelector('input[name="cm-payment-mode"]:checked');
+    return checked ? checked.value : 'FULL';
+  }
 
-    btn.disabled = true;
-    btn.textContent = 'Booking...';
-
-    fetch(url, {
+  function verifyAndFinalizeBooking(slotId, paymentMode, rpResponse, confirmBtn) {
+    var csrftoken = getCookie('csrftoken');
+    fetch('/payments/razorpay/verify-and-book/', {
       method: 'POST',
       headers: {
         'X-CSRFToken': csrftoken,
-        'Accept': 'text/html'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
-      credentials: 'same-origin'
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        slot_id: slotId,
+        payment_mode: paymentMode,
+        razorpay_order_id: rpResponse.razorpay_order_id,
+        razorpay_payment_id: rpResponse.razorpay_payment_id,
+        razorpay_signature: rpResponse.razorpay_signature
+      })
     }).then(function(res) {
-      if (res.redirected) {
-        btn.textContent = 'Booked!';
-        // follow redirect
-        setTimeout(function() { window.location = res.url; }, 240);
-        return;
-      }
-      if (res.ok) {
-        btn.textContent = 'Booked!';
-        showAppToast('Booking confirmed successfully.', 'success', 1800);
-        // reload to reflect booking state
-        setTimeout(function() { window.location.reload(); }, 240);
-      } else {
-        return res.text().then(function(t) { throw new Error('Booking failed'); });
-      }
-    }).catch(function(err){
-      showAppToast('Unable to book slot. Please try again.', 'danger', 2800);
-      btn.disabled = false;
-      btn.textContent = 'Confirm Booking';
-      console.error(err);
+      return res.json().then(function(data) {
+        if (!res.ok || !data.success) throw new Error((data && data.error) || 'Booking verification failed');
+        return data;
+      });
+    }).then(function(data) {
+      showAppToast(data.message || 'Booking confirmed. Non-refundable payment.', 'success', 2600);
+      setTimeout(function() {
+        window.location = data.redirect_url || '/my-bookings/';
+      }, 400);
+    }).catch(function(err) {
+      showAppToast(err.message || 'Payment verified but booking failed. Contact support.', 'danger', 4200);
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Proceed to Pay';
     });
-  };
+  }
+
+  function startSlotCheckout(slotId, confirmBtn) {
+    var ack = document.getElementById('cm-non-refundable-ack');
+    if (!ack || !ack.checked) {
+      showAppToast('Please accept the non-refundable policy before payment.', 'warning', 3000);
+      return;
+    }
+
+    if (typeof Razorpay === 'undefined') {
+      showAppToast('Payment gateway not loaded. Refresh and try again.', 'danger', 3200);
+      return;
+    }
+
+    var paymentMode = getSelectedPaymentMode();
+    var csrftoken = getCookie('csrftoken');
+
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Initializing...';
+
+    fetch('/payments/razorpay/create-order/', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': csrftoken,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        slot_id: slotId,
+        payment_mode: paymentMode
+      })
+    }).then(function(res) {
+      return res.json().then(function(data) {
+        if (!res.ok || !data.success) throw new Error((data && data.error) || 'Unable to initialize payment');
+        return data;
+      });
+    }).then(function(orderData) {
+      var options = {
+        key: orderData.key_id,
+        amount: orderData.pay_now_amount * 100,
+        currency: orderData.currency || 'INR',
+        name: 'FootBook',
+        description: 'Slot booking payment (non-refundable)',
+        order_id: orderData.order_id,
+        handler: function(resp) {
+          verifyAndFinalizeBooking(slotId, orderData.payment_mode, resp, confirmBtn);
+        },
+        modal: {
+          ondismiss: function() {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Proceed to Pay';
+            showAppToast('Payment was cancelled.', 'warning', 2200);
+          }
+        },
+        prefill: orderData.prefill || {}
+      };
+
+      var checkout = new Razorpay(options);
+      checkout.on('payment.failed', function() {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Proceed to Pay';
+        showAppToast('Payment failed. Please try again.', 'danger', 3200);
+      });
+      confirmModal.hide();
+      checkout.open();
+    }).catch(function(err) {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Proceed to Pay';
+      showAppToast(err.message || 'Unable to start payment.', 'danger', 3200);
+    });
+  }
 
   // Initialize single reusable modal instance
   var modalEl = document.getElementById('confirmModalGlobal');
@@ -261,12 +331,16 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('cm-slot-time').innerHTML = 'Slot: <strong>' + startTime + ' - ' + endTime + '</strong>';
     document.getElementById('cm-ground').innerHTML = 'Ground: <strong>' + (window.currentGroundName || document.title) + '</strong>';
     document.getElementById('cm-price').innerHTML = 'Price: <strong>₹' + price + '</strong>';
+    var fullRadio = document.getElementById('cm-payment-full');
+    var ack = document.getElementById('cm-non-refundable-ack');
+    if (fullRadio) fullRadio.checked = true;
+    if (ack) ack.checked = false;
 
     var confirmBtn = document.getElementById('cm-confirm-btn');
     confirmBtn.disabled = false;
-    confirmBtn.textContent = 'Confirm Booking';
+    confirmBtn.textContent = 'Proceed to Pay';
     // replace click handler
-    confirmBtn.onclick = function() { bookSlot(slotId, confirmBtn); };
+    confirmBtn.onclick = function() { startSlotCheckout(slotId, confirmBtn); };
 
     confirmModal.show();
   };

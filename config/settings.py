@@ -170,3 +170,8 @@ SESSION_COOKIE_SAMESITE = None
 CSRF_COOKIE_SAMESITE = None
 # If behind a proxy/load balancer that sets X-Forwarded-Proto, enable this so Django knows requests are secure
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+
+RAZORPAY_KEY_ID = 'rzp_live_SIjlgv0EhnClkB'
+RAZORPAY_KEY_SECRET = '9d6HE5rVymg1uZjCsuK2Xs2W'
+RAZORPAY_WEBHOOK_SECRET = ''

@@ -36,6 +36,8 @@
                   <div>
                     <div class="h6 mb-0">₹{{ booking.total_amount }}</div>
                     <div class="small text-muted">{{ booking.get_status_display }}</div>
+                    <div class="small text-muted">Payment: {{ booking.get_payment_status_display }} • Paid ₹{{ booking.paid_amount }} • Due ₹{{ booking.due_amount }}</div>
+                    <div class="small text-warning">Online payments are non-refundable.</div>
                     {% if booking.cancel_no_refund %}
                       <div class="small text-danger">if you Cancel now the amount will not be refunded.</div>
                     {% endif %}

@@ -97,6 +97,21 @@
                 <div class="fw-semibold">{{ booking.slot.ground.name }}</div>
                 <div class="small text-muted">{{ booking.slot.date }} • {{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</div>
                 <div class="small mt-1">Customer: <strong>{{ booking.customer_name }}</strong> • {{ booking.customer_phone }}</div>
+                <div class="small mt-1">
+                  Payment Status:
+                  {% if booking.payment_status == 'PAID' %}
+                    <span class="badge text-bg-success">Paid</span>
+                  {% elif booking.payment_status == 'PARTIALLY_PAID' %}
+                    <span class="badge text-bg-warning">Partially Paid</span>
+                  {% elif booking.payment_status == 'PENDING' %}
+                    <span class="badge text-bg-secondary">Pending</span>
+                  {% else %}
+                    <span class="badge text-bg-danger">Failed</span>
+                  {% endif %}
+                  • Mode: <strong>{{ booking.get_payment_mode_display }}</strong>
+                </div>
+                <div class="small text-muted">Paid: ₹{{ booking.paid_amount }} • Due: ₹{{ booking.due_amount }}</div>
+                <div class="small text-muted">Payment Time: {% if booking.payment_paid_at %}{{ booking.payment_paid_at|date:"Y-m-d g:i A" }}{% else %}-{% endif %}</div>
               </div>
               <div class="text-end">
                 <div class="small text-muted">₹{{ booking.total_amount }}</div>
