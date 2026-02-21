@@ -58,6 +58,10 @@ def _payment_amounts(total_amount, payment_mode):
     return total_amount, 0, 'FULL'
 
 
+def _is_restricted_manual_hour(slot_time):
+    return 2 <= slot_time.hour < 6
+
+
 def _owner_booking_email(booking):
     owner = booking.slot.ground.owner if booking.slot and booking.slot.ground else None
     if not owner or not owner.email:
@@ -914,6 +918,7 @@ def owner_manual_booking(request):
         slot_id = request.POST['slot']
         name = request.POST['name']
         phone = request.POST['phone']
+        now_dt = timezone.localtime(timezone.now())
 
         try:
             with transaction.atomic():
@@ -922,6 +927,14 @@ def owner_manual_booking(request):
                 if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
                     messages.error(request, 'Slot was booked just now. Please pick another slot.')
                     return redirect('/dashboard/owner/')
+
+                if _slot_start_datetime(slot) <= now_dt:
+                    messages.error(request, 'Past slots cannot be manually booked.')
+                    return redirect('/owner/manual-booking/')
+
+                if _is_restricted_manual_hour(slot.start_time):
+                    messages.error(request, 'Manual booking is not allowed between 2:00 AM and 6:00 AM.')
+                    return redirect('/owner/manual-booking/')
 
                 # Calculate amount
                 total_amount = _slot_price(slot.ground, slot.start_time)
@@ -935,10 +948,9 @@ def owner_manual_booking(request):
                     owner_payout=owner_payout,
                     booking_source='MANUAL',
                     payment_mode='FULL',
-                    payment_status='PAID',
-                    paid_amount=total_amount,
-                    due_amount=0,
-                    payment_paid_at=timezone.now(),
+                    payment_status='PENDING',
+                    paid_amount=0,
+                    due_amount=total_amount,
                 )
 
                 slot.is_booked = True
@@ -972,15 +984,25 @@ def owner_manual_booking(request):
         except Exception:
             selected_date = None
 
+    now_dt = timezone.localtime(timezone.now())
+
     if selected_ground and selected_date:
         slots_qs = Slot.objects.filter(ground=selected_ground, date=selected_date, is_booked=False).order_by('start_time')
         for s in slots_qs:
+            if _slot_start_datetime(s) <= now_dt:
+                continue
+            if _is_restricted_manual_hour(s.start_time):
+                continue
             price = _slot_price(s.ground, s.start_time)
             slots.append({'slot': s, 'price': price})
     else:
         # default: show all available upcoming slots across grounds owned by this owner
         slots_qs = Slot.objects.filter(ground__in=grounds, is_booked=False, date__gte=timezone.localdate()).order_by('date', 'start_time')
         for s in slots_qs:
+            if _slot_start_datetime(s) <= now_dt:
+                continue
+            if _is_restricted_manual_hour(s.start_time):
+                continue
             price = _slot_price(s.ground, s.start_time)
             slots.append({'slot': s, 'price': price})
 
