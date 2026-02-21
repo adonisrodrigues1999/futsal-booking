@@ -9,7 +9,7 @@
     </div>
     <div class="d-flex align-items-center gap-2 flex-wrap">
       {% if prev_date %}<a class="btn btn-sm btn-outline-primary" href="?date={{ prev_date|date:'Y-m-d' }}">Prev</a>{% endif %}
-      <span class="fw-semibold">{{ selected_date }}</span>
+      <span class="fw-semibold">{{ selected_date|date:"l, M j, Y" }}</span>
       <a class="btn btn-sm btn-outline-primary" href="?date={{ next_date|date:'Y-m-d' }}">Next</a>
     </div>
   </div>
@@ -26,7 +26,7 @@
       <div class="slot-wrap">
         <div class="slot-card" role="group" aria-label="Slot {{ slot.id }}" data-slot-id="{{ slot.id }}">
           <div class="slot-meta">
-            <div class="slot-time">{{ slot.start_time|time:"g:i A" }} to {{ slot.end_time|time:"g:i A" }}</div>
+            <div class="slot-time">{{ obj.time_icon }} {{ slot.start_time|time:"g:i A" }} to {{ slot.end_time|time:"g:i A" }}</div>
             <div class="slot-price">₹{{ obj.price }}</div>
           </div>
 

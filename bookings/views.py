@@ -33,6 +33,26 @@ def _slot_start_datetime(slot):
     )
 
 
+def _is_day_slot(slot_time):
+    return 6 <= slot_time.hour < 18
+
+
+def _operating_window_for_date(ground, target_date):
+    tz = timezone.get_current_timezone()
+    window_start = timezone.make_aware(
+        datetime.combine(target_date, ground.opening_time),
+        tz,
+    )
+    window_end_date = target_date
+    if ground.closing_time <= ground.opening_time:
+        window_end_date = target_date + timedelta(days=1)
+    window_end = timezone.make_aware(
+        datetime.combine(window_end_date, ground.closing_time),
+        tz,
+    )
+    return window_start, window_end
+
+
 def ground_image(request, ground_id):
     # Serve a ground image from the project `groundsimages` folder if available.
     try:
@@ -115,19 +135,13 @@ def ground_slots(request, ground_id):
     visible_slots = []
     now_dt = timezone.localtime(timezone.now())
     today = timezone.localdate()
+    window_start, window_end = _operating_window_for_date(ground, selected_date)
     for slot in slots_qs:
-        # Skip slots outside operating hours
-        if ground.closing_time > ground.opening_time:
-            # Normal hours
-            if slot.start_time < ground.opening_time or slot.start_time >= ground.closing_time:
-                continue
-        else:
-            # Overnight hours
-            if not (slot.start_time >= ground.opening_time or slot.start_time < ground.closing_time):
-                continue
+        slot_dt = _slot_start_datetime(slot)
+        if not (window_start <= slot_dt < window_end):
+            continue
 
         # Hide slots that have already started.
-        slot_dt = timezone.make_aware(timezone.datetime.combine(selected_date, slot.start_time), timezone.get_current_timezone())
         is_past = slot_dt <= now_dt
         if is_past:
             continue
@@ -146,7 +160,8 @@ def ground_slots(request, ground_id):
         visible_slots.append({
             'slot': slot,
             'is_past': is_past,
-            'price': ground.day_price if 6 <= slot.start_time.hour < 18 else ground.night_price,
+            'price': ground.day_price if _is_day_slot(slot.start_time) else ground.night_price,
+            'time_icon': '☀️' if _is_day_slot(slot.start_time) else '🌙',
             'booking': booking,
             'user_booking': user_booking,
             'can_cancel': can_cancel,
