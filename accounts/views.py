@@ -10,9 +10,13 @@ from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.forms import SetPasswordForm
+from datetime import timedelta
+from django.db.models import Count, Sum, Q
+from django.db.models.functions import Coalesce
 from django import forms
 from .models import User
 from bookings.models import EmailVerification
+from bookings.models import Booking
 from bookings.slot_generation import create_initial_slots_for_ground
 from .forms import UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm, GroundCreationForm
 from grounds.models import Ground
@@ -213,6 +217,52 @@ def admin_dashboard(request):
     ground_owners = User.objects.filter(role='owner')
     grounds = Ground.objects.all()
     customers = User.objects.filter(role='customer')
+    booked = Booking.objects.filter(status='BOOKED')
+
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+    month_bookings = booked.filter(slot__date__gte=month_start, slot__date__lte=today)
+    month_sums = month_bookings.aggregate(
+        gmv=Coalesce(Sum('total_amount'), 0),
+        owner_payout=Coalesce(Sum('owner_payout'), 0),
+    )
+    month_gmv = int(month_sums['gmv'] or 0)
+    month_owner_payout = int(month_sums['owner_payout'] or 0)
+    month_platform_revenue = month_gmv - month_owner_payout
+
+    days = [today - timedelta(days=i) for i in range(6, -1, -1)]
+    trend_labels = [d.strftime('%Y-%m-%d') for d in days]
+    trend_data = [booked.filter(slot__date=d).count() for d in days]
+
+    top_grounds = (
+        booked.values('slot__ground_id', 'slot__ground__name')
+        .annotate(
+            bookings_count=Count('id'),
+            gmv=Coalesce(Sum('total_amount'), 0),
+            owner_payout=Coalesce(Sum('owner_payout'), 0),
+        )
+        .order_by('-bookings_count', '-gmv')[:5]
+    )
+    for row in top_grounds:
+        row['gmv'] = int(row['gmv'] or 0)
+        row['platform_revenue'] = int((row['gmv'] or 0) - (row['owner_payout'] or 0))
+
+    owner_leaderboard = (
+        ground_owners
+        .annotate(
+            grounds_count=Count('ground', distinct=True),
+            bookings_count=Count(
+                'ground__slot__booking',
+                filter=Q(ground__slot__booking__status='BOOKED'),
+                distinct=True
+            ),
+            revenue=Coalesce(
+                Sum('ground__slot__booking__owner_payout', filter=Q(ground__slot__booking__status='BOOKED')),
+                0
+            ),
+        )
+        .order_by('-bookings_count', '-revenue', 'name')[:8]
+    )
 
     context = {
         'ground_owners': ground_owners,
@@ -221,6 +271,14 @@ def admin_dashboard(request):
         'total_owners': ground_owners.count(),
         'total_grounds': grounds.count(),
         'total_customers': customers.count(),
+        'month_bookings': month_bookings.count(),
+        'month_gmv': month_gmv,
+        'month_platform_revenue': month_platform_revenue,
+        'active_owners_this_month': month_bookings.values('slot__ground__owner').distinct().count(),
+        'trend_labels': trend_labels,
+        'trend_data': trend_data,
+        'top_grounds': top_grounds,
+        'owner_leaderboard': owner_leaderboard,
     }
     return render(request, 'accounts/admin_dashboard.html', context)
 

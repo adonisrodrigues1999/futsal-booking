@@ -42,15 +42,27 @@
                       <div class="small text-danger">if you Cancel now the amount will not be refunded.</div>
                     {% endif %}
                   </div>
-                  {% if booking.status == 'BOOKED' and booking.booking_source == 'ONLINE' and booking.can_cancel %}
-                    {% if booking.cancel_no_refund %}
-                      <a href="/cancel/{{ booking.id }}/" class="btn btn-sm btn-outline-danger" data-confirm-message="This cancellation  will not be refunded.">Cancel</a>
-                    {% else %}
-                      <a href="/cancel/{{ booking.id }}/" class="btn btn-sm btn-outline-danger" data-confirm-message="Cancel this booking?">Cancel</a>
+                  <div class="d-flex flex-column gap-2 align-items-end">
+                    {% if booking.status == 'BOOKED' and booking.can_reschedule %}
+                      <a href="{% url 'customer_reschedule_booking' booking.id %}" class="btn btn-sm btn-outline-primary">Reschedule</a>
+                    {% elif booking.status == 'BOOKED' and booking.reschedule_locked %}
+                      {% if booking.owner_phone %}
+                        <a href="tel:{{ booking.owner_phone }}" class="btn btn-sm btn-outline-warning">Call Owner</a>
+                      {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled>Call Owner</button>
+                      {% endif %}
                     {% endif %}
-                  {% elif booking.status == 'BOOKED' and booking.booking_source == 'ONLINE' %}
-                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-disabled="true">Past booking</button>
-                  {% endif %}
+
+                    {% if booking.status == 'BOOKED' and booking.booking_source == 'ONLINE' and booking.can_cancel %}
+                      {% if booking.cancel_no_refund %}
+                        <a href="/cancel/{{ booking.id }}/" class="btn btn-sm btn-outline-danger" data-confirm-message="This cancellation  will not be refunded.">Cancel</a>
+                      {% else %}
+                        <a href="/cancel/{{ booking.id }}/" class="btn btn-sm btn-outline-danger" data-confirm-message="Cancel this booking?">Cancel</a>
+                      {% endif %}
+                    {% elif booking.status == 'BOOKED' and booking.booking_source == 'ONLINE' %}
+                      <button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-disabled="true">Past booking</button>
+                    {% endif %}
+                  </div>
                 </div>
               </div>
             </div>

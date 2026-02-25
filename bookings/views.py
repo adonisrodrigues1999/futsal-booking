@@ -6,6 +6,8 @@ from django.http import HttpResponse
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction, OperationalError, IntegrityError
+from django.db.models import Count, Sum
+from django.db.models.functions import Coalesce
 import time
 from django.core.mail import send_mail
 from django.conf import settings
@@ -13,6 +15,8 @@ import csv
 import io
 import json
 from decimal import Decimal
+from decimal import InvalidOperation
+from calendar import month_name, month_abbr
 from django.views.decorators.csrf import csrf_exempt
 
 try:
@@ -25,7 +29,7 @@ try:
 except Exception:
     razorpay = None
 
-from .models import Ground, Slot, Booking, ActivityLog
+from .models import Ground, Slot, Booking, ActivityLog, OwnerExpense
 from .slot_generation import ensure_slots_for_ground_date
 import os
 from django.http import FileResponse, Http404
@@ -56,6 +60,39 @@ def _payment_amounts(total_amount, payment_mode):
             return total_amount, 0, 'FULL'
         return paid, due, 'PARTIAL_99'
     return total_amount, 0, 'FULL'
+
+
+def _hours_to_slot_start(slot):
+    now_dt = timezone.localtime(timezone.now())
+    return (_slot_start_datetime(slot) - now_dt).total_seconds() / 3600
+
+
+def _can_self_reschedule(booking):
+    if booking.status != 'BOOKED':
+        return False
+    if _slot_start_datetime(booking.slot) <= timezone.localtime(timezone.now()):
+        return False
+    return _hours_to_slot_start(booking.slot) >= 4
+
+
+def _available_reschedule_slots(booking, selected_date):
+    ground = booking.slot.ground
+    ensure_slots_for_ground_date(ground=ground, slot_date=selected_date)
+    now_dt = timezone.localtime(timezone.now())
+
+    slots = []
+    slots_qs = Slot.objects.filter(
+        ground=ground,
+        date=selected_date,
+        is_booked=False,
+    ).order_by('start_time')
+    for slot in slots_qs:
+        if slot.id == booking.slot_id:
+            continue
+        if _slot_start_datetime(slot) <= now_dt:
+            continue
+        slots.append({'slot': slot, 'price': _slot_price(ground, slot.start_time)})
+    return slots
 
 
 def _is_restricted_manual_hour(slot_time):
@@ -160,8 +197,30 @@ def home(request):
         return redirect('admin_dashboard')
     elif user.role == 'owner':
         return redirect('owner_dashboard')
+    today = timezone.localdate()
+    now_dt = timezone.localtime(timezone.now())
+    customer_bookings = (
+        Booking.objects
+        .filter(user=user, status='BOOKED')
+        .select_related('slot__ground')
+        .order_by('slot__date', 'slot__start_time')
+    )
+    upcoming_bookings = customer_bookings.filter(slot__date__gte=today)
+    upcoming_list = list(upcoming_bookings[:5])
+    for booking in upcoming_list:
+        booking.hours_left = int(max((_slot_start_datetime(booking.slot) - now_dt).total_seconds() // 3600, 0))
 
-    return render(request, 'dashboard/customer_home.html')
+    stats = {
+        'total_bookings': customer_bookings.count(),
+        'upcoming_bookings': upcoming_bookings.count(),
+        'this_month_bookings': customer_bookings.filter(slot__date__month=today.month, slot__date__year=today.year).count(),
+        'money_spent': int(customer_bookings.aggregate(total=Coalesce(Sum('paid_amount'), 0))['total'] or 0),
+    }
+
+    return render(request, 'dashboard/customer_home.html', {
+        'stats': stats,
+        'upcoming_list': upcoming_list,
+    })
 
 
 @login_required
@@ -393,7 +452,7 @@ def verify_razorpay_payment_and_book(request):
                 if int(payment.get('amount') or 0) != expected_amount_paise:
                     return JsonResponse({'success': False, 'error': 'Paid amount mismatch'}, status=400)
 
-                owner_payout = total_amount - 3
+                owner_payout = total_amount
                 payment_status = 'PAID' if due_amount == 0 else 'PARTIALLY_PAID'
                 booking = Booking.objects.create(
                     user=request.user,
@@ -458,6 +517,9 @@ def my_bookings(request):
         slot_start = _slot_start_datetime(booking.slot)
         booking.can_cancel = booking.slot.date >= today
         booking.cancel_no_refund = booking.can_cancel and ((slot_start - now_dt).total_seconds() / 3600) < 4
+        booking.can_reschedule = _can_self_reschedule(booking)
+        booking.owner_phone = booking.slot.ground.owner.phone_number if booking.slot and booking.slot.ground and booking.slot.ground.owner else ''
+        booking.reschedule_locked = booking.status == 'BOOKED' and not booking.can_reschedule
 
         date = booking.slot.date
         if date not in bookings_by_date:
@@ -475,6 +537,36 @@ def owner_dashboard(request):
     grounds = Ground.objects.filter(owner=owner)
 
     bookings = Booking.objects.filter(slot__ground__in=grounds, status='BOOKED')
+    today = timezone.localdate()
+
+    period = request.GET.get('period', 'month')
+    if period not in {'month', 'year'}:
+        period = 'month'
+    try:
+        selected_year = int(request.GET.get('year') or today.year)
+    except Exception:
+        selected_year = today.year
+    selected_year = max(2020, min(2100, selected_year))
+    try:
+        selected_month = int(request.GET.get('month') or today.month)
+    except Exception:
+        selected_month = today.month
+    selected_month = max(1, min(12, selected_month))
+
+    if period == 'year':
+        period_start = datetime(selected_year, 1, 1).date()
+        period_end = datetime(selected_year, 12, 31).date()
+        period_label = f"Year {selected_year}"
+    else:
+        period_start = datetime(selected_year, selected_month, 1).date()
+        if selected_month == 12:
+            period_end = datetime(selected_year + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            period_end = datetime(selected_year, selected_month + 1, 1).date() - timedelta(days=1)
+        period_label = f"{month_name[selected_month]} {selected_year}"
+
+    period_bookings = bookings.filter(slot__date__gte=period_start, slot__date__lte=period_end)
+    expense_qs = OwnerExpense.objects.filter(owner=owner, spent_on__gte=period_start, spent_on__lte=period_end)
 
     # heatmap by hour
     heatmap = {}
@@ -483,7 +575,6 @@ def owner_dashboard(request):
         heatmap[hour] = heatmap.get(hour, 0) + 1
 
     # bookings per day for the last 14 days
-    today = timezone.localdate()
     days = [today - timedelta(days=i) for i in range(13, -1, -1)]
     labels = [d.strftime('%Y-%m-%d') for d in days]
     counts = [bookings.filter(slot__date=d).count() for d in days]
@@ -492,23 +583,195 @@ def owner_dashboard(request):
     owner_bookings = bookings.order_by('-slot__date', '-slot__start_time')[:50]
     for booking in owner_bookings:
         booking.can_owner_cancel = _slot_start_datetime(booking.slot) > now_dt
+        booking.can_owner_reschedule = booking.status == 'BOOKED' and _slot_start_datetime(booking.slot) > now_dt
+        booking.can_mark_paid_at_ground = booking.status == 'BOOKED' and (
+            booking.booking_source == 'MANUAL' or booking.due_amount > 0
+        )
+
+    sums = bookings.aggregate(
+        gross_revenue=Coalesce(Sum('total_amount'), 0),
+        owner_revenue=Coalesce(Sum('owner_payout'), 0),
+        collected_amount=Coalesce(Sum('paid_amount'), 0),
+        pending_amount=Coalesce(Sum('due_amount'), 0),
+    )
+    period_sums = period_bookings.aggregate(
+        gross_revenue=Coalesce(Sum('total_amount'), 0),
+        owner_revenue=Coalesce(Sum('owner_payout'), 0),
+        collected_amount=Coalesce(Sum('paid_amount'), 0),
+        pending_amount=Coalesce(Sum('due_amount'), 0),
+    )
+
+    expense_total = expense_qs.aggregate(total=Coalesce(Sum('amount'), Decimal('0.00')))['total'] or Decimal('0.00')
+    expense_by_category = expense_qs.values('category').annotate(total=Coalesce(Sum('amount'), Decimal('0.00'))).order_by('-total')
+    category_map = dict(OwnerExpense.CATEGORY_CHOICES)
+    expense_category_summary = [
+        {'label': category_map.get(row['category'], row['category']), 'total': row['total']}
+        for row in expense_by_category
+    ]
+
+    period_income = Decimal(period_sums['owner_revenue'] or 0)
+    period_profit = period_income - expense_total
+    period_margin = float((period_profit / period_income) * 100) if period_income > 0 else 0.0
+
+    bookings_by_source = bookings.values('booking_source').annotate(total=Count('id'))
+    source_map = {row['booking_source']: row['total'] for row in bookings_by_source}
+
+    ground_performance = (
+        bookings
+        .values('slot__ground__name')
+        .annotate(
+            bookings_count=Count('id'),
+            revenue=Coalesce(Sum('owner_payout'), 0),
+            gross=Coalesce(Sum('total_amount'), 0),
+        )
+        .order_by('-revenue', '-bookings_count')[:5]
+    )
+
+    selected_grounds = grounds.values('id', 'name').order_by('name')
+    recent_expenses = OwnerExpense.objects.filter(owner=owner).select_related('ground').order_by('-spent_on', '-created_at')[:12]
+
+    pl_labels = [month_abbr[m] for m in range(1, 13)]
+    pl_income_data = []
+    pl_expense_data = []
+    pl_profit_data = []
+    for m in range(1, 13):
+        month_start = datetime(selected_year, m, 1).date()
+        if m == 12:
+            month_end = datetime(selected_year + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            month_end = datetime(selected_year, m + 1, 1).date() - timedelta(days=1)
+        month_income = bookings.filter(slot__date__gte=month_start, slot__date__lte=month_end).aggregate(
+            rev=Coalesce(Sum('owner_payout'), 0)
+        )['rev'] or 0
+        month_expense = OwnerExpense.objects.filter(
+            owner=owner,
+            spent_on__gte=month_start,
+            spent_on__lte=month_end
+        ).aggregate(total=Coalesce(Sum('amount'), Decimal('0.00')))['total'] or Decimal('0.00')
+        month_profit = Decimal(month_income) - month_expense
+        pl_income_data.append(float(month_income))
+        pl_expense_data.append(float(month_expense))
+        pl_profit_data.append(float(month_profit))
 
     context = {
         'stats': {
             'total_bookings': bookings.count(),
-            'revenue': bookings.count() * 1000,  # sample
+            'revenue': int(sums['owner_revenue'] or 0),
+            'gross_revenue': int(sums['gross_revenue'] or 0),
+            'collected_amount': int(sums['collected_amount'] or 0),
+            'pending_amount': int(sums['pending_amount'] or 0),
+            'online_bookings': source_map.get('ONLINE', 0),
+            'manual_bookings': source_map.get('MANUAL', 0),
             'peak_hour': max(heatmap, key=heatmap.get) if heatmap else 'N/A',
             'active_grounds': grounds.count(),
+            'period_income': period_income,
+            'period_expense': expense_total,
+            'period_profit': period_profit,
+            'period_margin': period_margin,
         },
         'heatmap': heatmap,
         'heatmap_labels': [i for i in range(24)],
         'heatmap_data': [heatmap.get(i, 0) for i in range(24)],
         'chart_labels': labels,
         'chart_data': counts,
+        'report_period': period,
+        'report_label': period_label,
+        'report_year': selected_year,
+        'report_month': selected_month,
+        'report_month_options': [(idx, month_name[idx]) for idx in range(1, 13)],
+        'report_year_options': list(range(today.year - 3, today.year + 1)),
+        'ground_performance': ground_performance,
         'owner_bookings': owner_bookings,
+        'owner_grounds': selected_grounds,
+        'recent_expenses': recent_expenses,
+        'expense_categories': OwnerExpense.CATEGORY_CHOICES,
+        'expense_by_category': expense_category_summary,
+        'pl_labels': pl_labels,
+        'pl_income_data': pl_income_data,
+        'pl_expense_data': pl_expense_data,
+        'pl_profit_data': pl_profit_data,
     }
 
     return render(request, 'dashboard/owner_dashboard.html', context)
+
+
+@login_required
+def owner_add_expense(request):
+    if request.user.role != 'owner' or request.method != 'POST':
+        return redirect('/dashboard/owner/')
+
+    title = (request.POST.get('title') or '').strip()
+    category = (request.POST.get('category') or 'OTHER').strip()
+    amount_raw = (request.POST.get('amount') or '').strip()
+    spent_on_raw = (request.POST.get('spent_on') or '').strip()
+    note = (request.POST.get('note') or '').strip()
+    ground_id = (request.POST.get('ground_id') or '').strip()
+    next_url = request.POST.get('next') or '/dashboard/owner/'
+    if not next_url.startswith('/dashboard/owner'):
+        next_url = '/dashboard/owner/'
+
+    if not title:
+        messages.error(request, 'Expense title is required.')
+        return redirect(next_url)
+
+    if category not in dict(OwnerExpense.CATEGORY_CHOICES):
+        category = 'OTHER'
+
+    try:
+        amount = Decimal(amount_raw)
+        if amount <= 0:
+            raise InvalidOperation()
+    except Exception:
+        messages.error(request, 'Enter a valid positive expense amount.')
+        return redirect(next_url)
+
+    if spent_on_raw:
+        try:
+            spent_on = datetime.strptime(spent_on_raw, '%Y-%m-%d').date()
+        except Exception:
+            messages.error(request, 'Invalid expense date format.')
+            return redirect(next_url)
+    else:
+        spent_on = timezone.localdate()
+
+    ground = None
+    if ground_id:
+        ground = Ground.objects.filter(id=ground_id, owner=request.user).first()
+        if not ground:
+            messages.error(request, 'Invalid ground selected for expense.')
+            return redirect(next_url)
+
+    OwnerExpense.objects.create(
+        owner=request.user,
+        ground=ground,
+        title=title,
+        category=category,
+        amount=amount,
+        spent_on=spent_on,
+        note=note or None,
+    )
+    messages.success(request, f'Expense added: {title} (₹{amount}).')
+    return redirect(next_url)
+
+
+@login_required
+def owner_delete_expense(request, expense_id):
+    if request.user.role != 'owner' or request.method != 'POST':
+        return redirect('/dashboard/owner/')
+
+    next_url = request.POST.get('next') or '/dashboard/owner/'
+    if not next_url.startswith('/dashboard/owner'):
+        next_url = '/dashboard/owner/'
+
+    expense = OwnerExpense.objects.filter(id=expense_id, owner=request.user).first()
+    if not expense:
+        messages.error(request, 'Expense entry not found.')
+        return redirect(next_url)
+
+    deleted_title = expense.title
+    expense.delete()
+    messages.success(request, f'Expense removed: {deleted_title}.')
+    return redirect(next_url)
 
 
 def latest_notification(request):
@@ -938,7 +1201,7 @@ def owner_manual_booking(request):
 
                 # Calculate amount
                 total_amount = _slot_price(slot.ground, slot.start_time)
-                owner_payout = total_amount - 3
+                owner_payout = total_amount
 
                 booking = Booking.objects.create(
                     slot=slot,
@@ -1012,7 +1275,234 @@ def owner_manual_booking(request):
         'selected_ground': selected_ground,
         'selected_date': selected_date,
     })
-    
+
+
+@login_required
+def customer_reschedule_booking(request, booking_id):
+    booking = get_object_or_404(
+        Booking.objects.select_related('slot__ground__owner'),
+        id=booking_id
+    )
+    if booking.user != request.user or booking.status != 'BOOKED':
+        messages.error(request, 'Booking not found.')
+        return redirect('/my-bookings/')
+
+    if not _can_self_reschedule(booking):
+        owner_phone = booking.slot.ground.owner.phone_number if booking.slot and booking.slot.ground and booking.slot.ground.owner else ''
+        if owner_phone:
+            messages.warning(request, f'Self-reschedule is allowed only 4+ hours before slot. Please call owner at {owner_phone}.')
+        else:
+            messages.warning(request, 'Self-reschedule is allowed only 4+ hours before slot. Please contact the ground owner.')
+        return redirect('/my-bookings/')
+
+    date_str = request.GET.get('date')
+    try:
+        selected_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else booking.slot.date
+    except Exception:
+        selected_date = booking.slot.date
+
+    if request.method == 'POST':
+        new_slot_id = request.POST.get('new_slot')
+        if not new_slot_id:
+            messages.error(request, 'Please select a slot.')
+            return redirect(f'/reschedule/{booking.id}/?date={selected_date}')
+
+        try:
+            with transaction.atomic():
+                locked_booking = Booking.objects.select_for_update().select_related('slot__ground__owner').get(id=booking.id)
+                old_slot = Slot.objects.select_for_update().get(id=locked_booking.slot_id)
+                new_slot = Slot.objects.select_for_update().get(
+                    id=new_slot_id,
+                    ground=locked_booking.slot.ground,
+                    date__gte=timezone.localdate(),
+                )
+
+                if not _can_self_reschedule(locked_booking):
+                    messages.error(request, 'Reschedule window is closed. Please contact the ground owner.')
+                    return redirect('/my-bookings/')
+                if new_slot.id == old_slot.id:
+                    messages.error(request, 'Please choose a different slot.')
+                    return redirect(f'/reschedule/{booking.id}/?date={selected_date}')
+                if new_slot.is_booked or Booking.objects.filter(slot=new_slot, status='BOOKED').exists():
+                    messages.error(request, 'Selected slot is no longer available.')
+                    return redirect(f'/reschedule/{booking.id}/?date={selected_date}')
+                if _slot_start_datetime(new_slot) <= timezone.localtime(timezone.now()):
+                    messages.error(request, 'Cannot reschedule to a past slot.')
+                    return redirect(f'/reschedule/{booking.id}/?date={selected_date}')
+
+                old_slot.is_booked = False
+                old_slot.save(update_fields=['is_booked'])
+                new_slot.is_booked = True
+                new_slot.save(update_fields=['is_booked'])
+
+                new_total = _slot_price(new_slot.ground, new_slot.start_time)
+                locked_booking.slot = new_slot
+                locked_booking.total_amount = new_total
+                locked_booking.owner_payout = new_total
+                if locked_booking.paid_amount >= new_total:
+                    locked_booking.paid_amount = new_total
+                    locked_booking.due_amount = 0
+                    locked_booking.payment_status = 'PAID'
+                else:
+                    locked_booking.due_amount = new_total - locked_booking.paid_amount
+                    locked_booking.payment_status = 'PARTIALLY_PAID' if locked_booking.paid_amount > 0 else 'PENDING'
+                locked_booking.save(update_fields=[
+                    'slot', 'total_amount', 'owner_payout', 'paid_amount', 'due_amount', 'payment_status'
+                ])
+
+                ActivityLog.objects.create(
+                    user=request.user,
+                    action='CUSTOMER_RESCHEDULED',
+                    booking=locked_booking,
+                    slot=new_slot,
+                    meta={'old_slot_id': old_slot.id, 'reason': 'self_service'},
+                )
+                messages.success(request, 'Booking rescheduled successfully.')
+                return redirect('/my-bookings/')
+        except (Booking.DoesNotExist, Slot.DoesNotExist):
+            messages.error(request, 'Unable to reschedule right now. Please retry.')
+            return redirect('/my-bookings/')
+
+    available_slots = _available_reschedule_slots(booking, selected_date)
+    return render(request, 'bookings/reschedule_booking.html', {
+        'booking': booking,
+        'available_slots': available_slots,
+        'selected_date': selected_date,
+        'rescheduler_role': 'customer',
+        'show_emergency_reason': False,
+    })
+
+
+@login_required
+def owner_reschedule_booking(request, booking_id):
+    booking = get_object_or_404(
+        Booking.objects.select_related('slot__ground__owner'),
+        id=booking_id
+    )
+    if booking.slot.ground.owner != request.user or booking.status != 'BOOKED':
+        messages.error(request, 'Booking not found.')
+        return redirect('/dashboard/owner/')
+
+    if _slot_start_datetime(booking.slot) <= timezone.localtime(timezone.now()):
+        messages.error(request, 'Past booking cannot be rescheduled.')
+        return redirect('/dashboard/owner/')
+
+    date_str = request.GET.get('date')
+    try:
+        selected_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else booking.slot.date
+    except Exception:
+        selected_date = booking.slot.date
+
+    if request.method == 'POST':
+        new_slot_id = request.POST.get('new_slot')
+        emergency_reason = (request.POST.get('emergency_reason') or '').strip()
+        if not emergency_reason:
+            messages.error(request, 'Emergency reason is required for owner reschedule.')
+            return redirect(f'/owner/reschedule/{booking.id}/?date={selected_date}')
+        if not new_slot_id:
+            messages.error(request, 'Please select a slot.')
+            return redirect(f'/owner/reschedule/{booking.id}/?date={selected_date}')
+
+        try:
+            with transaction.atomic():
+                locked_booking = Booking.objects.select_for_update().select_related('slot__ground__owner').get(id=booking.id)
+                old_slot = Slot.objects.select_for_update().get(id=locked_booking.slot_id)
+                new_slot = Slot.objects.select_for_update().get(
+                    id=new_slot_id,
+                    ground=locked_booking.slot.ground,
+                    date__gte=timezone.localdate(),
+                )
+
+                if _slot_start_datetime(locked_booking.slot) <= timezone.localtime(timezone.now()):
+                    messages.error(request, 'Past booking cannot be rescheduled.')
+                    return redirect('/dashboard/owner/')
+                if new_slot.id == old_slot.id:
+                    messages.error(request, 'Please choose a different slot.')
+                    return redirect(f'/owner/reschedule/{booking.id}/?date={selected_date}')
+                if new_slot.is_booked or Booking.objects.filter(slot=new_slot, status='BOOKED').exists():
+                    messages.error(request, 'Selected slot is no longer available.')
+                    return redirect(f'/owner/reschedule/{booking.id}/?date={selected_date}')
+                if _slot_start_datetime(new_slot) <= timezone.localtime(timezone.now()):
+                    messages.error(request, 'Cannot reschedule to a past slot.')
+                    return redirect(f'/owner/reschedule/{booking.id}/?date={selected_date}')
+
+                old_slot.is_booked = False
+                old_slot.save(update_fields=['is_booked'])
+                new_slot.is_booked = True
+                new_slot.save(update_fields=['is_booked'])
+
+                new_total = _slot_price(new_slot.ground, new_slot.start_time)
+                locked_booking.slot = new_slot
+                locked_booking.total_amount = new_total
+                locked_booking.owner_payout = new_total
+                if locked_booking.paid_amount >= new_total:
+                    locked_booking.paid_amount = new_total
+                    locked_booking.due_amount = 0
+                    locked_booking.payment_status = 'PAID'
+                else:
+                    locked_booking.due_amount = new_total - locked_booking.paid_amount
+                    locked_booking.payment_status = 'PARTIALLY_PAID' if locked_booking.paid_amount > 0 else 'PENDING'
+                locked_booking.save(update_fields=[
+                    'slot', 'total_amount', 'owner_payout', 'paid_amount', 'due_amount', 'payment_status'
+                ])
+
+                ActivityLog.objects.create(
+                    user=request.user,
+                    action='OWNER_RESCHEDULED',
+                    booking=locked_booking,
+                    slot=new_slot,
+                    meta={'old_slot_id': old_slot.id, 'reason': emergency_reason},
+                )
+                messages.success(request, 'Booking rescheduled successfully.')
+                return redirect('/dashboard/owner/')
+        except (Booking.DoesNotExist, Slot.DoesNotExist):
+            messages.error(request, 'Unable to reschedule right now. Please retry.')
+            return redirect('/dashboard/owner/')
+
+    available_slots = _available_reschedule_slots(booking, selected_date)
+    return render(request, 'bookings/reschedule_booking.html', {
+        'booking': booking,
+        'available_slots': available_slots,
+        'selected_date': selected_date,
+        'rescheduler_role': 'owner',
+        'show_emergency_reason': True,
+    })
+
+
+@login_required
+def owner_mark_paid_at_ground(request, booking_id):
+    if request.method != 'POST':
+        return redirect('/dashboard/owner/')
+
+    booking = get_object_or_404(
+        Booking.objects.select_related('slot__ground__owner'),
+        id=booking_id
+    )
+    if booking.slot.ground.owner != request.user or booking.status != 'BOOKED':
+        messages.error(request, 'Booking not found.')
+        return redirect('/dashboard/owner/')
+
+    if booking.booking_source != 'MANUAL' and booking.due_amount <= 0:
+        messages.info(request, 'This booking is already fully paid.')
+        return redirect('/dashboard/owner/')
+
+    booking.paid_amount = booking.total_amount
+    booking.due_amount = 0
+    booking.payment_status = 'PAID'
+    booking.payment_paid_at = timezone.now()
+    booking.save(update_fields=['paid_amount', 'due_amount', 'payment_status', 'payment_paid_at'])
+
+    ActivityLog.objects.create(
+        user=request.user,
+        action='OWNER_MARKED_PAID',
+        booking=booking,
+        slot=booking.slot,
+        meta={'marked_at_ground': True},
+    )
+    messages.success(request, f'Payment marked as paid at ground for {booking.customer_name}.')
+    return redirect('/dashboard/owner/')
+
+
 @login_required
 def cancel_booking(request, booking_id):
     booking = get_object_or_404(Booking, id=booking_id)

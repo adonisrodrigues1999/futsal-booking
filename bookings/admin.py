@@ -4,7 +4,8 @@ from .models import (
     Slot,
     Booking,
     BookingActivityLog,
-    ActivityLog
+    ActivityLog,
+    OwnerExpense,
 )
 from .models import GroundInvoice
 from grounds.models import Ground
@@ -126,3 +127,17 @@ class GroundInvoiceAdmin(admin.ModelAdmin):
     )
     list_filter = ('is_paid', 'ground')
     search_fields = ('ground__name',)
+
+
+@admin.register(OwnerExpense)
+class OwnerExpenseAdmin(admin.ModelAdmin):
+    list_display = (
+        'owner',
+        'ground',
+        'title',
+        'category',
+        'amount',
+        'spent_on',
+    )
+    list_filter = ('category', 'spent_on', 'ground')
+    search_fields = ('owner__name', 'title', 'note')

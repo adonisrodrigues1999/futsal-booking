@@ -10,12 +10,43 @@
     <a href="/owner/manual-booking/" class="btn btn-primary">Manual Booking</a>
   </div>
 
+  <div class="panel-soft mb-3">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label mb-1">Report Period</label>
+        <select name="period" id="report-period" class="form-select">
+          <option value="month" {% if report_period == 'month' %}selected{% endif %}>Monthly</option>
+          <option value="year" {% if report_period == 'year' %}selected{% endif %}>Yearly</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-1">Year</label>
+        <select name="year" class="form-select">
+          {% for yr in report_year_options %}
+            <option value="{{ yr }}" {% if yr == report_year %}selected{% endif %}>{{ yr }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-1">Month</label>
+        <select name="month" id="report-month" class="form-select" {% if report_period == 'year' %}disabled{% endif %}>
+          {% for mnum, mname in report_month_options %}
+            <option value="{{ mnum }}" {% if mnum == report_month %}selected{% endif %}>{{ mname }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <button type="submit" class="btn btn-outline-primary w-100">Update Report</button>
+      </div>
+    </form>
+  </div>
+
   <div class="row g-3 mb-4">
     <div class="col-sm-6 col-md-3">
       <div class="card p-3 shadow-sm metric-card">
         <div class="d-flex align-items-center justify-content-between">
           <div>
-            <div class="small text-muted">Bookings (month)</div>
+            <div class="small text-muted">Total bookings</div>
             <div class="h3 mb-0" data-count>{{ stats.total_bookings }}</div>
           </div>
           <div class="ms-3 metric-icon">
@@ -32,7 +63,7 @@
       <div class="card p-3 shadow-sm metric-card">
         <div class="d-flex align-items-center justify-content-between">
           <div>
-            <div class="small text-muted">Revenue</div>
+            <div class="small text-muted">Owner Revenue</div>
             <div class="h3 mb-0" data-count>₹{{ stats.revenue }}</div>
           </div>
           <div class="ms-3 metric-icon">
@@ -81,6 +112,65 @@
     </div>
   </div>
 
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm h-100">
+        <div class="small text-muted">Gross Booking Value</div>
+        <div class="h5 mb-0">₹{{ stats.gross_revenue }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm h-100">
+        <div class="small text-muted">Collected Amount</div>
+        <div class="h5 mb-0 text-success">₹{{ stats.collected_amount }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm h-100">
+        <div class="small text-muted">Pending Amount</div>
+        <div class="h5 mb-0 text-warning">₹{{ stats.pending_amount }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm h-100">
+        <div class="small text-muted">Source Split</div>
+        <div class="small">Online: <strong>{{ stats.online_bookings }}</strong></div>
+        <div class="small">Manual: <strong>{{ stats.manual_bookings }}</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm h-100">
+        <div class="small text-muted">Income ({{ report_label }})</div>
+        <div class="h5 mb-0 text-success">₹{{ stats.period_income|floatformat:2 }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm h-100">
+        <div class="small text-muted">Expenses ({{ report_label }})</div>
+        <div class="h5 mb-0 text-danger">₹{{ stats.period_expense|floatformat:2 }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm h-100">
+        <div class="small text-muted">Net Result</div>
+        <div class="h5 mb-0 {% if stats.period_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+          ₹{{ stats.period_profit|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm h-100">
+        <div class="small text-muted">Profit Margin</div>
+        <div class="h5 mb-0 {% if stats.period_margin >= 0 %}text-success{% else %}text-danger{% endif %}">
+          {{ stats.period_margin|floatformat:1 }}%
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="row g-4">
     <div class="col-lg-7">
       <div class="card p-3 shadow-sm">
@@ -115,11 +205,22 @@
               </div>
               <div class="text-end">
                 <div class="small text-muted">₹{{ booking.total_amount }}</div>
-                {% if booking.can_owner_cancel %}
-                  <a href="{% url 'owner_cancel_booking' booking.id %}" class="btn btn-sm btn-outline-danger mt-2" data-confirm-message="Delete this booking?">Delete</a>
-                {% else %}
-                  <button type="button" class="btn btn-sm btn-outline-secondary mt-2" disabled>Past booking</button>
-                {% endif %}
+                <div class="d-flex flex-column align-items-end gap-2 mt-2">
+                  {% if booking.can_owner_reschedule %}
+                    <a href="{% url 'owner_reschedule_booking' booking.id %}" class="btn btn-sm btn-outline-primary">Emergency Reschedule</a>
+                  {% endif %}
+                  {% if booking.can_mark_paid_at_ground %}
+                    <form method="post" action="{% url 'owner_mark_paid_at_ground' booking.id %}">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-outline-success" data-confirm-message="Mark this booking as paid at ground?">Mark Paid At Ground</button>
+                    </form>
+                  {% endif %}
+                  {% if booking.can_owner_cancel %}
+                    <a href="{% url 'owner_cancel_booking' booking.id %}" class="btn btn-sm btn-outline-danger" data-confirm-message="Delete this booking?">Delete</a>
+                  {% else %}
+                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled>Past booking</button>
+                  {% endif %}
+                </div>
               </div>
             </div>
           {% empty %}
@@ -135,11 +236,146 @@
         <canvas id="heatmapChart" height="200"></canvas>
       </div>
 
+      <div class="card p-3 shadow-sm mb-3">
+        <h6 class="mb-3">Top Grounds by Revenue</h6>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Ground</th>
+                <th>Bookings</th>
+                <th>Owner Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in ground_performance %}
+                <tr>
+                  <td>{{ row.slot__ground__name }}</td>
+                  <td>{{ row.bookings_count }}</td>
+                  <td>₹{{ row.revenue }}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="3" class="text-muted text-center">No data available</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card p-3 shadow-sm">
         <h6>Quick Actions</h6>
         <div class="d-grid gap-2">
           <a href="/owner/manual-booking/" class="btn btn-outline-primary">Create manual booking</a>
           <a href="/grounds/" class="btn btn-outline-secondary">Manage Grounds</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mt-1">
+    <div class="col-lg-7">
+      <div class="card p-3 shadow-sm mb-3">
+        <h6>Income vs Expense vs Profit ({{ report_year }})</h6>
+        <canvas id="profitLossChart" height="180"></canvas>
+      </div>
+      <div class="card p-3 shadow-sm">
+        <h6 class="mb-3">Expense Categories ({{ report_label }})</h6>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in expense_by_category %}
+                <tr>
+                  <td>{{ row.label }}</td>
+                  <td>₹{{ row.total|floatformat:2 }}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="2" class="text-muted text-center">No expenses in selected period.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card p-3 shadow-sm mb-3">
+        <h6 class="mb-3">Add Expense</h6>
+        <form method="post" action="{% url 'owner_add_expense' %}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <div class="row g-2">
+            <div class="col-12">
+              <label class="form-label mb-1">Title</label>
+              <input type="text" name="title" class="form-control" maxlength="120" placeholder="Eg. Turf light repair" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label mb-1">Category</label>
+              <select name="category" class="form-select" required>
+                {% for key, val in expense_categories %}
+                  <option value="{{ key }}">{{ val }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label mb-1">Amount (₹)</label>
+              <input type="number" name="amount" class="form-control" step="0.01" min="0.01" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label mb-1">Ground</label>
+              <select name="ground_id" class="form-select">
+                <option value="">All / shared</option>
+                {% for g in owner_grounds %}
+                  <option value="{{ g.id }}">{{ g.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label mb-1">Spent On</label>
+              <input type="date" name="spent_on" class="form-control" value="{% now 'Y-m-d' %}">
+            </div>
+            <div class="col-12">
+              <label class="form-label mb-1">Note</label>
+              <textarea name="note" class="form-control" rows="2" placeholder="Optional details..."></textarea>
+            </div>
+            <div class="col-12">
+              <button type="submit" class="btn btn-primary w-100">Save Expense</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="card p-3 shadow-sm">
+        <h6 class="mb-3">Recent Expense Entries</h6>
+        <div class="list-group list-group-flush">
+          {% for exp in recent_expenses %}
+            <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-start gap-2">
+              <div>
+                <div class="fw-semibold">{{ exp.title }}</div>
+                <div class="small text-muted">{{ exp.spent_on }} • {{ exp.get_category_display }}{% if exp.ground %} • {{ exp.ground.name }}{% endif %}</div>
+                {% if exp.note %}<div class="small text-muted">{{ exp.note|truncatechars:70 }}</div>{% endif %}
+              </div>
+              <div class="text-end">
+                <div class="fw-semibold text-danger">₹{{ exp.amount|floatformat:2 }}</div>
+                <form method="post" action="{% url 'owner_delete_expense' exp.id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger mt-1" data-confirm-message="Delete this expense entry?">Delete</button>
+                </form>
+              </div>
+            </div>
+          {% empty %}
+            <div class="text-muted text-center py-2">No expenses added yet.</div>
+          {% endfor %}
         </div>
       </div>
     </div>
@@ -152,6 +388,10 @@
   const data = {{ chart_data|safe }};
   const heatLabels = {{ heatmap_labels|safe }};
   const heatData = {{ heatmap_data|safe }};
+  const plLabels = {{ pl_labels|safe }};
+  const plIncome = {{ pl_income_data|safe }};
+  const plExpense = {{ pl_expense_data|safe }};
+  const plProfit = {{ pl_profit_data|safe }};
 
   function getChartFonts() {
     const vw = Math.max(window.innerWidth || 1024, 320);
@@ -166,6 +406,7 @@
 
   const bookingsCtx = document.getElementById('bookingsChart').getContext('2d');
   const heatCtx = document.getElementById('heatmapChart').getContext('2d');
+  const plCtx = document.getElementById('profitLossChart').getContext('2d');
 
   function createGrad(ctx) {
     const g = ctx.createLinearGradient(0, 0, 0, 220);
@@ -241,6 +482,68 @@
     }
   });
 
+  const profitChart = new Chart(plCtx, {
+    type: 'line',
+    data: {
+      labels: plLabels,
+      datasets: [
+        {
+          label: 'Income',
+          data: plIncome,
+          borderColor: '#15803d',
+          backgroundColor: 'rgba(21, 128, 61, 0.15)',
+          tension: 0.3,
+          fill: false
+        },
+        {
+          label: 'Expense',
+          data: plExpense,
+          borderColor: '#dc2626',
+          backgroundColor: 'rgba(220, 38, 38, 0.12)',
+          tension: 0.3,
+          fill: false
+        },
+        {
+          label: 'Profit/Loss',
+          data: plProfit,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.12)',
+          tension: 0.3,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          backgroundColor: 'rgba(20, 34, 23, 0.95)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          titleFont: { size: fonts.tooltipTitle },
+          bodyFont: { size: fonts.tooltipBody },
+          callbacks: {
+            label: function(context) {
+              return context.dataset.label + ': ₹' + Number(context.parsed.y || 0).toLocaleString();
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#4e6152', font: { size: fonts.tick } } },
+        y: {
+          beginAtZero: false,
+          ticks: {
+            color: '#4e6152',
+            font: { size: fonts.tick },
+            callback: function(value) { return '₹' + value; }
+          }
+        }
+      }
+    }
+  });
+
   let resizeTimer = null;
   window.addEventListener('resize', function() {
     clearTimeout(resizeTimer);
@@ -257,6 +560,12 @@
       heatChart.options.plugins.tooltip.titleFont.size = fonts.tooltipTitle;
       heatChart.options.plugins.tooltip.bodyFont.size = fonts.tooltipBody;
       heatChart.update();
+
+      profitChart.options.scales.x.ticks.font.size = fonts.tick;
+      profitChart.options.scales.y.ticks.font.size = fonts.tick;
+      profitChart.options.plugins.tooltip.titleFont.size = fonts.tooltipTitle;
+      profitChart.options.plugins.tooltip.bodyFont.size = fonts.tooltipBody;
+      profitChart.update();
     }, 120);
   });
 
@@ -269,6 +578,14 @@
       {% endfor %}
     });
   {% endif %}
+
+  const periodEl = document.getElementById('report-period');
+  const monthEl = document.getElementById('report-month');
+  if (periodEl && monthEl) {
+    periodEl.addEventListener('change', function() {
+      monthEl.disabled = periodEl.value === 'year';
+    });
+  }
 </script>
 
   <script>

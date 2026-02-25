@@ -38,7 +38,7 @@ class Booking(models.Model):
 
     duration_hours = models.PositiveIntegerField(default=1)
     total_amount = models.PositiveIntegerField()
-    platform_fee = models.PositiveIntegerField(default=3)
+    platform_fee = models.PositiveIntegerField(default=0)
     owner_payout = models.PositiveIntegerField()
 
     booking_source = models.CharField(max_length=10, choices=SOURCE, default='ONLINE')
@@ -107,12 +107,46 @@ class EmailVerification(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+class OwnerExpense(models.Model):
+    CATEGORY_CHOICES = (
+        ('RENT', 'Ground Rent'),
+        ('SALARY', 'Staff Salary'),
+        ('EQUIPMENT', 'Equipment'),
+        ('MAINTENANCE', 'Maintenance'),
+        ('UTILITIES', 'Utilities'),
+        ('MARKETING', 'Marketing'),
+        ('OTHER', 'Other'),
+    )
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        limit_choices_to={'role': 'owner'}
+    )
+    ground = models.ForeignKey(Ground, null=True, blank=True, on_delete=models.SET_NULL)
+    title = models.CharField(max_length=120)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='OTHER')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    spent_on = models.DateField(default=now)
+    note = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-spent_on', '-created_at']
+
+    def __str__(self):
+        return f"{self.owner} | {self.category} | {self.amount}"
+
+
 class ActivityLog(models.Model):
     ACTION_CHOICES = (
         ('BOOKED', 'Booked'),
         ('MANUAL_BOOKING', 'Manual Booking'),
         ('CUSTOMER_CANCELLED', 'Customer Cancelled'),
         ('OWNER_CANCELLED', 'Owner Cancelled'),
+        ('CUSTOMER_RESCHEDULED', 'Customer Rescheduled'),
+        ('OWNER_RESCHEDULED', 'Owner Rescheduled'),
+        ('OWNER_MARKED_PAID', 'Owner Marked Paid'),
         ('ADMIN_ACTION', 'Admin Action'),
     )
 

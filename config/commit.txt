@@ -1,7 +1,8 @@
 git add .
-git commit -m "changed manual booking"
+git commit -m "cadded owner analysis, expense tracker,loading status and title bar"
 git push
 
+curl ifconfig.me
 
 /home/statvalu/adonis/futbook/football_booking/config/settings.py
 fix double booking issue on manual booking (if booked lready get messsage saying booked just now) Done
@@ -44,3 +45,9 @@ on booking slots page show  day of the week with date,also show sun emohi if the
   "TAN": "BLRR30567F",
   "GST": "29AANCR6717K1ZN"
 }
+
+
+add reschedling option
+
+
+allow option for owner to select that the user has paid cash on the futsal ground  on give an option to gnerate qo to py online 

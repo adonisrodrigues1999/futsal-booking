@@ -1,4 +1,35 @@
 document.addEventListener('DOMContentLoaded', function() {
+  var appLoader = (function() {
+    var root = document.getElementById('app-loader');
+    var textEl = root ? root.querySelector('.loader-text') : null;
+    var subEl = root ? root.querySelector('.loader-subtext') : null;
+    var lockCount = 0;
+
+    function show(message, subtext) {
+      if (!root) return;
+      lockCount += 1;
+      if (textEl && message) textEl.textContent = message;
+      if (subEl && subtext) subEl.textContent = subtext;
+      root.classList.add('is-active');
+      root.setAttribute('aria-hidden', 'false');
+    }
+
+    function hide(force) {
+      if (!root) return;
+      if (force) lockCount = 0;
+      else lockCount = Math.max(0, lockCount - 1);
+      if (lockCount > 0) return;
+      root.classList.remove('is-active');
+      root.setAttribute('aria-hidden', 'true');
+    }
+
+    return {
+      show: show,
+      hide: hide
+    };
+  })();
+  window.appLoader = appLoader;
+
   function getCookie(name) {
     var match = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
     return match ? match.pop() : '';
@@ -36,6 +67,54 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   window.showAppToast = showAppToast;
+
+  // Global loading behaviors for navigation and requests.
+  window.addEventListener('pageshow', function() {
+    appLoader.hide(true);
+  });
+
+  window.addEventListener('beforeunload', function() {
+    appLoader.show('Loading page...', 'Loading next screen');
+  });
+
+  document.querySelectorAll('a[href]').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      var href = link.getAttribute('href') || '';
+      if (!href || href.startsWith('#')) return;
+      if (href.startsWith('javascript:')) return;
+      if (href.startsWith('mailto:') || href.startsWith('tel:')) return;
+      if (link.hasAttribute('download')) return;
+      if (link.target && link.target.toLowerCase() === '_blank') return;
+      if (e.defaultPrevented) return;
+      appLoader.show('Loading page...', 'Opening page');
+    });
+  });
+
+  document.querySelectorAll('form').forEach(function(form) {
+    form.addEventListener('submit', function() {
+      var method = (form.getAttribute('method') || 'GET').toUpperCase();
+      var msg = method === 'GET' ? 'Searching slots...' : 'Saving your play...';
+      appLoader.show(msg, 'Please wait');
+    });
+  });
+
+  if (window.fetch) {
+    var nativeFetch = window.fetch.bind(window);
+    window.fetch = function() {
+      var shouldShow = false;
+      var timer = setTimeout(function() {
+        shouldShow = true;
+        appLoader.show('Loading live updates...', 'Syncing request');
+      }, 140);
+
+      return nativeFetch.apply(null, arguments).finally(function() {
+        clearTimeout(timer);
+        if (shouldShow) {
+          appLoader.hide(false);
+        }
+      });
+    };
+  }
 
   // Quick shimmer load state for cards
   var loadingCards = document.querySelectorAll('.slot-card, .ground-card, .metric-card');
@@ -267,6 +346,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     confirmBtn.disabled = true;
     confirmBtn.textContent = 'Initializing...';
+    appLoader.show('Preparing secure checkout...', 'Connecting to payment gateway');
 
     fetch('/payments/razorpay/create-order/', {
       method: 'POST',
@@ -313,8 +393,10 @@ document.addEventListener('DOMContentLoaded', function() {
         showAppToast('Payment failed. Please try again.', 'danger', 3200);
       });
       confirmModal.hide();
+      appLoader.hide(false);
       checkout.open();
     }).catch(function(err) {
+      appLoader.hide(false);
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Proceed to Pay';
       showAppToast(err.message || 'Unable to start payment.', 'danger', 3200);

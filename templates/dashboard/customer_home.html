@@ -4,29 +4,105 @@
 {% block content %}
 <div class="hero-card p-4 p-md-5 mb-4">
   <div class="row align-items-center g-4">
-    <div class="col-lg-8">
-      <h2 class="mb-2">Play under lights, not under stress.</h2>
-      <p class="text-muted mb-3">Browse local grounds, lock a slot instantly, and keep all your bookings in one place.</p>
+    <div class="col-lg-7">
+      <span class="customer-home-chip">Customer Hub</span>
+      <h2 class="mb-2 mt-2">Plan smarter. Play more.</h2>
+      <p class="text-muted mb-3">Track upcoming slots, manage bookings quickly, and jump back into action in one click.</p>
       <div class="d-flex flex-wrap gap-2">
-        <a href="/grounds/" class="btn btn-primary btn-lg">Book a Ground</a>
-        <a href="/my-bookings/" class="btn btn-outline-light btn-lg">My Bookings</a>
+        <a href="/grounds/" class="btn btn-primary btn-lg">Explore Grounds</a>
+        <a href="/my-bookings/" class="btn btn-outline-light btn-lg">View My Bookings</a>
       </div>
     </div>
-    <div class="col-lg-4">
+    <div class="col-lg-5">
       <div class="hero-inline-stats">
         <div class="hero-stat">
-          <div class="label">Booking Time</div>
-          <div class="value">30 sec</div>
+          <div class="label">Upcoming</div>
+          <div class="value">{{ stats.upcoming_bookings }}</div>
         </div>
         <div class="hero-stat">
-          <div class="label">Support</div>
-          <div class="value">24x7</div>
+          <div class="label">This Month</div>
+          <div class="value">{{ stats.this_month_bookings }}</div>
         </div>
         <div class="hero-stat">
-          <div class="label">Reschedule</div>
-          <div class="value">Easy</div>
+          <div class="label">Spend</div>
+          <div class="value">₹{{ stats.money_spent }}</div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3 col-6">
+    <div class="card p-3 metric-card h-100">
+      <div class="small text-muted">Total Bookings</div>
+      <div class="h4 mb-0">{{ stats.total_bookings }}</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3 metric-card h-100">
+      <div class="small text-muted">Upcoming Matches</div>
+      <div class="h4 mb-0">{{ stats.upcoming_bookings }}</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3 metric-card h-100">
+      <div class="small text-muted">This Month</div>
+      <div class="h4 mb-0">{{ stats.this_month_bookings }}</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3 metric-card h-100">
+      <div class="small text-muted">Amount Paid</div>
+      <div class="h4 mb-0">₹{{ stats.money_spent }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card p-3 p-md-4 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">Upcoming Bookings</h5>
+        <a href="/my-bookings/" class="btn btn-sm btn-outline-primary">See all</a>
+      </div>
+      {% if upcoming_list %}
+        <div class="list-group list-group-flush">
+          {% for booking in upcoming_list %}
+            <div class="list-group-item px-0 py-3">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <div class="fw-semibold">{{ booking.slot.ground.name }}</div>
+                  <div class="small text-muted">{{ booking.slot.date }} • {{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</div>
+                  <div class="small mt-1">Paid: ₹{{ booking.paid_amount }} • Due: ₹{{ booking.due_amount }}</div>
+                </div>
+                <span class="countdown-chip">{{ booking.hours_left }}h left</span>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-center py-4 text-muted">
+          No upcoming bookings. Book your next game now.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card p-3 p-md-4 mb-3">
+      <h6 class="mb-3">Quick Actions</h6>
+      <div class="d-grid gap-2">
+        <a href="/grounds/" class="btn btn-primary">Book New Slot</a>
+        <a href="/my-bookings/" class="btn btn-outline-primary">Manage Bookings</a>
+      </div>
+    </div>
+    <div class="card p-3 p-md-4">
+      <h6 class="mb-2">Booking Tips</h6>
+      <ul class="small text-muted mb-0 customer-home-tips">
+        <li>Use advance payment to lock prime-time slots faster.</li>
+        <li>Reschedule yourself at least 4 hours before slot time.</li>
+        <li>If within 4 hours, call the ground owner for emergency change.</li>
+      </ul>
     </div>
   </div>
 </div>

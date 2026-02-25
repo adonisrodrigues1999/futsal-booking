@@ -14,10 +14,15 @@ urlpatterns = [
     path('payments/razorpay/verify-and-book/', views.verify_razorpay_payment_and_book, name='verify_razorpay_payment_and_book'),
     path('payments/razorpay/webhook/', views.razorpay_webhook, name='razorpay_webhook'),
     path('cancel/<uuid:booking_id>/', views.cancel_booking, name='cancel_booking'),
+    path('reschedule/<uuid:booking_id>/', views.customer_reschedule_booking, name='customer_reschedule_booking'),
     path('my-bookings/', views.my_bookings),
 
     path('dashboard/owner/', views.owner_dashboard, name='owner_dashboard'),
+    path('dashboard/owner/expenses/add/', views.owner_add_expense, name='owner_add_expense'),
+    path('dashboard/owner/expenses/<int:expense_id>/delete/', views.owner_delete_expense, name='owner_delete_expense'),
     path('owner/cancel/<uuid:booking_id>/', views.owner_cancel_booking, name='owner_cancel_booking'),
+    path('owner/reschedule/<uuid:booking_id>/', views.owner_reschedule_booking, name='owner_reschedule_booking'),
+    path('owner/mark-paid/<uuid:booking_id>/', views.owner_mark_paid_at_ground, name='owner_mark_paid_at_ground'),
     path('owner/manual/', views.owner_manual_booking, name='owner_manual_booking'),
     path('owner/manual-booking/', views.owner_manual_booking, name='owner_manual_booking_alias'),
 

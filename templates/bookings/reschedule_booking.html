@@ -1,0 +1,63 @@
+{% extends 'base/base.html' %}
+{% block title %}Reschedule Booking{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h2>Reschedule Booking</h2>
+      <p class="page-subtitle">{{ booking.slot.ground.name }} • Current: {{ booking.slot.date }} {{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</p>
+    </div>
+    {% if rescheduler_role == 'owner' %}
+      <a href="/dashboard/owner/" class="btn btn-outline-secondary">Back</a>
+    {% else %}
+      <a href="/my-bookings/" class="btn btn-outline-secondary">Back</a>
+    {% endif %}
+  </div>
+
+  <div class="panel-soft mb-3">
+    <h6 class="panel-title">Find New Slot</h6>
+    <form method="get">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label for="date" class="form-label">Date</label>
+          <input type="date" name="date" id="date" class="form-control" value="{{ selected_date|date:'Y-m-d' }}">
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-outline-primary w-100">Load Slots</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel-soft">
+    <h6 class="panel-title">Apply Reschedule</h6>
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3 align-items-end">
+        <div class="col-md-7">
+          <label for="new_slot" class="form-label">Available Slots</label>
+          <select id="new_slot" name="new_slot" class="form-select" required>
+            <option value="">Choose a slot...</option>
+            {% for obj in available_slots %}
+              {% with slot=obj.slot %}
+                <option value="{{ slot.id }}">{{ slot.date }} • {{ slot.start_time|time:"g:i A" }} - {{ slot.end_time|time:"g:i A" }} (₹{{ obj.price }})</option>
+              {% endwith %}
+            {% endfor %}
+          </select>
+          {% if not available_slots %}
+            <div class="small text-muted mt-2">No slots available on this date. Try a different date.</div>
+          {% endif %}
+        </div>
+        {% if show_emergency_reason %}
+          <div class="col-md-5">
+            <label for="emergency_reason" class="form-label">Emergency Reason</label>
+            <input type="text" id="emergency_reason" name="emergency_reason" class="form-control" placeholder="Reason for emergency reschedule" required>
+          </div>
+        {% endif %}
+      </div>
+      <button type="submit" class="btn btn-primary mt-3" {% if not available_slots %}disabled{% endif %}>Reschedule Booking</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
