@@ -68,8 +68,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
   window.showAppToast = showAppToast;
 
-  // Loader policy: show only for slow API responses.
-  var API_LOADER_DELAY_MS = 4000;
+  // Loader policy: show only for background API calls.
+  var BG_API_LOADER_DELAY_MS = 1200;
+  var BG_API_LOADER_VISIBLE_MS = 1500;
 
   window.addEventListener('pageshow', function() {
     appLoader.hide(true);
@@ -78,16 +79,23 @@ document.addEventListener('DOMContentLoaded', function() {
   if (window.fetch) {
     var nativeFetch = window.fetch.bind(window);
     window.fetch = function() {
+      var init = arguments[1] || {};
+      var shouldUseBackgroundLoader = !!(init && init.__backgroundLoader);
+      if (!shouldUseBackgroundLoader) return nativeFetch.apply(null, arguments);
+
       var shouldShow = false;
       var timer = setTimeout(function() {
         shouldShow = true;
-        appLoader.show('Still working...', 'API is taking longer than usual');
-      }, API_LOADER_DELAY_MS);
+        appLoader.show('Page loading...', 'Do not refresh browser');
+        setTimeout(function() {
+          appLoader.hide(true);
+        }, BG_API_LOADER_VISIBLE_MS);
+      }, BG_API_LOADER_DELAY_MS);
 
       return nativeFetch.apply(null, arguments).finally(function() {
         clearTimeout(timer);
-        if (shouldShow) {
-          appLoader.hide(false);
+        if (!shouldShow) {
+          appLoader.hide(true);
         }
       });
     };
@@ -211,9 +219,92 @@ document.addEventListener('DOMContentLoaded', function() {
     setCounterValue('live-booked-count', booked);
     setCounterValue('live-your-count', yours);
   }
+  window.__updateSlotLiveCounters = updateSlotLiveCounters;
 
   updateSlotLiveCounters();
   setInterval(updateSlotLiveCounters, 30000);
+
+  // Auto-refresh slot availability every 8s without reloading page.
+  (function initSlotAvailabilityAutoRefresh() {
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.slot-card[data-slot-id]'));
+    if (!cards.length || !window.slotStatusUrl) return;
+
+    function findCard(slotId) {
+      return cards.find(function(card) {
+        return String(card.getAttribute('data-slot-id')) === String(slotId);
+      });
+    }
+
+    function markBooked(card) {
+      if (!card) return;
+      if (card.querySelector('[data-slot-state="your"]')) return;
+      if (card.getAttribute('data-availability') === 'booked') return;
+      var body = card.querySelector('.slot-body');
+      if (!body) return;
+      body.classList.add('muted');
+      body.innerHTML = '<div class="slot-status"><span data-slot-state="booked">Booked</span></div>' +
+        '<button class="btn btn-outline-secondary slot-action" disabled aria-disabled="true">Booked</button>';
+      card.setAttribute('data-availability', 'booked');
+    }
+
+    function markAvailable(card) {
+      if (!card) return;
+      if (card.getAttribute('data-past') === '1') return;
+      if (card.querySelector('[data-slot-state="your"]')) return;
+      if (card.getAttribute('data-availability') === 'available') return;
+      var body = card.querySelector('.slot-body');
+      if (!body) return;
+      var slotId = Number(card.getAttribute('data-slot-id'));
+      var startTime = card.getAttribute('data-start-time') || '';
+      var endTime = card.getAttribute('data-end-time') || '';
+      var price = Number(card.getAttribute('data-price') || 0);
+      body.classList.remove('muted');
+      body.innerHTML = '<div class="slot-status text-success"><span data-slot-state="available">Available</span></div>' +
+        '<button type="button" class="btn btn-primary slot-action">Book</button>';
+      var btn = body.querySelector('.slot-action');
+      if (btn && typeof window.showConfirmModal === 'function') {
+        btn.addEventListener('click', function() {
+          window.showConfirmModal(slotId, startTime, endTime, price);
+        });
+      }
+      card.setAttribute('data-availability', 'available');
+    }
+
+    var isPolling = false;
+    function pollSlotStatus() {
+      if (isPolling) return;
+      var modalOpen = document.querySelector('.modal.show');
+      if (modalOpen) return;
+      isPolling = true;
+      var slotIds = cards.map(function(card) { return card.getAttribute('data-slot-id'); }).join(',');
+      var url = window.slotStatusUrl + (window.slotStatusUrl.indexOf('?') >= 0 ? '&' : '?') + 'slot_ids=' + encodeURIComponent(slotIds);
+      fetch(url, {
+        credentials: 'same-origin',
+        __backgroundLoader: true
+      }).then(function(res) {
+        return res.json().then(function(data) {
+          if (!res.ok || !data.success) throw new Error('slot status fetch failed');
+          return data;
+        });
+      }).then(function(data) {
+        (data.slots || []).forEach(function(slotRow) {
+          var card = findCard(slotRow.id);
+          if (!card) return;
+          if (slotRow.is_booked) markBooked(card);
+          else markAvailable(card);
+        });
+        if (typeof window.__updateSlotLiveCounters === 'function') {
+          window.__updateSlotLiveCounters();
+        }
+      }).catch(function() {
+        // silent retry on next interval
+      }).finally(function() {
+        isPolling = false;
+      });
+    }
+
+    setInterval(pollSlotStatus, 8000);
+  })();
 
   // Styled double-confirmation modal for destructive actions.
   var actionConfirmEl = document.getElementById('actionConfirmModal');

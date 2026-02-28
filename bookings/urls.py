@@ -7,6 +7,7 @@ urlpatterns = [
 
     path('grounds/', views.ground_list),
     path('grounds/<int:ground_id>/', views.ground_slots),
+    path('grounds/<int:ground_id>/slot-status/', views.ground_slots_status, name='ground_slots_status'),
     path('grounds/<int:ground_id>/image/', views.ground_image, name='ground_image'),
 
     path('book/<int:slot_id>/', views.book_slot, name='book_slot'),

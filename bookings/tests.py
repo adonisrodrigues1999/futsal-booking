@@ -195,6 +195,38 @@ class BookingFlowTests(TestCase):
         self.assertEqual(booking.due_amount, 0)
         self.assertEqual(booking.paid_amount, booking.total_amount)
 
+    def test_ground_slot_status_endpoint_reflects_active_booking(self):
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=1),
+            start_time=time(15, 0),
+            end_time=time(16, 0),
+            is_booked=False,
+        )
+        Booking.objects.create(
+            slot=slot,
+            user=self.customer,
+            customer_name=self.customer.name,
+            customer_phone=self.customer.phone_number,
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='FULL',
+            payment_status='PAID',
+            paid_amount=500,
+            due_amount=0,
+            status='BOOKED',
+        )
+        self.client.force_login(self.customer)
+        response = self.client.get(
+            f'/grounds/{self.ground.id}/slot-status/?date={slot.date.isoformat()}&slot_ids={slot.id}'
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload.get('success'))
+        self.assertEqual(len(payload.get('slots', [])), 1)
+        self.assertTrue(payload['slots'][0]['is_booked'])
+
     def test_owner_dashboard_shows_online_and_manual_money_split(self):
         online_slot = Slot.objects.create(
             ground=self.ground,
@@ -247,6 +279,51 @@ class BookingFlowTests(TestCase):
         self.assertEqual(stats['manual_paid_amount'], 200)
         self.assertEqual(stats['online_due_amount'], 0)
         self.assertEqual(stats['manual_due_amount'], 500)
+
+    def test_partial_online_payment_monthly_split_and_ground_tally(self):
+        today = timezone.localdate()
+        partial_slot = Slot.objects.create(
+            ground=self.ground,
+            date=today,
+            start_time=time(12, 0),
+            end_time=time(13, 0),
+            is_booked=True,
+        )
+        booking = Booking.objects.create(
+            slot=partial_slot,
+            user=self.customer,
+            customer_name='Partial Customer',
+            customer_phone='7000000099',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='PARTIAL_99',
+            payment_status='PARTIALLY_PAID',
+            paid_amount=99,
+            due_amount=401,
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get('/dashboard/owner/')
+        self.assertEqual(response.status_code, 200)
+        stats = response.context['stats']
+        self.assertEqual(stats['period_online_collection'], 99)
+        self.assertEqual(stats['period_online_due_at_ground'], 401)
+        self.assertEqual(stats['period_collected_at_ground_tally'], 0)
+
+        mark_response = self.client.post(f'/owner/mark-paid/{booking.id}/')
+        self.assertEqual(mark_response.status_code, 302)
+
+        booking.refresh_from_db()
+        self.assertEqual(booking.payment_status, 'PAID_AT_GROUND')
+        self.assertEqual(booking.due_amount, 0)
+
+        response_after = self.client.get('/dashboard/owner/')
+        self.assertEqual(response_after.status_code, 200)
+        stats_after = response_after.context['stats']
+        self.assertEqual(stats_after['period_online_collection'], 99)
+        self.assertEqual(stats_after['period_online_due_at_ground'], 0)
+        self.assertEqual(stats_after['period_collected_at_ground_tally'], 401)
 
 
 class OwnerExpenseTests(TestCase):

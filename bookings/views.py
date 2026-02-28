@@ -6,7 +6,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction, OperationalError, IntegrityError
-from django.db.models import Count, Sum
+from django.db.models import Count, Sum, Case, When, Value, IntegerField, F
 from django.db.models.functions import Coalesce
 import time
 from django.core.mail import send_mail
@@ -299,6 +299,48 @@ def ground_slots(request, ground_id):
         'prev_date': prev_date,
         'next_date': next_date,
     })
+
+
+@login_required
+def ground_slots_status(request, ground_id):
+    ground = get_object_or_404(Ground, id=ground_id)
+    date_str = request.GET.get('date')
+    try:
+        selected_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else timezone.localdate()
+    except Exception:
+        selected_date = timezone.localdate()
+
+    slot_ids_param = request.GET.get('slot_ids') or ''
+    slot_ids = []
+    for raw in slot_ids_param.split(','):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            slot_ids.append(int(raw))
+        except Exception:
+            continue
+
+    slots_qs = Slot.objects.filter(ground=ground, date=selected_date)
+    if slot_ids:
+        slots_qs = slots_qs.filter(id__in=slot_ids)
+    slots = list(slots_qs.values('id', 'is_booked'))
+
+    booked_slot_ids = set(
+        Booking.objects.filter(
+            slot__in=[row['id'] for row in slots],
+            status='BOOKED'
+        ).values_list('slot_id', flat=True)
+    )
+
+    data = [
+        {
+            'id': row['id'],
+            'is_booked': bool(row['is_booked'] or row['id'] in booked_slot_ids),
+        }
+        for row in slots
+    ]
+    return JsonResponse({'success': True, 'slots': data})
 
 
 @login_required
@@ -597,7 +639,13 @@ def owner_dashboard(request):
     online_sums = bookings.filter(booking_source='ONLINE').aggregate(
         bookings_count=Count('id'),
         total_amount=Coalesce(Sum('total_amount'), 0),
-        paid_amount=Coalesce(Sum('paid_amount'), 0),
+        paid_amount=Coalesce(Sum(
+            Case(
+                When(payment_mode='PARTIAL_99', then=Value(99)),
+                default=F('paid_amount'),
+                output_field=IntegerField(),
+            )
+        ), 0),
         due_amount=Coalesce(Sum('due_amount'), 0),
         owner_payout=Coalesce(Sum('owner_payout'), 0),
     )
@@ -614,6 +662,35 @@ def owner_dashboard(request):
         collected_amount=Coalesce(Sum('paid_amount'), 0),
         pending_amount=Coalesce(Sum('due_amount'), 0),
     )
+    period_online_sums = period_bookings.filter(booking_source='ONLINE').aggregate(
+        online_collection=Coalesce(Sum(
+            Case(
+                When(payment_mode='PARTIAL_99', then=Value(99)),
+                default=F('paid_amount'),
+                output_field=IntegerField(),
+            )
+        ), 0),
+        online_due_at_ground=Coalesce(Sum('due_amount'), 0),
+    )
+    period_collected_at_ground = period_bookings.aggregate(
+        total=Coalesce(Sum(
+            Case(
+                When(
+                    booking_source='ONLINE',
+                    payment_mode='PARTIAL_99',
+                    payment_status='PAID_AT_GROUND',
+                    then=F('total_amount') - Value(99),
+                ),
+                When(
+                    booking_source='MANUAL',
+                    payment_status='PAID_AT_GROUND',
+                    then=F('total_amount'),
+                ),
+                default=Value(0),
+                output_field=IntegerField(),
+            )
+        ), 0)
+    )['total'] or 0
 
     expense_total = expense_qs.aggregate(total=Coalesce(Sum('amount'), Decimal('0.00')))['total'] or Decimal('0.00')
     expense_by_category = expense_qs.values('category').annotate(total=Coalesce(Sum('amount'), Decimal('0.00'))).order_by('-total')
@@ -680,6 +757,9 @@ def owner_dashboard(request):
             'online_paid_amount': int(online_sums['paid_amount'] or 0),
             'online_due_amount': int(online_sums['due_amount'] or 0),
             'online_owner_payable': int(online_sums['owner_payout'] or 0),
+            'period_online_collection': int(period_online_sums['online_collection'] or 0),
+            'period_online_due_at_ground': int(period_online_sums['online_due_at_ground'] or 0),
+            'period_collected_at_ground_tally': int(period_collected_at_ground or 0),
             'manual_total_amount': int(manual_sums['total_amount'] or 0),
             'manual_paid_amount': int(manual_sums['paid_amount'] or 0),
             'manual_due_amount': int(manual_sums['due_amount'] or 0),
