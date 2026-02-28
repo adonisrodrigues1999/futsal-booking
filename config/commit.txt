@@ -1,5 +1,5 @@
 git add .
-git commit -m "added full online/ offline amount share"
+git commit -m "final stable push"
 git push
 
 curl ifconfig.me

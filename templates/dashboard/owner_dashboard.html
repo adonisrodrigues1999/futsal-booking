@@ -212,6 +212,8 @@
                   Payment Status:
                   {% if booking.payment_status == 'PAID' %}
                     <span class="badge text-bg-success">Paid</span>
+                  {% elif booking.payment_status == 'PAID_AT_GROUND' %}
+                    <span class="badge text-bg-info">Paid at Ground</span>
                   {% elif booking.payment_status == 'PARTIALLY_PAID' %}
                     <span class="badge text-bg-warning">Partially Paid</span>
                   {% elif booking.payment_status == 'PENDING' %}

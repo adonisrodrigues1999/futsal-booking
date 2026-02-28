@@ -191,7 +191,7 @@ class BookingFlowTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
         booking.refresh_from_db()
-        self.assertEqual(booking.payment_status, 'PAID')
+        self.assertEqual(booking.payment_status, 'PAID_AT_GROUND')
         self.assertEqual(booking.due_amount, 0)
         self.assertEqual(booking.paid_amount, booking.total_amount)
 

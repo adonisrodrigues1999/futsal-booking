@@ -68,34 +68,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
   window.showAppToast = showAppToast;
 
-  // Global loading behaviors for navigation and requests.
+  // Loader policy: show only for slow API responses.
+  var API_LOADER_DELAY_MS = 4000;
+
   window.addEventListener('pageshow', function() {
     appLoader.hide(true);
-  });
-
-  window.addEventListener('beforeunload', function() {
-    appLoader.show('Loading page...', 'Loading next screen');
-  });
-
-  document.querySelectorAll('a[href]').forEach(function(link) {
-    link.addEventListener('click', function(e) {
-      var href = link.getAttribute('href') || '';
-      if (!href || href.startsWith('#')) return;
-      if (href.startsWith('javascript:')) return;
-      if (href.startsWith('mailto:') || href.startsWith('tel:')) return;
-      if (link.hasAttribute('download')) return;
-      if (link.target && link.target.toLowerCase() === '_blank') return;
-      if (e.defaultPrevented) return;
-      appLoader.show('Loading page...', 'Opening page');
-    });
-  });
-
-  document.querySelectorAll('form').forEach(function(form) {
-    form.addEventListener('submit', function() {
-      var method = (form.getAttribute('method') || 'GET').toUpperCase();
-      var msg = method === 'GET' ? 'Searching slots...' : 'Saving your play...';
-      appLoader.show(msg, 'Please wait');
-    });
   });
 
   if (window.fetch) {
@@ -104,8 +81,8 @@ document.addEventListener('DOMContentLoaded', function() {
       var shouldShow = false;
       var timer = setTimeout(function() {
         shouldShow = true;
-        appLoader.show('Loading live updates...', 'Syncing request');
-      }, 140);
+        appLoader.show('Still working...', 'API is taking longer than usual');
+      }, API_LOADER_DELAY_MS);
 
       return nativeFetch.apply(null, arguments).finally(function() {
         clearTimeout(timer);
@@ -238,24 +215,104 @@ document.addEventListener('DOMContentLoaded', function() {
   updateSlotLiveCounters();
   setInterval(updateSlotLiveCounters, 30000);
 
-  // Replace browser confirm with toast-driven 2-step confirmation
+  // Styled double-confirmation modal for destructive actions.
+  var actionConfirmEl = document.getElementById('actionConfirmModal');
+  var actionConfirmModal = actionConfirmEl ? new bootstrap.Modal(actionConfirmEl, { backdrop: 'static' }) : null;
+  var actionConfirmMessageEl = document.getElementById('action-confirm-message');
+  var actionConfirmHintEl = document.getElementById('action-confirm-hint');
+  var actionConfirmNextBtn = document.getElementById('action-confirm-next');
+  var actionConfirmFinalBtn = document.getElementById('action-confirm-final');
+  var actionConfirmState = {
+    step: 1,
+    type: null,
+    href: null,
+    form: null,
+    submitter: null
+  };
+
+  function resetActionConfirmState() {
+    actionConfirmState.step = 1;
+    actionConfirmState.type = null;
+    actionConfirmState.href = null;
+    actionConfirmState.form = null;
+    actionConfirmState.submitter = null;
+    if (actionConfirmHintEl) actionConfirmHintEl.textContent = 'Step 1 of 2: Review this action.';
+    if (actionConfirmNextBtn) actionConfirmNextBtn.classList.remove('d-none');
+    if (actionConfirmFinalBtn) actionConfirmFinalBtn.classList.add('d-none');
+  }
+
+  function openActionConfirm(opts) {
+    if (!actionConfirmModal || !actionConfirmMessageEl) return false;
+    resetActionConfirmState();
+    actionConfirmState.type = opts.type;
+    actionConfirmState.href = opts.href || null;
+    actionConfirmState.form = opts.form || null;
+    actionConfirmState.submitter = opts.submitter || null;
+    actionConfirmMessageEl.textContent = opts.message || 'Please confirm this action.';
+    actionConfirmModal.show();
+    return true;
+  }
+
+  function executeConfirmedAction() {
+    if (actionConfirmState.type === 'link' && actionConfirmState.href) {
+      window.location = actionConfirmState.href;
+      return;
+    }
+    if (actionConfirmState.type === 'form' && actionConfirmState.form) {
+      actionConfirmModal.hide();
+      if (actionConfirmState.form.requestSubmit && actionConfirmState.submitter) {
+        actionConfirmState.form.requestSubmit(actionConfirmState.submitter);
+      } else {
+        actionConfirmState.form.submit();
+      }
+    }
+  }
+
+  if (actionConfirmNextBtn) {
+    actionConfirmNextBtn.addEventListener('click', function() {
+      actionConfirmState.step = 2;
+      if (actionConfirmHintEl) actionConfirmHintEl.textContent = 'Step 2 of 2: Final confirmation required.';
+      actionConfirmNextBtn.classList.add('d-none');
+      if (actionConfirmFinalBtn) actionConfirmFinalBtn.classList.remove('d-none');
+    });
+  }
+
+  if (actionConfirmFinalBtn) {
+    actionConfirmFinalBtn.addEventListener('click', function() {
+      executeConfirmedAction();
+    });
+  }
+
+  if (actionConfirmEl) {
+    actionConfirmEl.addEventListener('hidden.bs.modal', function() {
+      resetActionConfirmState();
+    });
+  }
+
   document.querySelectorAll('a[data-confirm-message]').forEach(function(link) {
     link.addEventListener('click', function(e) {
-      var now = Date.now();
-      var armedUntil = parseInt(link.dataset.confirmArmedUntil || '0', 10);
-      if (armedUntil > now) {
-        showAppToast('Processing request...', 'info', 1200);
-        return;
-      }
+      if (e.defaultPrevented) return;
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      var opened = openActionConfirm({
+        type: 'link',
+        href: link.getAttribute('href'),
+        message: link.dataset.confirmMessage
+      });
+      if (opened) e.preventDefault();
+    });
+  });
 
-      e.preventDefault();
-      link.dataset.confirmArmedUntil = String(now + 4200);
-      showAppToast((link.dataset.confirmMessage || 'Please confirm action.') + ' Tap again to continue.', 'warning', 3600);
-      setTimeout(function() {
-        if ((parseInt(link.dataset.confirmArmedUntil || '0', 10)) <= Date.now()) {
-          delete link.dataset.confirmArmedUntil;
-        }
-      }, 4400);
+  document.querySelectorAll('button[data-confirm-message], input[type="submit"][data-confirm-message]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      var form = btn.form || btn.closest('form');
+      if (!form) return;
+      var opened = openActionConfirm({
+        type: 'form',
+        form: form,
+        submitter: btn,
+        message: btn.dataset.confirmMessage
+      });
+      if (opened) e.preventDefault();
     });
   });
 
@@ -346,7 +403,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     confirmBtn.disabled = true;
     confirmBtn.textContent = 'Initializing...';
-    appLoader.show('Preparing secure checkout...', 'Connecting to payment gateway');
 
     fetch('/payments/razorpay/create-order/', {
       method: 'POST',
@@ -393,10 +449,8 @@ document.addEventListener('DOMContentLoaded', function() {
         showAppToast('Payment failed. Please try again.', 'danger', 3200);
       });
       confirmModal.hide();
-      appLoader.hide(false);
       checkout.open();
     }).catch(function(err) {
-      appLoader.hide(false);
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Proceed to Pay';
       showAppToast(err.message || 'Unable to start payment.', 'danger', 3200);

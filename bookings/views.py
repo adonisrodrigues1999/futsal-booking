@@ -1533,7 +1533,7 @@ def owner_mark_paid_at_ground(request, booking_id):
 
     booking.paid_amount = booking.total_amount
     booking.due_amount = 0
-    booking.payment_status = 'PAID'
+    booking.payment_status = 'PAID_AT_GROUND'
     booking.payment_paid_at = timezone.now()
     booking.save(update_fields=['paid_amount', 'due_amount', 'payment_status', 'payment_paid_at'])
 

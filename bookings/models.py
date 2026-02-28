@@ -26,6 +26,7 @@ class Booking(models.Model):
         ('PENDING', 'Pending'),
         ('PARTIALLY_PAID', 'Partially Paid'),
         ('PAID', 'Paid'),
+        ('PAID_AT_GROUND', 'Paid at Ground'),
         ('FAILED', 'Failed'),
     )
 
