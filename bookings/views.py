@@ -594,6 +594,20 @@ def owner_dashboard(request):
         collected_amount=Coalesce(Sum('paid_amount'), 0),
         pending_amount=Coalesce(Sum('due_amount'), 0),
     )
+    online_sums = bookings.filter(booking_source='ONLINE').aggregate(
+        bookings_count=Count('id'),
+        total_amount=Coalesce(Sum('total_amount'), 0),
+        paid_amount=Coalesce(Sum('paid_amount'), 0),
+        due_amount=Coalesce(Sum('due_amount'), 0),
+        owner_payout=Coalesce(Sum('owner_payout'), 0),
+    )
+    manual_sums = bookings.filter(booking_source='MANUAL').aggregate(
+        bookings_count=Count('id'),
+        total_amount=Coalesce(Sum('total_amount'), 0),
+        paid_amount=Coalesce(Sum('paid_amount'), 0),
+        due_amount=Coalesce(Sum('due_amount'), 0),
+        owner_payout=Coalesce(Sum('owner_payout'), 0),
+    )
     period_sums = period_bookings.aggregate(
         gross_revenue=Coalesce(Sum('total_amount'), 0),
         owner_revenue=Coalesce(Sum('owner_payout'), 0),
@@ -662,6 +676,14 @@ def owner_dashboard(request):
             'pending_amount': int(sums['pending_amount'] or 0),
             'online_bookings': source_map.get('ONLINE', 0),
             'manual_bookings': source_map.get('MANUAL', 0),
+            'online_total_amount': int(online_sums['total_amount'] or 0),
+            'online_paid_amount': int(online_sums['paid_amount'] or 0),
+            'online_due_amount': int(online_sums['due_amount'] or 0),
+            'online_owner_payable': int(online_sums['owner_payout'] or 0),
+            'manual_total_amount': int(manual_sums['total_amount'] or 0),
+            'manual_paid_amount': int(manual_sums['paid_amount'] or 0),
+            'manual_due_amount': int(manual_sums['due_amount'] or 0),
+            'manual_owner_collected': int(manual_sums['owner_payout'] or 0),
             'peak_hour': max(heatmap, key=heatmap.get) if heatmap else 'N/A',
             'active_grounds': grounds.count(),
             'period_income': period_income,
@@ -893,7 +915,24 @@ def export_bookings_csv(request):
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['Booking ID', 'Ground', 'Date', 'Start', 'End', 'Customer Name', 'Customer Phone', 'User Email', 'Amount', 'Status'])
+    writer.writerow([
+        'Booking ID',
+        'Ground',
+        'Date',
+        'Start',
+        'End',
+        'Customer Name',
+        'Customer Phone',
+        'User Email',
+        'Booking Source',
+        'Payment Mode',
+        'Payment Status',
+        'Paid Amount',
+        'Due Amount',
+        'Owner Payout',
+        'Amount',
+        'Status',
+    ])
     for b in qs:
         writer.writerow([
             str(b.id),
@@ -904,6 +943,12 @@ def export_bookings_csv(request):
             b.customer_name,
             b.customer_phone,
             b.user.email if b.user and getattr(b.user, 'email', None) else '',
+            b.get_booking_source_display(),
+            b.get_payment_mode_display(),
+            b.get_payment_status_display(),
+            f"{b.paid_amount}",
+            f"{b.due_amount}",
+            f"{b.owner_payout}",
             f"{b.total_amount}",
             b.status,
         ])

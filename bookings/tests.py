@@ -194,6 +194,59 @@ class BookingFlowTests(TestCase):
         self.assertEqual(booking.due_amount, 0)
         self.assertEqual(booking.paid_amount, booking.total_amount)
 
+    def test_owner_dashboard_shows_online_and_manual_money_split(self):
+        online_slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=1),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            is_booked=True,
+        )
+        manual_slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=2),
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=online_slot,
+            user=self.customer,
+            customer_name='Online Customer',
+            customer_phone='7000000001',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='FULL',
+            payment_status='PAID',
+            paid_amount=500,
+            due_amount=0,
+        )
+        Booking.objects.create(
+            slot=manual_slot,
+            customer_name='Walk-in Customer',
+            customer_phone='7000000002',
+            total_amount=700,
+            owner_payout=700,
+            booking_source='MANUAL',
+            payment_mode='FULL',
+            payment_status='PENDING',
+            paid_amount=200,
+            due_amount=500,
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get('/dashboard/owner/')
+        self.assertEqual(response.status_code, 200)
+
+        stats = response.context['stats']
+        self.assertEqual(stats['online_bookings'], 1)
+        self.assertEqual(stats['manual_bookings'], 1)
+        self.assertEqual(stats['online_paid_amount'], 500)
+        self.assertEqual(stats['manual_paid_amount'], 200)
+        self.assertEqual(stats['online_due_amount'], 0)
+        self.assertEqual(stats['manual_due_amount'], 500)
+
 
 class OwnerExpenseTests(TestCase):
     def setUp(self):

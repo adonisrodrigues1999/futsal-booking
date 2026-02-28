@@ -226,6 +226,18 @@ def admin_dashboard(request):
         gmv=Coalesce(Sum('total_amount'), 0),
         owner_payout=Coalesce(Sum('owner_payout'), 0),
     )
+    month_online_sums = month_bookings.filter(booking_source='ONLINE').aggregate(
+        bookings=Count('id'),
+        paid=Coalesce(Sum('paid_amount'), 0),
+        due=Coalesce(Sum('due_amount'), 0),
+        owner_payout=Coalesce(Sum('owner_payout'), 0),
+    )
+    month_manual_sums = month_bookings.filter(booking_source='MANUAL').aggregate(
+        bookings=Count('id'),
+        paid=Coalesce(Sum('paid_amount'), 0),
+        due=Coalesce(Sum('due_amount'), 0),
+        owner_payout=Coalesce(Sum('owner_payout'), 0),
+    )
     month_gmv = int(month_sums['gmv'] or 0)
     month_owner_payout = int(month_sums['owner_payout'] or 0)
     month_platform_revenue = month_gmv - month_owner_payout
@@ -274,6 +286,14 @@ def admin_dashboard(request):
         'month_bookings': month_bookings.count(),
         'month_gmv': month_gmv,
         'month_platform_revenue': month_platform_revenue,
+        'month_online_bookings': int(month_online_sums['bookings'] or 0),
+        'month_online_collected': int(month_online_sums['paid'] or 0),
+        'month_online_due': int(month_online_sums['due'] or 0),
+        'month_online_owner_payable': int(month_online_sums['owner_payout'] or 0),
+        'month_manual_bookings': int(month_manual_sums['bookings'] or 0),
+        'month_manual_collected': int(month_manual_sums['paid'] or 0),
+        'month_manual_due': int(month_manual_sums['due'] or 0),
+        'month_manual_owner_collected': int(month_manual_sums['owner_payout'] or 0),
         'active_owners_this_month': month_bookings.values('slot__ground__owner').distinct().count(),
         'trend_labels': trend_labels,
         'trend_data': trend_data,

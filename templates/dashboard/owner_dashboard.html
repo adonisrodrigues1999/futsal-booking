@@ -133,9 +133,30 @@
     </div>
     <div class="col-md-3">
       <div class="card p-3 shadow-sm h-100">
-        <div class="small text-muted">Source Split</div>
-        <div class="small">Online: <strong>{{ stats.online_bookings }}</strong></div>
-        <div class="small">Manual: <strong>{{ stats.manual_bookings }}</strong></div>
+        <div class="small text-muted">Source Split (Count)</div>
+        <div class="small">Online bookings: <strong>{{ stats.online_bookings }}</strong></div>
+        <div class="small">Ground/manual bookings: <strong>{{ stats.manual_bookings }}</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card p-3 shadow-sm h-100 border-start border-4 border-primary">
+        <div class="small text-muted mb-1">Online Settlements (Admin Collected)</div>
+        <div class="small">Gross online value: <strong>₹{{ stats.online_total_amount }}</strong></div>
+        <div class="small">Collected online: <strong class="text-success">₹{{ stats.online_paid_amount }}</strong></div>
+        <div class="small">Pending on online bookings: <strong class="text-warning">₹{{ stats.online_due_amount }}</strong></div>
+        <div class="small">Owner payout to receive from admin: <strong>₹{{ stats.online_owner_payable }}</strong></div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card p-3 shadow-sm h-100 border-start border-4 border-success">
+        <div class="small text-muted mb-1">Ground Collections (Owner Collected)</div>
+        <div class="small">Gross ground/manual value: <strong>₹{{ stats.manual_total_amount }}</strong></div>
+        <div class="small">Collected at ground: <strong class="text-success">₹{{ stats.manual_paid_amount }}</strong></div>
+        <div class="small">Pending on ground/manual bookings: <strong class="text-warning">₹{{ stats.manual_due_amount }}</strong></div>
+        <div class="small">Owner share from ground/manual: <strong>₹{{ stats.manual_owner_collected }}</strong></div>
       </div>
     </div>
   </div>
@@ -199,6 +220,14 @@
                     <span class="badge text-bg-danger">Failed</span>
                   {% endif %}
                   • Mode: <strong>{{ booking.get_payment_mode_display }}</strong>
+                </div>
+                <div class="small mt-1">
+                  Source:
+                  {% if booking.booking_source == 'ONLINE' %}
+                    <span class="badge text-bg-primary">Online</span>
+                  {% else %}
+                    <span class="badge text-bg-secondary">Ground/Manual</span>
+                  {% endif %}
                 </div>
                 <div class="small text-muted">Paid: ₹{{ booking.paid_amount }} • Due: ₹{{ booking.due_amount }}</div>
                 <div class="small text-muted">Payment Time: {% if booking.payment_paid_at %}{{ booking.payment_paid_at|date:"Y-m-d g:i A" }}{% else %}-{% endif %}</div>

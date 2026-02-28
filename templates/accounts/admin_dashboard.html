@@ -74,6 +74,31 @@
   </div>
 
   <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="mb-3">Online Booking Money Flow (This Month)</h5>
+          <div class="small">Bookings: <strong>{{ month_online_bookings }}</strong></div>
+          <div class="small">Collected in admin account: <strong class="text-success">₹{{ month_online_collected }}</strong></div>
+          <div class="small">Pending on online bookings: <strong class="text-warning">₹{{ month_online_due }}</strong></div>
+          <div class="small">Amount payable to owners from online bookings: <strong>₹{{ month_online_owner_payable }}</strong></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="mb-3">Ground/Manual Booking Money Flow (This Month)</h5>
+          <div class="small">Bookings: <strong>{{ month_manual_bookings }}</strong></div>
+          <div class="small">Collected at ground: <strong class="text-success">₹{{ month_manual_collected }}</strong></div>
+          <div class="small">Pending on ground/manual bookings: <strong class="text-warning">₹{{ month_manual_due }}</strong></div>
+          <div class="small">Owner share collected directly: <strong>₹{{ month_manual_owner_collected }}</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
     <div class="col-lg-8">
       <div class="card">
         <div class="card-body">
