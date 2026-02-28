@@ -1,6 +1,7 @@
 from django.test import TestCase
 from datetime import time, date
 from datetime import timedelta
+from unittest.mock import patch
 
 from accounts.models import User
 from grounds.models import Ground
@@ -302,3 +303,119 @@ class OwnerExpenseTests(TestCase):
         response = self.client.post(f'/dashboard/owner/expenses/{expense.id}/delete/', {'next': '/dashboard/owner/'})
         self.assertEqual(response.status_code, 302)
         self.assertTrue(OwnerExpense.objects.filter(id=expense.id).exists())
+
+
+class BookingFraudDetectionTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            email='fraudowner@example.com',
+            phone_number='6111111111',
+            name='Fraud Owner',
+            password='password123',
+            role='owner',
+            email_verified=True,
+        )
+        self.customer = User.objects.create_user(
+            email='fraudcustomer@example.com',
+            phone_number='6222222222',
+            name='Fraud Customer',
+            password='password123',
+            role='customer',
+            email_verified=True,
+        )
+        self.ground = Ground.objects.create(
+            name='Fraud Arena',
+            location='City',
+            owner=self.owner,
+            day_price=500,
+            night_price=900,
+            opening_time=time(6, 0),
+            closing_time=time(23, 0),
+        )
+        self.slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=1),
+            start_time=time(8, 0),
+            end_time=time(9, 0),
+            is_booked=False,
+        )
+
+    def _mock_razorpay_client(self, *, user_id, slot_id, amount_paise):
+        class _Utility:
+            @staticmethod
+            def verify_payment_signature(_):
+                return None
+
+        class _Order:
+            @staticmethod
+            def fetch(order_id):
+                return {
+                    'id': order_id,
+                    'notes': {'slot_id': str(slot_id), 'user_id': str(user_id)},
+                }
+
+        class _Payment:
+            @staticmethod
+            def fetch(_):
+                return {
+                    'order_id': 'order_test_1',
+                    'status': 'captured',
+                    'amount': amount_paise,
+                }
+
+        class _Client:
+            utility = _Utility()
+            order = _Order()
+            payment = _Payment()
+
+        return _Client()
+
+    def test_verify_payment_blocks_user_mismatch(self):
+        self.client.force_login(self.customer)
+        fake_client = self._mock_razorpay_client(
+            user_id=999999,  # wrong user on purpose
+            slot_id=self.slot.id,
+            amount_paise=50000,
+        )
+        payload = {
+            'slot_id': self.slot.id,
+            'payment_mode': 'FULL',
+            'razorpay_order_id': 'order_test_1',
+            'razorpay_payment_id': 'pay_test_1',
+            'razorpay_signature': 'sig_test_1',
+        }
+        with patch('bookings.views._razorpay_client', return_value=(fake_client, 'rzp_test_key')):
+            response = self.client.post(
+                '/payments/razorpay/verify-and-book/',
+                data=payload,
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('User mismatch', response.json().get('error', ''))
+        self.assertFalse(Booking.objects.filter(slot=self.slot, status='BOOKED').exists())
+
+    def test_verify_payment_blocks_amount_mismatch(self):
+        self.client.force_login(self.customer)
+        fake_client = self._mock_razorpay_client(
+            user_id=self.customer.id,
+            slot_id=self.slot.id,
+            amount_paise=10000,  # wrong amount for full payment
+        )
+        payload = {
+            'slot_id': self.slot.id,
+            'payment_mode': 'FULL',
+            'razorpay_order_id': 'order_test_1',
+            'razorpay_payment_id': 'pay_test_1',
+            'razorpay_signature': 'sig_test_1',
+        }
+        with patch('bookings.views._razorpay_client', return_value=(fake_client, 'rzp_test_key')):
+            response = self.client.post(
+                '/payments/razorpay/verify-and-book/',
+                data=payload,
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Paid amount mismatch', response.json().get('error', ''))
+        self.assertFalse(Booking.objects.filter(slot=self.slot, status='BOOKED').exists())

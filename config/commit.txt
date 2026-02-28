@@ -1,5 +1,5 @@
 git add .
-git commit -m "cadded owner analysis, expense tracker,loading status and title bar"
+git commit -m "added full online/ offline amount share"
 git push
 
 curl ifconfig.me
@@ -54,4 +54,5 @@ add reschedling option
 allow option for owner to select that the user has paid cash on the futsal ground  on give an option to gnerate qo to py online 
 
 
-now from income from groud booking let there be a option to keep trak of bookings from online payments and bookings taken on the ground so that it is easy for e to return it to them
+now from income from groud booking let there be a option to keep track of bookings from online payments and bookings taken on the ground so that it is easy for e to return it to them as all online bookings are coming to admin main bank account and from there its been sent to the ground owners 
+so here the groud owner as well as the admin should have a proper  details

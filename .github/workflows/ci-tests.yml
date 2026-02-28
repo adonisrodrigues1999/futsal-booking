@@ -1,0 +1,41 @@
+name: CI Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+      - "feature/**"
+  pull_request:
+
+jobs:
+  test-suite:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ensure test scripts are executable
+        run: chmod +x scripts/test_unit.sh scripts/test_fraud.sh scripts/test_e2e_build.sh
+
+      - name: Fraud detection tests
+        run: ./scripts/test_fraud.sh
+
+      - name: Unit test suite
+        run: ./scripts/test_unit.sh
+
+      - name: End-to-end build checks
+        run: ./scripts/test_e2e_build.sh

@@ -48,14 +48,14 @@ class AdminDashboardSettlementSplitTests(TestCase):
         today = timezone.localdate()
         online_slot = Slot.objects.create(
             ground=self.ground,
-            date=today + timedelta(days=1),
+            date=today,
             start_time=time(8, 0),
             end_time=time(9, 0),
             is_booked=True,
         )
         manual_slot = Slot.objects.create(
             ground=self.ground,
-            date=today + timedelta(days=2),
+            date=today,
             start_time=time(9, 0),
             end_time=time(10, 0),
             is_booked=True,
