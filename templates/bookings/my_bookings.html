@@ -55,9 +55,9 @@
 
                     {% if booking.status == 'BOOKED' and booking.booking_source == 'ONLINE' and booking.can_cancel %}
                       {% if booking.cancel_no_refund %}
-                        <a href="/cancel/{{ booking.id }}/" class="btn btn-sm btn-outline-danger" data-confirm-message="This cancellation  will not be refunded.">Cancel</a>
+                        <a href="/cancel/{{ booking.id }}/" class="btn btn-sm btn-outline-danger">Cancel</a>
                       {% else %}
-                        <a href="/cancel/{{ booking.id }}/" class="btn btn-sm btn-outline-danger" data-confirm-message="Cancel this booking?">Cancel</a>
+                        <a href="/cancel/{{ booking.id }}/" class="btn btn-sm btn-outline-danger">Cancel</a>
                       {% endif %}
                     {% elif booking.status == 'BOOKED' and booking.booking_source == 'ONLINE' %}
                       <button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-disabled="true">Past booking</button>

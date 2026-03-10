@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from calendar import monthrange
 
 from django.utils import timezone
 
@@ -56,5 +57,36 @@ def create_initial_slots_for_ground(ground, days=14, start_date=None, slot_confi
         ensure_slots_for_ground_date(
             ground=ground,
             slot_date=start_date + timedelta(days=offset),
+            slot_config=slot_config,
+        )
+
+
+def ensure_next_month_slots_for_ground(ground, slot_config=None, today=None):
+    if today is None:
+        today = timezone.localdate()
+
+    year = today.year
+    month = today.month + 1
+    if month == 13:
+        month = 1
+        year += 1
+
+    days_in_month = monthrange(year, month)[1]
+    month_start = datetime(year, month, 1).date()
+    month_end = datetime(year, month, days_in_month).date()
+
+    has_slots = Slot.objects.filter(
+        ground=ground,
+        date__gte=month_start,
+        date__lte=month_end,
+    ).exists()
+
+    if has_slots:
+        return
+
+    for offset in range(days_in_month):
+        ensure_slots_for_ground_date(
+            ground=ground,
+            slot_date=month_start + timedelta(days=offset),
             slot_config=slot_config,
         )

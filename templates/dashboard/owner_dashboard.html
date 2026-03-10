@@ -10,43 +10,8 @@
     <a href="/owner/manual-booking/" class="btn btn-primary">Manual Booking</a>
   </div>
 
-  <div class="d-flex flex-wrap gap-2 mb-3">
-    <button type="button" class="btn btn-sm btn-outline-secondary owner-toggle-btn" data-target="owner-section-overview">Minimize Overview</button>
-    <button type="button" class="btn btn-sm btn-outline-secondary owner-toggle-btn" data-target="owner-section-bookings">Minimize Bookings</button>
-    <button type="button" class="btn btn-sm btn-outline-secondary owner-toggle-btn" data-target="owner-section-finance">Minimize Finance</button>
-  </div>
 
   <div id="owner-section-overview">
-  <div class="panel-soft mb-3">
-    <form method="get" class="row g-2 align-items-end">
-      <div class="col-md-3">
-        <label class="form-label mb-1">Report Period</label>
-        <select name="period" id="report-period" class="form-select">
-          <option value="month" {% if report_period == 'month' %}selected{% endif %}>Monthly</option>
-          <option value="year" {% if report_period == 'year' %}selected{% endif %}>Yearly</option>
-        </select>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label mb-1">Year</label>
-        <select name="year" class="form-select">
-          {% for yr in report_year_options %}
-            <option value="{{ yr }}" {% if yr == report_year %}selected{% endif %}>{{ yr }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label mb-1">Month</label>
-        <select name="month" id="report-month" class="form-select" {% if report_period == 'year' %}disabled{% endif %}>
-          {% for mnum, mname in report_month_options %}
-            <option value="{{ mnum }}" {% if mnum == report_month %}selected{% endif %}>{{ mname }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-md-3">
-        <button type="submit" class="btn btn-outline-primary w-100">Update Report</button>
-      </div>
-    </form>
-  </div>
 
   <div class="row g-3 mb-4">
     <div class="col-sm-6 col-md-3">
@@ -150,21 +115,16 @@
   <div class="row g-3 mb-4">
     <div class="col-md-6">
       <div class="card p-3 shadow-sm h-100 border-start border-4 border-primary">
-        <div class="small text-muted mb-1">Online Settlements (Admin Collected)</div>
-        <div class="small">Gross online value: <strong>₹{{ stats.online_total_amount }}</strong></div>
-        <div class="small">Online collection ({{ report_label }}): <strong class="text-success">₹{{ stats.period_online_collection }}</strong></div>
-        <div class="small">Yet to collect at ground ({{ report_label }}): <strong class="text-warning">₹{{ stats.period_online_due_at_ground }}</strong></div>
-        <div class="small">Owner payout to receive from admin: <strong>₹{{ stats.online_owner_payable }}</strong></div>
+        <div class="small text-muted mb-1">Online Money ({{ report_label }})</div>
+        <div class="small">Collected online: <strong class="text-success">₹{{ stats.period_online_collection }}</strong></div>
       </div>
     </div>
     <div class="col-md-6">
       <div class="card p-3 shadow-sm h-100 border-start border-4 border-success">
-        <div class="small text-muted mb-1">Ground Collections (Owner Collected)</div>
-        <div class="small">Gross ground/manual value: <strong>₹{{ stats.manual_total_amount }}</strong></div>
+        <div class="small text-muted mb-1">Ground Money</div>
         <div class="small">Collected at ground: <strong class="text-success">₹{{ stats.manual_paid_amount }}</strong></div>
-        <div class="small">Pending on ground/manual bookings: <strong class="text-warning">₹{{ stats.manual_due_amount }}</strong></div>
-        <div class="small">Collected at ground tally ({{ report_label }}): <strong class="text-success">₹{{ stats.period_collected_at_ground_tally }}</strong></div>
-        <div class="small">Owner share from ground/manual: <strong>₹{{ stats.manual_owner_collected }}</strong></div>
+        <div class="small">Pending at ground: <strong class="text-warning">₹{{ stats.manual_due_amount }}</strong></div>
+        <div class="small">Collected at ground ({{ report_label }}): <strong class="text-success">₹{{ stats.period_collected_at_ground_tally }}</strong></div>
       </div>
     </div>
   </div>
@@ -203,16 +163,18 @@
 
   <div id="owner-section-bookings">
   <div class="row g-4">
-    <div class="col-lg-7">
+    <div class="col-12">
       <div class="card p-3 shadow-sm">
-        <h6>Bookings (Last 14 days)</h6>
-        <canvas id="bookingsChart" height="180"></canvas>
-      </div>
-
-      <div class="card p-3 shadow-sm mt-3">
-        <h6 class="mb-3">Recent Bookings</h6>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+          <h6 class="mb-0">{{ bookings_title }}</h6>
+          <form method="get" class="d-flex align-items-center gap-2">
+            <label class="small text-muted mb-0" for="owner-booking-date">Date</label>
+            <input id="owner-booking-date" type="date" name="date" class="form-control form-control-sm" value="{{ selected_date|date:'Y-m-d' }}">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Go</button>
+          </form>
+        </div>
         <div class="list-group list-group-flush">
-          {% for booking in owner_bookings %}
+          {% for booking in filtered_bookings %}
             <div class="list-group-item d-flex justify-content-between align-items-start gap-3">
               <div>
                 <div class="fw-semibold">{{ booking.slot.ground.name }}</div>
@@ -253,7 +215,7 @@
                   {% if booking.can_mark_paid_at_ground %}
                     <form method="post" action="{% url 'owner_mark_paid_at_ground' booking.id %}">
                       {% csrf_token %}
-                      <button type="submit" class="btn btn-sm btn-outline-success" data-confirm-message="Mark this booking as paid at ground?">Mark Paid At Ground</button>
+                      <button type="submit" class="btn btn-sm btn-outline-success">Mark Paid At Ground</button>
                     </form>
                   {% endif %}
                   {% if booking.can_owner_cancel %}
@@ -265,18 +227,16 @@
               </div>
             </div>
           {% empty %}
-            <div class="p-3 text-center text-muted">No recent bookings.</div>
+            <div class="p-3 text-center text-muted">No bookings found.</div>
           {% endfor %}
         </div>
       </div>
     </div>
+  </div>
+  </div>
 
-    <div class="col-lg-5">
-      <div class="card p-3 shadow-sm mb-3">
-        <h6>Peak Hours Heatmap</h6>
-        <canvas id="heatmapChart" height="200"></canvas>
-      </div>
-
+  <div class="row g-4 mt-1">
+    <div class="col-lg-7">
       <div class="card p-3 shadow-sm mb-3">
         <h6 class="mb-3">Top Grounds by Revenue</h6>
         <div class="table-responsive">
@@ -304,7 +264,8 @@
           </table>
         </div>
       </div>
-
+    </div>
+    <div class="col-lg-5">
       <div class="card p-3 shadow-sm">
         <h6>Quick Actions</h6>
         <div class="d-grid gap-2">
@@ -314,15 +275,10 @@
       </div>
     </div>
   </div>
-  </div>
 
   <div id="owner-section-finance">
   <div class="row g-4 mt-1">
     <div class="col-lg-7">
-      <div class="card p-3 shadow-sm mb-3">
-        <h6>Income vs Expense vs Profit ({{ report_year }})</h6>
-        <canvas id="profitLossChart" height="180"></canvas>
-      </div>
       <div class="card p-3 shadow-sm">
         <h6 class="mb-3">Expense Categories ({{ report_label }})</h6>
         <div class="table-responsive">
@@ -426,192 +382,7 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  const labels = {{ chart_labels|safe }};
-  const data = {{ chart_data|safe }};
-  const heatLabels = {{ heatmap_labels|safe }};
-  const heatData = {{ heatmap_data|safe }};
-  const plLabels = {{ pl_labels|safe }};
-  const plIncome = {{ pl_income_data|safe }};
-  const plExpense = {{ pl_expense_data|safe }};
-  const plProfit = {{ pl_profit_data|safe }};
-
-  function getChartFonts() {
-    const vw = Math.max(window.innerWidth || 1024, 320);
-    const base = Math.min(16, Math.max(11, Math.round(vw / 100)));
-    const ratio = window.devicePixelRatio || 1;
-    return {
-      tick: Math.round(base * 0.95 * ratio),
-      tooltipTitle: Math.round(base * ratio),
-      tooltipBody: Math.round(base * 0.95 * ratio)
-    };
-  }
-
-  const bookingsCtx = document.getElementById('bookingsChart').getContext('2d');
-  const heatCtx = document.getElementById('heatmapChart').getContext('2d');
-  const plCtx = document.getElementById('profitLossChart').getContext('2d');
-
-  function createGrad(ctx) {
-    const g = ctx.createLinearGradient(0, 0, 0, 220);
-    g.addColorStop(0, 'rgba(22, 163, 74, 0.28)');
-    g.addColorStop(1, 'rgba(22, 163, 74, 0.04)');
-    return g;
-  }
-
-  let fonts = getChartFonts();
-
-  const bookingsChart = new Chart(bookingsCtx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Bookings',
-        data: data,
-        borderColor: '#15803d',
-        backgroundColor: createGrad(bookingsCtx),
-        tension: 0.35,
-        fill: true,
-        pointRadius: 4,
-        pointBackgroundColor: '#f59e0b'
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(20, 34, 23, 0.95)',
-          titleColor: '#fff',
-          bodyColor: '#fff',
-          padding: 10,
-          titleFont: { size: fonts.tooltipTitle },
-          bodyFont: { size: fonts.tooltipBody },
-          callbacks: { label: function(context) { return ' ' + context.parsed.y + ' bookings'; } }
-        }
-      },
-      scales: {
-        x: { ticks: { color: '#4e6152', maxRotation: 0, font: { size: fonts.tick } }, grid: { color: 'rgba(20, 34, 23, 0.08)' } },
-        y: { beginAtZero: true, ticks: { color: '#4e6152', font: { size: fonts.tick } }, grid: { color: 'rgba(20, 34, 23, 0.08)' } }
-      }
-    }
-  });
-
-  const heatChart = new Chart(heatCtx, {
-    type: 'bar',
-    data: {
-      labels: heatLabels,
-      datasets: [{
-        label: 'Bookings per hour',
-        data: heatData,
-        backgroundColor: heatData.map(v => v > 0 ? '#15803d' : '#cbdccf')
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(20, 34, 23, 0.95)',
-          titleColor: '#fff',
-          bodyColor: '#fff',
-          titleFont: { size: fonts.tooltipTitle },
-          bodyFont: { size: fonts.tooltipBody }
-        }
-      },
-      scales: {
-        x: { ticks: { color: '#4e6152', font: { size: fonts.tick } } },
-        y: { beginAtZero: true, ticks: { color: '#4e6152', font: { size: fonts.tick } } }
-      }
-    }
-  });
-
-  const profitChart = new Chart(plCtx, {
-    type: 'line',
-    data: {
-      labels: plLabels,
-      datasets: [
-        {
-          label: 'Income',
-          data: plIncome,
-          borderColor: '#15803d',
-          backgroundColor: 'rgba(21, 128, 61, 0.15)',
-          tension: 0.3,
-          fill: false
-        },
-        {
-          label: 'Expense',
-          data: plExpense,
-          borderColor: '#dc2626',
-          backgroundColor: 'rgba(220, 38, 38, 0.12)',
-          tension: 0.3,
-          fill: false
-        },
-        {
-          label: 'Profit/Loss',
-          data: plProfit,
-          borderColor: '#f59e0b',
-          backgroundColor: 'rgba(245, 158, 11, 0.12)',
-          tension: 0.3,
-          fill: false
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { position: 'bottom' },
-        tooltip: {
-          backgroundColor: 'rgba(20, 34, 23, 0.95)',
-          titleColor: '#fff',
-          bodyColor: '#fff',
-          titleFont: { size: fonts.tooltipTitle },
-          bodyFont: { size: fonts.tooltipBody },
-          callbacks: {
-            label: function(context) {
-              return context.dataset.label + ': ₹' + Number(context.parsed.y || 0).toLocaleString();
-            }
-          }
-        }
-      },
-      scales: {
-        x: { ticks: { color: '#4e6152', font: { size: fonts.tick } } },
-        y: {
-          beginAtZero: false,
-          ticks: {
-            color: '#4e6152',
-            font: { size: fonts.tick },
-            callback: function(value) { return '₹' + value; }
-          }
-        }
-      }
-    }
-  });
-
-  let resizeTimer = null;
-  window.addEventListener('resize', function() {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function() {
-      fonts = getChartFonts();
-      bookingsChart.options.scales.x.ticks.font.size = fonts.tick;
-      bookingsChart.options.scales.y.ticks.font.size = fonts.tick;
-      bookingsChart.options.plugins.tooltip.titleFont.size = fonts.tooltipTitle;
-      bookingsChart.options.plugins.tooltip.bodyFont.size = fonts.tooltipBody;
-      bookingsChart.update();
-
-      heatChart.options.scales.x.ticks.font.size = fonts.tick;
-      heatChart.options.scales.y.ticks.font.size = fonts.tick;
-      heatChart.options.plugins.tooltip.titleFont.size = fonts.tooltipTitle;
-      heatChart.options.plugins.tooltip.bodyFont.size = fonts.tooltipBody;
-      heatChart.update();
-
-      profitChart.options.scales.x.ticks.font.size = fonts.tick;
-      profitChart.options.scales.y.ticks.font.size = fonts.tick;
-      profitChart.options.plugins.tooltip.titleFont.size = fonts.tooltipTitle;
-      profitChart.options.plugins.tooltip.bodyFont.size = fonts.tooltipBody;
-      profitChart.update();
-    }, 120);
-  });
 
   {% if messages %}
     window.addEventListener('load', function() {
@@ -622,14 +393,6 @@
       {% endfor %}
     });
   {% endif %}
-
-  const periodEl = document.getElementById('report-period');
-  const monthEl = document.getElementById('report-month');
-  if (periodEl && monthEl) {
-    periodEl.addEventListener('change', function() {
-      monthEl.disabled = periodEl.value === 'year';
-    });
-  }
 
   const ownerToggleButtons = document.querySelectorAll('.owner-toggle-btn');
   const sectionStateKey = 'owner_dashboard_section_state_v1';
@@ -666,13 +429,6 @@
       sectionState[target] = !sectionState[target];
       localStorage.setItem(sectionStateKey, JSON.stringify(sectionState));
       applySectionState(target, sectionState[target]);
-      if (!sectionState[target]) {
-        setTimeout(function() {
-          bookingsChart.resize();
-          heatChart.resize();
-          profitChart.resize();
-        }, 60);
-      }
     });
   });
 </script>

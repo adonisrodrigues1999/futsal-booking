@@ -30,7 +30,7 @@ except Exception:
     razorpay = None
 
 from .models import Ground, Slot, Booking, ActivityLog, OwnerExpense
-from .slot_generation import ensure_slots_for_ground_date
+from .slot_generation import ensure_slots_for_ground_date, ensure_next_month_slots_for_ground
 import os
 from django.http import FileResponse, Http404
 from django.conf import settings as djsettings
@@ -244,8 +244,9 @@ def ground_slots(request, ground_id):
     except Exception:
         selected_date = timezone.localdate()
 
-    # Ensure slots exist for the selected date
+    # Ensure slots exist for the selected date and precreate next month if missing
     ensure_slots_for_ground_date(ground=ground, slot_date=selected_date)
+    ensure_next_month_slots_for_ground(ground=ground)
 
     # fetch slots for that date
     slots_qs = Slot.objects.filter(ground=ground, date=selected_date).order_by('start_time')
@@ -577,6 +578,8 @@ def my_bookings(request):
 def owner_dashboard(request):
     owner = request.user
     grounds = Ground.objects.filter(owner=owner)
+    for g in grounds:
+        ensure_next_month_slots_for_ground(ground=g)
 
     bookings = Booking.objects.filter(slot__ground__in=grounds, status='BOOKED')
     today = timezone.localdate()
@@ -616,14 +619,18 @@ def owner_dashboard(request):
         hour = b.slot.start_time.hour
         heatmap[hour] = heatmap.get(hour, 0) + 1
 
-    # bookings per day for the last 14 days
-    days = [today - timedelta(days=i) for i in range(13, -1, -1)]
-    labels = [d.strftime('%Y-%m-%d') for d in days]
-    counts = [bookings.filter(slot__date=d).count() for d in days]
-
     now_dt = timezone.localtime(timezone.now())
-    owner_bookings = bookings.order_by('-slot__date', '-slot__start_time')[:50]
-    for booking in owner_bookings:
+    selected_date = today
+    selected_date_raw = (request.GET.get('date') or '').strip()
+    if selected_date_raw:
+        try:
+            selected_date = datetime.strptime(selected_date_raw, '%Y-%m-%d').date()
+        except Exception:
+            selected_date = today
+    filtered_bookings = bookings.filter(slot__date=selected_date).order_by('slot__start_time')
+    bookings_title = f"Bookings for {selected_date}"
+
+    for booking in filtered_bookings:
         booking.can_owner_cancel = _slot_start_datetime(booking.slot) > now_dt
         booking.can_owner_reschedule = booking.status == 'BOOKED' and _slot_start_datetime(booking.slot) > now_dt
         booking.can_mark_paid_at_ground = booking.status == 'BOOKED' and (
@@ -721,29 +728,6 @@ def owner_dashboard(request):
     selected_grounds = grounds.values('id', 'name').order_by('name')
     recent_expenses = OwnerExpense.objects.filter(owner=owner).select_related('ground').order_by('-spent_on', '-created_at')[:12]
 
-    pl_labels = [month_abbr[m] for m in range(1, 13)]
-    pl_income_data = []
-    pl_expense_data = []
-    pl_profit_data = []
-    for m in range(1, 13):
-        month_start = datetime(selected_year, m, 1).date()
-        if m == 12:
-            month_end = datetime(selected_year + 1, 1, 1).date() - timedelta(days=1)
-        else:
-            month_end = datetime(selected_year, m + 1, 1).date() - timedelta(days=1)
-        month_income = bookings.filter(slot__date__gte=month_start, slot__date__lte=month_end).aggregate(
-            rev=Coalesce(Sum('owner_payout'), 0)
-        )['rev'] or 0
-        month_expense = OwnerExpense.objects.filter(
-            owner=owner,
-            spent_on__gte=month_start,
-            spent_on__lte=month_end
-        ).aggregate(total=Coalesce(Sum('amount'), Decimal('0.00')))['total'] or Decimal('0.00')
-        month_profit = Decimal(month_income) - month_expense
-        pl_income_data.append(float(month_income))
-        pl_expense_data.append(float(month_expense))
-        pl_profit_data.append(float(month_profit))
-
     context = {
         'stats': {
             'total_bookings': bookings.count(),
@@ -772,10 +756,6 @@ def owner_dashboard(request):
             'period_margin': period_margin,
         },
         'heatmap': heatmap,
-        'heatmap_labels': [i for i in range(24)],
-        'heatmap_data': [heatmap.get(i, 0) for i in range(24)],
-        'chart_labels': labels,
-        'chart_data': counts,
         'report_period': period,
         'report_label': period_label,
         'report_year': selected_year,
@@ -783,15 +763,13 @@ def owner_dashboard(request):
         'report_month_options': [(idx, month_name[idx]) for idx in range(1, 13)],
         'report_year_options': list(range(today.year - 3, today.year + 1)),
         'ground_performance': ground_performance,
-        'owner_bookings': owner_bookings,
+        'filtered_bookings': filtered_bookings,
+        'selected_date': selected_date,
+        'bookings_title': bookings_title,
         'owner_grounds': selected_grounds,
         'recent_expenses': recent_expenses,
         'expense_categories': OwnerExpense.CATEGORY_CHOICES,
         'expense_by_category': expense_category_summary,
-        'pl_labels': pl_labels,
-        'pl_income_data': pl_income_data,
-        'pl_expense_data': pl_expense_data,
-        'pl_profit_data': pl_profit_data,
     }
 
     return render(request, 'dashboard/owner_dashboard.html', context)
@@ -1296,6 +1274,7 @@ def admin_invoices(request):
 def owner_manual_booking(request):
     owner = request.user
     grounds = Ground.objects.filter(owner=owner)
+    grounds_count = grounds.count()
     # GET: optional filters 'ground' (id) and 'date' (YYYY-MM-DD)
     selected_ground = None
     selected_date = None
@@ -1303,53 +1282,68 @@ def owner_manual_booking(request):
 
     if request.method == 'POST':
         # creating a manual booking
-        slot_id = request.POST['slot']
         name = request.POST['name']
         phone = request.POST['phone']
         now_dt = timezone.localtime(timezone.now())
+        slot_ids = request.POST.getlist('slots')
+        if not slot_ids:
+            single_slot = request.POST.get('slot')
+            if single_slot:
+                slot_ids = [single_slot]
+        slot_ids = [s for s in slot_ids if s]
 
         try:
             with transaction.atomic():
-                slot = Slot.objects.select_for_update().get(id=slot_id, ground__owner=owner)
-
-                if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
-                    messages.error(request, 'Slot was booked just now. Please pick another slot.')
-                    return redirect('/dashboard/owner/')
-
-                if _slot_start_datetime(slot) <= now_dt:
-                    messages.error(request, 'Past slots cannot be manually booked.')
+                if not slot_ids:
+                    messages.error(request, 'Please select at least one slot.')
                     return redirect('/owner/manual-booking/')
 
-                if _is_restricted_manual_hour(slot.start_time):
-                    messages.error(request, 'Manual booking is not allowed between 2:00 AM and 6:00 AM.')
+                slots_qs = list(
+                    Slot.objects.select_for_update().filter(id__in=slot_ids, ground__owner=owner).select_related('ground')
+                )
+                if len(slots_qs) != len(set(slot_ids)):
+                    messages.error(request, 'One or more selected slots are invalid.')
                     return redirect('/owner/manual-booking/')
 
-                # Calculate amount
-                total_amount = _slot_price(slot.ground, slot.start_time)
-                owner_payout = total_amount
+                for slot in slots_qs:
+                    if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
+                        messages.error(request, 'One of the selected slots was booked just now. Please pick another slot.')
+                        return redirect('/owner/manual-booking/')
 
-                booking = Booking.objects.create(
-                    slot=slot,
-                    customer_name=name,
-                    customer_phone=phone,
-                    total_amount=total_amount,
-                    owner_payout=owner_payout,
-                    booking_source='MANUAL',
-                    payment_mode='FULL',
-                    payment_status='PENDING',
-                    paid_amount=0,
-                    due_amount=total_amount,
-                )
+                    if _slot_start_datetime(slot) <= now_dt:
+                        messages.error(request, 'Past slots cannot be manually booked.')
+                        return redirect('/owner/manual-booking/')
 
-                slot.is_booked = True
-                slot.save(update_fields=['is_booked'])
+                    if _is_restricted_manual_hour(slot.start_time):
+                        messages.error(request, 'Manual booking is not allowed between 2:00 AM and 6:00 AM.')
+                        return redirect('/owner/manual-booking/')
 
-                ActivityLog.objects.create(
-                    user=request.user,
-                    action='MANUAL_BOOKING',
-                    booking=booking,
-                    slot=slot
-                )
+                for slot in slots_qs:
+                    total_amount = _slot_price(slot.ground, slot.start_time)
+                    owner_payout = total_amount
+
+                    booking = Booking.objects.create(
+                        slot=slot,
+                        customer_name=name,
+                        customer_phone=phone,
+                        total_amount=total_amount,
+                        owner_payout=owner_payout,
+                        booking_source='MANUAL',
+                        payment_mode='FULL',
+                        payment_status='PENDING',
+                        paid_amount=0,
+                        due_amount=total_amount,
+                    )
+
+                    slot.is_booked = True
+                    slot.save(update_fields=['is_booked'])
+
+                    ActivityLog.objects.create(
+                        user=request.user,
+                        action='MANUAL_BOOKING',
+                        booking=booking,
+                        slot=slot
+                    )
         except Slot.DoesNotExist:
             messages.error(request, 'Invalid slot selected.')
             return redirect('/owner/manual-booking/')
@@ -1365,14 +1359,21 @@ def owner_manual_booking(request):
             selected_ground = Ground.objects.get(id=ground_id, owner=owner)
         except Ground.DoesNotExist:
             selected_ground = None
+    elif grounds_count == 1:
+        selected_ground = grounds.first()
 
     if date_str:
         try:
             selected_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
         except Exception:
             selected_date = None
+    elif selected_ground:
+        selected_date = timezone.localdate()
 
     now_dt = timezone.localtime(timezone.now())
+
+    if selected_ground:
+        ensure_next_month_slots_for_ground(ground=selected_ground)
 
     if selected_ground and selected_date:
         slots_qs = Slot.objects.filter(ground=selected_ground, date=selected_date, is_booked=False).order_by('start_time')
@@ -1399,6 +1400,7 @@ def owner_manual_booking(request):
         'slots': slots,
         'selected_ground': selected_ground,
         'selected_date': selected_date,
+        'grounds_count': grounds_count,
     })
 
 

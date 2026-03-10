@@ -52,9 +52,9 @@
                 </div>
                 {% if obj.can_cancel %}
                   {% if obj.cancel_no_refund %}
-                    <a href="{% url 'cancel_booking' obj.booking.id %}" class="btn btn-outline-danger slot-action" data-confirm-message="This cancellation is within 4 hours of slot time. Amount will not be refunded.">Cancel</a>
+                    <a href="{% url 'cancel_booking' obj.booking.id %}" class="btn btn-outline-danger slot-action">Cancel</a>
                   {% else %}
-                    <a href="{% url 'cancel_booking' obj.booking.id %}" class="btn btn-outline-danger slot-action" data-confirm-message="Cancel this booking?">Cancel</a>
+                    <a href="{% url 'cancel_booking' obj.booking.id %}" class="btn btn-outline-danger slot-action">Cancel</a>
                   {% endif %}
                 {% else %}
                   <button class="btn btn-outline-secondary slot-action" disabled aria-disabled="true">Past booking</button>

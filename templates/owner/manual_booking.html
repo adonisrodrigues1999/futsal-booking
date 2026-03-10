@@ -6,56 +6,64 @@
   <div class="page-header">
     <div>
       <h2>Manual Booking</h2>
-      <p class="page-subtitle">Quickly create walk-in bookings with a simple 2-step flow.</p>
+      <p class="page-subtitle">Book multiple slots in one go for walk-in customers.</p>
     </div>
     <a href="/dashboard/owner/" class="btn btn-outline-secondary">Back to Dashboard</a>
   </div>
 
-  <div class="panel-soft mb-3">
-    <div class="d-flex align-items-center justify-content-between mb-2">
-      <h6 class="panel-title mb-0">Step 1: Find Slots</h6>
-      <span class="badge text-bg-light border">Ground + Date</span>
-    </div>
-    <form method="get">
-      <div class="row g-2 align-items-end">
-        <div class="col-md-5">
-          <label for="ground" class="form-label">Select Ground</label>
-          <select name="ground" id="ground" class="form-select" required>
-            <option value="">Choose ground...</option>
-            {% for g in grounds %}
-              <option value="{{ g.id }}" {% if selected_ground and g.id == selected_ground.id %}selected{% endif %}>{{ g.name }}</option>
-            {% endfor %}
-          </select>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <h6 class="mb-0">Ground and Date</h6>
+        {% if selected_ground and selected_date %}
+          <span class="badge text-bg-light border">{{ selected_ground.name }} · {{ selected_date|date:"M j, Y" }}</span>
+        {% endif %}
+      </div>
+      <form method="get" id="manual-filter-form" class="row g-2 align-items-end">
+        <div class="col-md-6">
+          <label class="form-label" for="ground">Ground</label>
+          {% if grounds_count == 1 and selected_ground %}
+            <div class="form-control bg-light">{{ selected_ground.name }}</div>
+            <input type="hidden" name="ground" value="{{ selected_ground.id }}">
+          {% else %}
+            <select name="ground" id="ground" class="form-select" required>
+              <option value="">Select ground</option>
+              {% for g in grounds %}
+                <option value="{{ g.id }}" {% if selected_ground and g.id == selected_ground.id %}selected{% endif %}>{{ g.name }}</option>
+              {% endfor %}
+            </select>
+          {% endif %}
         </div>
         <div class="col-md-4">
-          <label for="date" class="form-label">Select Date</label>
+          <label class="form-label" for="date">Date</label>
           <input type="date" name="date" id="date" class="form-control" value="{% if selected_date %}{{ selected_date|date:'Y-m-d' }}{% endif %}" required>
         </div>
-        <div class="col-md-3">
-          <button class="btn btn-outline-primary w-100">Load Slots</button>
-        </div>
-      </div>
-    </form>
+      </form>
+      <div class="small text-muted mt-2">Default is today once a ground is selected.</div>
+    </div>
   </div>
 
   {% if selected_ground and selected_date %}
-    <div class="panel-soft mb-4">
-      <div class="d-flex align-items-center justify-content-between mb-2">
-        <h6 class="panel-title mb-0">Step 2: Create Booking</h6>
-        <span class="badge text-bg-light border">{{ selected_ground.name }} • {{ selected_date|date:"M j, Y" }}</span>
-      </div>
-      <form method="post">
-        {% csrf_token %}
-        <div class="row g-3">
+    <form method="post" class="card shadow-sm">
+      {% csrf_token %}
+      <input type="hidden" name="ground" value="{{ selected_ground.id }}">
+      <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+      <div class="card-body">
+        <div class="row g-4">
           <div class="col-lg-7">
-            <label class="form-label">Pick an Available Slot</label>
-            <div class="list-group" style="max-height: 340px; overflow:auto;">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="mb-0">Available Slots</h6>
+              <span class="badge text-bg-light border">Select multiple slots</span>
+            </div>
+            <div class="list-group slot-list" style="max-height: 360px; overflow: auto;">
               {% for obj in slots %}
                 {% with slot=obj.slot %}
-                  <label class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-2">
-                    <span>
-                      <input class="form-check-input me-2 manual-slot-radio" type="radio" name="slot" value="{{ slot.id }}" required>
-                      <strong>{{ slot.start_time|time:"g:i A" }}</strong> - {{ slot.end_time|time:"g:i A" }}
+                  <label class="list-group-item d-flex justify-content-between align-items-center gap-2">
+                    <span class="d-flex align-items-center gap-2">
+                      <input class="form-check-input manual-slot-checkbox" type="checkbox" name="slots" value="{{ slot.id }}" data-price="{{ obj.price }}" data-label="{{ slot.start_time|time:'g:i A' }} - {{ slot.end_time|time:'g:i A' }}">
+                      <span>
+                        <strong>{{ slot.start_time|time:"g:i A" }}</strong> - {{ slot.end_time|time:"g:i A" }}
+                      </span>
                     </span>
                     <span class="badge text-bg-success">₹{{ obj.price }}</span>
                   </label>
@@ -64,55 +72,120 @@
                 <div class="list-group-item text-muted">No available slots for this ground/date.</div>
               {% endfor %}
             </div>
-            <div class="small text-muted mt-2" id="manual-selected-slot">No slot selected yet.</div>
+            <div class="mt-2 small text-muted" id="manual-selected-summary">No slots selected yet.</div>
           </div>
 
           <div class="col-lg-5">
-            <div class="card h-100 border-0 shadow-sm">
+            <div class="card border-0 shadow-sm h-100">
               <div class="card-body">
                 <h6 class="mb-3">Customer Details</h6>
                 <div class="mb-2">
                   <label for="name" class="form-label">Customer Name</label>
                   <input type="text" name="name" id="name" class="form-control" placeholder="Enter customer name" required>
                 </div>
-                <div class="mb-2">
+                <div class="mb-3">
                   <label for="phone" class="form-label">Phone Number</label>
                   <input type="tel" name="phone" id="phone" class="form-control" placeholder="10-digit phone number" required>
                 </div>
+                <div class="p-3 bg-light rounded">
+                  <div class="small text-muted">Selected slots</div>
+                  <div class="fw-semibold" id="manual-slot-count">0 slots</div>
+                  <div class="small text-muted mt-2">Total amount</div>
+                  <div class="h5 mb-0" id="manual-total-amount">₹0</div>
+                </div>
                 <div class="alert alert-light border mt-3 mb-0 py-2 small">
-                  Save only after confirming slot and customer phone.
+                  Confirm the slots and customer phone before saving.
                 </div>
               </div>
             </div>
           </div>
         </div>
-        <div class="d-flex justify-content-end mt-3">
-          <button type="submit" class="btn btn-primary">Create Manual Booking</button>
-        </div>
-      </form>
-    </div>
+      </div>
+      <div class="card-footer d-flex justify-content-end">
+        <button type="submit" class="btn btn-primary" id="manual-book-btn" disabled>Create Manual Booking</button>
+      </div>
+    </form>
   {% else %}
-    <div class="alert alert-info">Select ground and date in Step 1 to continue.</div>
+    <div class="alert alert-info">Select a ground to load today&apos;s slots.</div>
   {% endif %}
-
-  <div class="small text-muted">Tip: use “Load Slots” for each date before creating a booking.</div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
   (function() {
-    const radios = document.querySelectorAll('.manual-slot-radio');
-    const selectedLabel = document.getElementById('manual-selected-slot');
-    if (!radios.length || !selectedLabel) return;
+    const form = document.getElementById('manual-filter-form');
+    const groundEl = document.getElementById('ground');
+    const dateEl = document.getElementById('date');
+    const hiddenGroundEl = form ? form.querySelector('input[name=\"ground\"]') : null;
 
-    radios.forEach(function(radio) {
-      radio.addEventListener('change', function() {
-        const row = radio.closest('.list-group-item');
-        if (!row) return;
-        selectedLabel.textContent = 'Selected: ' + row.textContent.replace(/\s+/g, ' ').trim();
+    if (dateEl && !dateEl.value) {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      dateEl.value = `${yyyy}-${mm}-${dd}`;
+    }
+
+    function getGroundValue() {
+      if (groundEl) return groundEl.value;
+      if (hiddenGroundEl) return hiddenGroundEl.value;
+      return '';
+    }
+
+    if (form) {
+      if (groundEl) {
+        groundEl.addEventListener('change', function() {
+          if (getGroundValue()) {
+            form.submit();
+          }
+        });
+      }
+      if (dateEl) {
+        dateEl.addEventListener('change', function() {
+          if (getGroundValue()) {
+            form.submit();
+          }
+        });
+      }
+    }
+
+    const checkboxes = document.querySelectorAll('.manual-slot-checkbox');
+    const summary = document.getElementById('manual-selected-summary');
+    const countEl = document.getElementById('manual-slot-count');
+    const totalEl = document.getElementById('manual-total-amount');
+    const submitBtn = document.getElementById('manual-book-btn');
+
+    function updateSummary() {
+      let count = 0;
+      let total = 0;
+      const labels = [];
+      checkboxes.forEach(function(cb) {
+        if (cb.checked) {
+          count += 1;
+          total += Number(cb.getAttribute('data-price') || 0);
+          labels.push(cb.getAttribute('data-label') || '');
+        }
       });
+      if (summary) {
+        summary.textContent = count ? `Selected: ${labels.join(', ')}` : 'No slots selected yet.';
+      }
+      if (countEl) {
+        countEl.textContent = count + (count === 1 ? ' slot' : ' slots');
+      }
+      if (totalEl) {
+        totalEl.textContent = '₹' + total;
+      }
+      if (submitBtn) {
+        submitBtn.disabled = count === 0;
+      }
+    }
+
+    checkboxes.forEach(function(cb) {
+      cb.addEventListener('change', updateSummary);
     });
+
+    updateSummary();
   })();
 </script>
 {% endblock %}
