@@ -79,9 +79,7 @@
 name: Deploy to Azure
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -140,5 +138,5 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
-          app-name: futsal-booking
+          app-name: footbook-de4f92
           package: '.'

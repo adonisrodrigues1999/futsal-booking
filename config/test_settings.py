@@ -3,6 +3,13 @@ from .settings import *  # noqa: F403,F401
 
 DEBUG = False
 
+# Keep test clients on plain HTTP so assertions see real response codes instead
+# of security redirects from production-only HTTPS enforcement.
+SECURE_SSL_REDIRECT = False
+PREPEND_WWW = False
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
+
 # Use a local SQLite DB for repeatable test/build checks in restricted environments.
 DATABASES = {
     "default": {
