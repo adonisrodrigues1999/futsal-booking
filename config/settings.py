@@ -46,7 +46,8 @@ DEBUG = env_bool("DJANGO_DEBUG", default=False)
 
 ALLOWED_HOSTS = env_list(
     "ALLOWED_HOSTS",
-    default=["127.0.0.1", "localhost", ".azurewebsites.net"],
+    default=["127.0.0.1", "localhost", ".azurewebsites.net","footbook.online",
+    "www.footbook.online",],
 )
 
 
@@ -202,3 +203,6 @@ STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_PUBLIC_KEY = os.getenv("STRIPE_PUBLIC_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "inr")
+SECURE_SSL_REDIRECT = True
+
+PREPEND_WWW = True
