@@ -35,6 +35,15 @@ def env_list(name, default=None):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def merged_env_list(name, default=None):
+    values = env_list(name, default=[])
+    merged = list(default or [])
+    for value in values:
+        if value not in merged:
+            merged.append(value)
+    return merged
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
@@ -44,10 +53,15 @@ SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-local-dev-key-change-me")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env_bool("DJANGO_DEBUG", default=False)
 
-ALLOWED_HOSTS = env_list(
+ALLOWED_HOSTS = merged_env_list(
     "ALLOWED_HOSTS",
-    default=["127.0.0.1", "localhost", ".azurewebsites.net","footbook.online",
-    "www.footbook.online",],
+    default=[
+        "127.0.0.1",
+        "localhost",
+        ".azurewebsites.net",
+        "footbook.online",
+        "www.footbook.online",
+    ],
 )
 
 
@@ -172,9 +186,13 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = 'accounts.User'
-CSRF_TRUSTED_ORIGINS = env_list(
+CSRF_TRUSTED_ORIGINS = merged_env_list(
     "CSRF_TRUSTED_ORIGINS",
-    default=["https://*.azurewebsites.net"],
+    default=[
+        "https://*.azurewebsites.net",
+        "https://footbook.online",
+        "https://www.footbook.online",
+    ],
 )
 
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
@@ -205,4 +223,4 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "inr")
 SECURE_SSL_REDIRECT = True
 
-PREPEND_WWW = True
+PREPEND_WWW = env_bool("PREPEND_WWW", default=False)
