@@ -2,8 +2,26 @@
 {% block title %}Login{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-7 col-lg-5">
+<div class="ad-cta-banner mb-4">
+  <div>
+    <div class="ad-cta-kicker">Advertise here</div>
+    <h5 class="mb-1">Promote your turf, tournament, academy, or sports brand on FootBook.</h5>
+    <p class="mb-0">Reach active futsal players before they book their next game.</p>
+  </div>
+  <a href="https://wa.me/918625877270?text=Hi%20FootBook%2C%20I%20want%20to%20know%20more%20about%20advertising%20on%20FootBook." target="_blank" rel="noopener" class="btn btn-success">To know more click here</a>
+</div>
+
+<div class="row justify-content-center g-4">
+  <div class="col-lg-3 order-2 order-lg-1">
+    <div class="ad-spot h-100">
+      <div class="ad-spot-label">Advertise here</div>
+      <h6>Ground Launch Offer</h6>
+      <p>Feature your turf to players searching for slots in your area.</p>
+      <a href="https://wa.me/918625877270?text=Hi%20FootBook%2C%20I%20want%20to%20advertise%20my%20ground." target="_blank" rel="noopener">To know more click here</a>
+    </div>
+  </div>
+
+  <div class="col-md-7 col-lg-5 order-1 order-lg-2">
     <div class="page-shell">
       <h4 class="text-center mb-4">Login to FootBook</h4>
 
@@ -63,4 +81,52 @@
     </div>
   </div>
 </div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function() {
+    const emailInput = document.getElementById('{{ form.email.auto_id }}');
+    const phoneInput = document.getElementById('{{ form.phone.auto_id }}');
+
+    if (!emailInput || !phoneInput) return;
+
+    function syncLoginIdentifierFields(changedInput) {
+      const hasEmail = emailInput.value.trim().length > 0;
+      const hasPhone = phoneInput.value.trim().length > 0;
+
+      if (changedInput === emailInput && hasEmail) {
+        phoneInput.disabled = true;
+        emailInput.disabled = false;
+        return;
+      }
+
+      if (changedInput === phoneInput && hasPhone) {
+        emailInput.disabled = true;
+        phoneInput.disabled = false;
+        return;
+      }
+
+      if (hasEmail && !hasPhone) {
+        phoneInput.disabled = true;
+        emailInput.disabled = false;
+      } else if (hasPhone && !hasEmail) {
+        emailInput.disabled = true;
+        phoneInput.disabled = false;
+      } else {
+        emailInput.disabled = false;
+        phoneInput.disabled = false;
+      }
+    }
+
+    emailInput.addEventListener('input', function() {
+      syncLoginIdentifierFields(emailInput);
+    });
+    phoneInput.addEventListener('input', function() {
+      syncLoginIdentifierFields(phoneInput);
+    });
+    syncLoginIdentifierFields();
+  })();
+</script>
 {% endblock %}
