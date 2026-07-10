@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, time
 from django.conf import settings
 from django.core.files.base import ContentFile
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
@@ -32,6 +32,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--reset', action='store_true', help='Remove previously created demo data first.')
+        parser.add_argument('--force', action='store_true', help='Allow seeding even if demo mode is not enabled.')
 
     def _get_or_create_user(self, *, email, phone_number, name, role, password, is_staff=False):
         user, _ = User.objects.get_or_create(
@@ -125,6 +126,11 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        if not options['force'] and not getattr(settings, 'FOOTBOOK_DEMO_MODE', False):
+            raise CommandError(
+                'Demo seeding is disabled unless FOOTBOOK_DEMO_MODE=true is set for this environment.'
+            )
+
         if options['reset']:
             self.stdout.write('Clearing prior demo data...')
             prefixes = ('Demo', 'Goa')
@@ -211,6 +217,8 @@ class Command(BaseCommand):
         )
 
         today = timezone.localdate()
+        month_start = today.replace(day=1)
+        past_days = [today - timedelta(days=offset) for offset in range(6, -1, -1)]
         primary_ground = self._upsert_ground(
             name='Goa Turf Arena',
             owner=owner,
@@ -234,6 +242,36 @@ class Command(BaseCommand):
         )
 
         self._seed_slots_and_bookings(primary_ground, [
+            (past_days[0], time(7, 0), 'ONLINE', 'FULL', 1000, 0, customer, customer.name, customer.phone_number),
+            (past_days[1], time(19, 0), 'ONLINE', 'PARTIAL_99', 99, 1401, customer, customer.name, customer.phone_number),
+            (past_days[2], time(8, 0), 'MANUAL', 'FULL', 1000, 0, backup_customer, 'Goa Tuesday Crew', '9000000101'),
+        ])
+        self._seed_slots_and_bookings(partner_ground, [
+            (past_days[3], time(9, 0), 'ONLINE', 'FULL', 1200, 0, extra_customer, extra_customer.name, extra_customer.phone_number),
+            (past_days[4], time(20, 0), 'ONLINE', 'PARTIAL_99', 99, 1401, referrer, referrer.name, referrer.phone_number),
+            (past_days[5], time(10, 0), 'MANUAL', 'FULL', 1200, 0, customer, 'Goa Weekend Team', '9000000102'),
+        ])
+        self._seed_slots_and_bookings(league_ground, [
+            (past_days[6], time(7, 0), 'ONLINE', 'FULL', 500, 0, backup_customer, backup_customer.name, backup_customer.phone_number),
+            (past_days[1], time(19, 0), 'ONLINE', 'FULL', 1000, 0, extra_customer, extra_customer.name, extra_customer.phone_number),
+            (past_days[0], time(8, 0), 'MANUAL', 'FULL', 500, 0, customer, 'Goa Early Kickoff Crew', '9000000103'),
+        ])
+
+        month_history_specs = []
+        month_dates = [month_start + timedelta(days=offset) for offset in range(min(4, max((today - month_start).days + 1, 0)))]
+        if month_dates:
+            first_month_day = month_dates[0]
+            month_history_specs.append((first_month_day, time(7, 0), 'ONLINE', 'FULL', 1000, 0, customer, 'Goa Month Opener', '9000000104'))
+        if len(month_dates) > 1:
+            month_history_specs.append((month_dates[1], time(19, 0), 'ONLINE', 'PARTIAL_99', 99, 1401, extra_customer, 'Goa Mid-Month Rush', '9000000105'))
+        if len(month_dates) > 2:
+            month_history_specs.append((month_dates[2], time(8, 0), 'MANUAL', 'FULL', 500, 0, backup_customer, 'Goa Monthly Meetup', '9000000106'))
+        if len(month_dates) > 3:
+            month_history_specs.append((month_dates[3], time(20, 0), 'MANUAL', 'FULL', 1500, 0, customer, 'Goa Under Lights', '9000000107'))
+        if month_history_specs:
+            self._seed_slots_and_bookings(league_ground, month_history_specs)
+
+        self._seed_slots_and_bookings(primary_ground, [
             (today + timedelta(days=1), time(7, 0), 'ONLINE', 'FULL', 1000, 0, customer, customer.name, customer.phone_number),
             (today + timedelta(days=1), time(19, 0), 'ONLINE', 'PARTIAL_99', 99, 1401, customer, customer.name, customer.phone_number),
             (today + timedelta(days=2), time(8, 0), 'MANUAL', 'FULL', 1000, 0, backup_customer, 'Goa Wednesday Crew', '9000000101'),
@@ -241,7 +279,7 @@ class Command(BaseCommand):
         self._seed_slots_and_bookings(partner_ground, [
             (today + timedelta(days=1), time(9, 0), 'ONLINE', 'FULL', 1200, 0, extra_customer, extra_customer.name, extra_customer.phone_number),
             (today + timedelta(days=1), time(20, 0), 'ONLINE', 'PARTIAL_99', 99, 1401, referrer, referrer.name, referrer.phone_number),
-            (today + timedelta(days=3), time(10, 0), 'MANUAL', 'FULL', 1200, 0, customer, 'Goa Weekend Team', '9000000102'),
+            (today + timedelta(days=3), time(10, 0), 'MANUAL', 'FULL', 1200, 0, customer, 'Goa Sunday Team', '9000000102'),
         ])
         self._seed_slots_and_bookings(league_ground, [
             (today + timedelta(days=1), time(7, 0), 'ONLINE', 'FULL', 500, 0, backup_customer, backup_customer.name, backup_customer.phone_number),

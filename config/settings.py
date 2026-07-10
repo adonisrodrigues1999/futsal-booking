@@ -237,3 +237,4 @@ STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "inr")
 SECURE_SSL_REDIRECT = False
 
 PREPEND_WWW = env_bool("PREPEND_WWW", default=False)
+FOOTBOOK_DEMO_MODE = env_bool("FOOTBOOK_DEMO_MODE", default=False)

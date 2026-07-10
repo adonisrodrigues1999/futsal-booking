@@ -242,7 +242,7 @@ What they are for:
 
 ## Demo Setup
 
-On Azure Web App, the `main` branch deploy workflow does not reseed demo data automatically, so the same demo content stays in place across pushes.
+On Azure Web App, keep demo and production separate by running the demo seed only in a dedicated demo environment where `FOOTBOOK_DEMO_MODE=true` is set.
 
 For a clean Goa-focused demo environment on any environment, run:
 
@@ -250,6 +250,8 @@ For a clean Goa-focused demo environment on any environment, run:
 python manage.py migrate
 python manage.py setup_demo --reset
 ```
+
+If you are on a separate demo Azure App Service and want to allow seeding there, set `FOOTBOOK_DEMO_MODE=true` in that app's settings. Production should leave that unset.
 
 Demo login accounts created by the command:
 
@@ -281,6 +283,8 @@ If you need to seed or refresh the demo data on Azure App Service, open an SSH s
 ```bash
 python manage.py setup_demo --reset
 ```
+
+If the environment is not marked as demo-enabled, the command exits with a guard error unless you explicitly pass `--force`.
 
 High-value features to emphasize:
 
