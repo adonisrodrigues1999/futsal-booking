@@ -27,6 +27,13 @@ def _build_time_ranges(ground, slot_config=None):
 
 def ensure_slots_for_ground_date(ground, slot_date, slot_config=None):
     time_ranges = _build_time_ranges(ground, slot_config=slot_config)
+    existing_keys = set(
+        Slot.objects.filter(
+            ground=ground,
+            date__in=[slot_date, slot_date + timedelta(days=1)],
+        ).values_list("date", "start_time")
+    )
+    slots_to_create = []
 
     for start_time, end_time in time_ranges:
         start_dt = datetime.combine(slot_date, start_time)
@@ -37,16 +44,22 @@ def ensure_slots_for_ground_date(ground, slot_date, slot_config=None):
         current = start_dt
         while current < end_dt:
             next_dt = min(current + timedelta(hours=1), end_dt)
-            Slot.objects.get_or_create(
-                ground=ground,
-                date=current.date(),
-                start_time=current.time(),
-                defaults={
-                    "end_time": next_dt.time(),
-                    "is_booked": False,
-                },
-            )
+            slot_key = (current.date(), current.time())
+            if slot_key not in existing_keys:
+                slots_to_create.append(
+                    Slot(
+                        ground=ground,
+                        date=current.date(),
+                        start_time=current.time(),
+                        end_time=next_dt.time(),
+                        is_booked=False,
+                    )
+                )
+                existing_keys.add(slot_key)
             current = next_dt
+
+    if slots_to_create:
+        Slot.objects.bulk_create(slots_to_create, ignore_conflicts=True)
 
 
 def create_initial_slots_for_ground(ground, days=14, start_date=None, slot_config=None):

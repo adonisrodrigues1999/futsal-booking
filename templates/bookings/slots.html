@@ -46,7 +46,7 @@
           data-end-time="{{ slot.end_time|time:'g:i A' }}"
           data-price="{{ obj.price }}"
           data-past="{% if is_past %}1{% else %}0{% endif %}"
-          data-availability="{% if slot.is_booked %}booked{% elif is_past %}past{% else %}available{% endif %}"
+          data-availability="{% if obj.is_booked %}booked{% elif is_past %}past{% else %}available{% endif %}"
         >
           <div class="slot-meta">
             <div class="slot-time">{{ obj.time_icon }} {{ slot.start_time|time:"g:i A" }} to {{ slot.end_time|time:"g:i A" }}</div>
@@ -58,7 +58,7 @@
             </div>
           </div>
 
-          {% if slot.is_booked %}
+          {% if obj.is_booked %}
             <div class="slot-body muted">
               {% if obj.booking and obj.user_booking %}
                 <div class="slot-status">

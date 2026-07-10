@@ -242,7 +242,9 @@ What they are for:
 
 ## Demo Setup
 
-For a clean demo environment, run:
+On Azure Web App, the `main` branch deploy workflow does not reseed demo data automatically, so the same demo content stays in place across pushes.
+
+For a clean demo environment on any environment, run:
 
 ```bash
 python manage.py migrate
@@ -264,6 +266,21 @@ Best demo flow:
 4. Log in as `demo_owner@example.com` and show the owner dashboard, tournaments, and revenue/expense view.
 5. Log in as `demo_admin@example.com` and show the top-income grounds dashboard and overall analytics.
 
+If you want to rerun the demo from scratch locally or on Azure, repeat the same two commands:
+
+```bash
+python manage.py migrate
+python manage.py setup_demo --reset
+```
+
+The command is idempotent enough for repeated demos, but `--reset` is the cleanest way to ensure the sample users, grounds, bookings, tournaments, reviews, alerts, and rewards are recreated consistently.
+
+If you need to seed or refresh the demo data on Azure App Service, open an SSH session or use a one-off command inside the app container and run:
+
+```bash
+python manage.py setup_demo --reset
+```
+
 High-value features to emphasize:
 
 - Fast booking with date-based slot loading
@@ -282,6 +299,7 @@ The project already includes several production-oriented pieces:
 - WhiteNoise static serving
 - secure cookie settings for HTTPS deployments
 - Azure-oriented trusted origin configuration in settings
+- `startup.sh`, which runs `migrate`, `collectstatic`, and then starts `gunicorn`
 
 Before production deployment, you should still address:
 
@@ -293,6 +311,8 @@ Before production deployment, you should still address:
 - webhook secret configuration
 - database migration workflow
 - static file collection with `python manage.py collectstatic`
+
+For Azure App Service, set the startup command to `bash startup.sh`. That keeps database migrations and static collection in the boot path so the app comes up cleanly after each deployment.
 
 ## Known Gaps and Cleanup Areas
 

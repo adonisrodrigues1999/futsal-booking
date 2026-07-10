@@ -55,32 +55,54 @@ class Command(BaseCommand):
         user.save()
         return user
 
-    def _seed_slots_and_bookings(self, ground, customer, start_date):
-        ensure_slots_for_ground_date(ground, start_date)
-        ensure_slots_for_ground_date(ground, start_date + timedelta(days=1))
+    def _upsert_ground(self, *, name, owner, location, day_price, night_price):
+        ground, _ = Ground.objects.get_or_create(
+            name=name,
+            defaults={
+                'location': location,
+                'owner': owner,
+                'day_price': day_price,
+                'night_price': night_price,
+                'opening_time': time(6, 0),
+                'closing_time': time(23, 0),
+                'image': DEMO_GROUND_IMAGE,
+                'is_active': True,
+            },
+        )
+        ground.location = location
+        ground.owner = owner
+        ground.day_price = day_price
+        ground.night_price = night_price
+        ground.opening_time = time(6, 0)
+        ground.closing_time = time(23, 0)
+        ground.image = DEMO_GROUND_IMAGE
+        ground.is_active = True
+        ground.save()
+        return ground
 
-        morning_slot = Slot.objects.filter(ground=ground, date=start_date, start_time=time(7, 0)).first()
-        evening_slot = Slot.objects.filter(ground=ground, date=start_date, start_time=time(19, 0)).first()
-        next_day_slot = Slot.objects.filter(ground=ground, date=start_date + timedelta(days=1), start_time=time(8, 0)).first()
+    def _seed_slots_and_bookings(self, ground, booking_specs):
+        required_dates = sorted({slot_date for slot_date, *_ in booking_specs})
+        for slot_date in required_dates:
+            ensure_slots_for_ground_date(ground, slot_date)
+            ensure_slots_for_ground_date(ground, slot_date + timedelta(days=1))
 
         bookings = []
-        for slot, booking_source, payment_mode, paid_amount, due_amount, customer_name, customer_phone in [
-            (morning_slot, 'ONLINE', 'FULL', ground.day_price, 0, customer.name, customer.phone_number),
-            (evening_slot, 'ONLINE', 'PARTIAL_99', 99, max(ground.night_price - 99, 0), customer.name, customer.phone_number),
-            (next_day_slot, 'MANUAL', 'FULL', ground.day_price, 0, 'Walk-in Demo Team', '9000000000'),
-        ]:
+        for slot_date, start_time, booking_source, payment_mode, paid_amount, due_amount, customer_obj, customer_name, customer_phone in booking_specs:
+            slot = Slot.objects.filter(ground=ground, date=slot_date, start_time=start_time).first()
             if not slot:
                 continue
+
+            total_amount = ground.day_price if start_time.hour < 18 else ground.night_price
             booking, created = Booking.objects.get_or_create(
                 slot=slot,
                 defaults={
-                    'user': customer if customer_name == customer.name else None,
+                    'user': customer_obj,
                     'customer_name': customer_name,
                     'customer_phone': customer_phone,
                     'duration_hours': 1,
-                    'total_amount': ground.day_price if slot.start_time.hour < 18 else ground.night_price,
+                    'total_amount': total_amount,
                     'platform_fee': 0,
-                    'owner_payout': ground.day_price if slot.start_time.hour < 18 else ground.night_price,
+                    'owner_payout': total_amount,
                     'booking_source': booking_source,
                     'status': 'BOOKED',
                     'payment_mode': payment_mode,
@@ -151,9 +173,9 @@ class Command(BaseCommand):
             password='demo12345',
         )
         customer.referred_by = referrer
-        customer.booking_count = 19
-        customer.loyalty_points = 95
-        customer.free_booking_credits = 1
+        customer.booking_count = 28
+        customer.loyalty_points = 140
+        customer.free_booking_credits = 2
         customer.save(update_fields=['referred_by', 'booking_count', 'loyalty_points', 'free_booking_credits'])
 
         backup_customer = self._get_or_create_user(
@@ -164,55 +186,60 @@ class Command(BaseCommand):
             password='demo12345',
         )
 
+        extra_customer = self._get_or_create_user(
+            email='demo_guest@example.com',
+            phone_number='9000000007',
+            name='Demo Guest',
+            role='customer',
+            password='demo12345',
+        )
+
+        support_owner = self._get_or_create_user(
+            email='demo_owner3@example.com',
+            phone_number='9000000008',
+            name='Demo League Owner',
+            role='owner',
+            password='demo12345',
+        )
+
         today = timezone.localdate()
-        primary_ground, _ = Ground.objects.get_or_create(
+        primary_ground = self._upsert_ground(
             name='Demo Turf Arena',
-            defaults={
-                'location': 'Koramangala, Bengaluru',
-                'owner': owner,
-                'day_price': 799,
-                'night_price': 1099,
-                'opening_time': time(6, 0),
-                'closing_time': time(23, 0),
-                'image': DEMO_GROUND_IMAGE,
-                'is_active': True,
-            },
+            owner=owner,
+            location='Koramangala, Bengaluru',
+            day_price=1000,
+            night_price=1500,
         )
-        primary_ground.location = 'Koramangala, Bengaluru'
-        primary_ground.owner = owner
-        primary_ground.day_price = 799
-        primary_ground.night_price = 1099
-        primary_ground.opening_time = time(6, 0)
-        primary_ground.closing_time = time(23, 0)
-        primary_ground.image = DEMO_GROUND_IMAGE
-        primary_ground.is_active = True
-        primary_ground.save()
-
-        partner_ground, _ = Ground.objects.get_or_create(
+        partner_ground = self._upsert_ground(
             name='Demo City Arena',
-            defaults={
-                'location': 'Indiranagar, Bengaluru',
-                'owner': assistant_owner,
-                'day_price': 899,
-                'night_price': 1199,
-                'opening_time': time(6, 0),
-                'closing_time': time(23, 0),
-                'image': DEMO_GROUND_IMAGE,
-                'is_active': True,
-            },
+            owner=assistant_owner,
+            location='Indiranagar, Bengaluru',
+            day_price=1200,
+            night_price=1500,
         )
-        partner_ground.location = 'Indiranagar, Bengaluru'
-        partner_ground.owner = assistant_owner
-        partner_ground.day_price = 899
-        partner_ground.night_price = 1199
-        partner_ground.opening_time = time(6, 0)
-        partner_ground.closing_time = time(23, 0)
-        partner_ground.image = DEMO_GROUND_IMAGE
-        partner_ground.is_active = True
-        partner_ground.save()
+        league_ground = self._upsert_ground(
+            name='Demo League Hub',
+            owner=support_owner,
+            location='HSR Layout, Bengaluru',
+            day_price=500,
+            night_price=1000,
+        )
 
-        demo_bookings = self._seed_slots_and_bookings(primary_ground, customer, today + timedelta(days=1))
-        self._seed_slots_and_bookings(partner_ground, backup_customer, today + timedelta(days=2))
+        self._seed_slots_and_bookings(primary_ground, [
+            (today + timedelta(days=1), time(7, 0), 'ONLINE', 'FULL', 1000, 0, customer, customer.name, customer.phone_number),
+            (today + timedelta(days=1), time(19, 0), 'ONLINE', 'PARTIAL_99', 99, 1401, customer, customer.name, customer.phone_number),
+            (today + timedelta(days=2), time(8, 0), 'MANUAL', 'FULL', 1000, 0, backup_customer, 'Walk-in Wednesday Crew', '9000000101'),
+        ])
+        self._seed_slots_and_bookings(partner_ground, [
+            (today + timedelta(days=1), time(9, 0), 'ONLINE', 'FULL', 1200, 0, extra_customer, extra_customer.name, extra_customer.phone_number),
+            (today + timedelta(days=1), time(20, 0), 'ONLINE', 'PARTIAL_99', 99, 1401, referrer, referrer.name, referrer.phone_number),
+            (today + timedelta(days=3), time(10, 0), 'MANUAL', 'FULL', 1200, 0, customer, 'Weekend League Team', '9000000102'),
+        ])
+        self._seed_slots_and_bookings(league_ground, [
+            (today + timedelta(days=1), time(7, 0), 'ONLINE', 'FULL', 500, 0, backup_customer, backup_customer.name, backup_customer.phone_number),
+            (today + timedelta(days=1), time(19, 0), 'ONLINE', 'FULL', 1000, 0, extra_customer, extra_customer.name, extra_customer.phone_number),
+            (today + timedelta(days=2), time(8, 0), 'MANUAL', 'FULL', 500, 0, customer, 'Early Kickoff Crew', '9000000103'),
+        ])
 
         OwnerExpense.objects.get_or_create(
             owner=owner,
@@ -223,6 +250,28 @@ class Command(BaseCommand):
                 'amount': 2500,
                 'spent_on': today - timedelta(days=2),
                 'note': 'Used for demo expense reporting.',
+            },
+        )
+        OwnerExpense.objects.get_or_create(
+            owner=assistant_owner,
+            ground=partner_ground,
+            title='Demo City Turf Deep Clean',
+            defaults={
+                'category': 'MAINTENANCE',
+                'amount': 3500,
+                'spent_on': today - timedelta(days=1),
+                'note': 'Fresh cleanup before weekend bookings.',
+            },
+        )
+        OwnerExpense.objects.get_or_create(
+            owner=support_owner,
+            ground=league_ground,
+            title='Demo League Scoreboard Upgrade',
+            defaults={
+                'category': 'EQUIPMENT',
+                'amount': 1500,
+                'spent_on': today - timedelta(days=3),
+                'note': 'Added before the showcase night.',
             },
         )
 
@@ -261,12 +310,96 @@ class Command(BaseCommand):
         tournament.contact_phone = '9000011111'
         tournament.category_fees = [
             {'name': 'Open Men', 'fee': 500},
-            {'name': 'Women Open', 'fee': 300},
+            {'name': 'Women Open', 'fee': 500},
         ]
         tournament.rules = 'Knockout format. 10-minute halves.'
         tournament.status = 'UPCOMING'
         tournament.is_published = True
         tournament.save()
+
+        tournament_two, _ = Tournament.objects.get_or_create(
+            ground=partner_ground,
+            title='Demo City Night League',
+            defaults={
+                'description': 'A local 5-a-side league with strong weekday signups.',
+                'start_date': today + timedelta(days=14),
+                'end_date': today + timedelta(days=15),
+                'start_time': time(20, 0),
+                'registration_deadline': today + timedelta(days=11),
+                'entry_fee': 1000,
+                'prize_details': 'Trophy, medals, and sponsored kits',
+                'max_teams': 12,
+                'contact_name': 'Nikhil Rao',
+                'contact_phone': '9000012222',
+                'category_fees': [
+                    {'name': 'Corporate', 'fee': 1000},
+                    {'name': 'Open', 'fee': 1000},
+                ],
+                'rules': 'League format. 12-minute halves.',
+                'status': 'UPCOMING',
+                'is_published': True,
+            },
+        )
+        tournament_two.description = 'A local 5-a-side league with strong weekday signups.'
+        tournament_two.start_date = today + timedelta(days=14)
+        tournament_two.end_date = today + timedelta(days=15)
+        tournament_two.start_time = time(20, 0)
+        tournament_two.registration_deadline = today + timedelta(days=11)
+        tournament_two.entry_fee = 1000
+        tournament_two.prize_details = 'Trophy, medals, and sponsored kits'
+        tournament_two.max_teams = 12
+        tournament_two.contact_name = 'Nikhil Rao'
+        tournament_two.contact_phone = '9000012222'
+        tournament_two.category_fees = [
+            {'name': 'Corporate', 'fee': 1000},
+            {'name': 'Open', 'fee': 1000},
+        ]
+        tournament_two.rules = 'League format. 12-minute halves.'
+        tournament_two.status = 'UPCOMING'
+        tournament_two.is_published = True
+        tournament_two.save()
+
+        tournament_three, _ = Tournament.objects.get_or_create(
+            ground=league_ground,
+            title='Demo League Challenge',
+            defaults={
+                'description': 'Weekend challenge series for teams who want more match time.',
+                'start_date': today + timedelta(days=18),
+                'end_date': today + timedelta(days=19),
+                'start_time': time(9, 0),
+                'registration_deadline': today + timedelta(days=15),
+                'entry_fee': 500,
+                'prize_details': 'Winning jersey set and a trophy',
+                'max_teams': 16,
+                'contact_name': 'Imran Ali',
+                'contact_phone': '9000013333',
+                'category_fees': [
+                    {'name': 'Open', 'fee': 500},
+                    {'name': 'Corporate', 'fee': 500},
+                ],
+                'rules': 'Short matches. Fast turnaround.',
+                'status': 'UPCOMING',
+                'is_published': True,
+            },
+        )
+        tournament_three.description = 'Weekend challenge series for teams who want more match time.'
+        tournament_three.start_date = today + timedelta(days=18)
+        tournament_three.end_date = today + timedelta(days=19)
+        tournament_three.start_time = time(9, 0)
+        tournament_three.registration_deadline = today + timedelta(days=15)
+        tournament_three.entry_fee = 500
+        tournament_three.prize_details = 'Winning jersey set and a trophy'
+        tournament_three.max_teams = 16
+        tournament_three.contact_name = 'Imran Ali'
+        tournament_three.contact_phone = '9000013333'
+        tournament_three.category_fees = [
+            {'name': 'Open', 'fee': 500},
+            {'name': 'Corporate', 'fee': 500},
+        ]
+        tournament_three.rules = 'Short matches. Fast turnaround.'
+        tournament_three.status = 'UPCOMING'
+        tournament_three.is_published = True
+        tournament_three.save()
 
         reg, created = TournamentRegistration.objects.get_or_create(
             tournament=tournament,
@@ -294,6 +427,58 @@ class Command(BaseCommand):
         if created:
             award_tournament_registration_rewards(reg)
 
+        reg_two, created_two = TournamentRegistration.objects.get_or_create(
+            tournament=tournament_two,
+            team_name='Demo United',
+            defaults={
+                'user': extra_customer,
+                'captain_name': extra_customer.name,
+                'contact_phone': extra_customer.phone_number,
+                'contact_email': extra_customer.email,
+                'category_name': 'Corporate',
+                'fee_amount': 1000,
+                'status': 'REGISTERED',
+                'notes': 'Weeknight league registration for demo exploration.',
+            },
+        )
+        reg_two.user = extra_customer
+        reg_two.captain_name = extra_customer.name
+        reg_two.contact_phone = extra_customer.phone_number
+        reg_two.contact_email = extra_customer.email
+        reg_two.category_name = 'Corporate'
+        reg_two.fee_amount = 1000
+        reg_two.status = 'REGISTERED'
+        reg_two.notes = 'Weeknight league registration for demo exploration.'
+        reg_two.save()
+        if created_two:
+            award_tournament_registration_rewards(reg_two)
+
+        reg_three, created_three = TournamentRegistration.objects.get_or_create(
+            tournament=tournament_three,
+            team_name='Demo Phoenix',
+            defaults={
+                'user': backup_customer,
+                'captain_name': backup_customer.name,
+                'contact_phone': backup_customer.phone_number,
+                'contact_email': backup_customer.email,
+                'category_name': 'Open',
+                'fee_amount': 500,
+                'status': 'REGISTERED',
+                'notes': 'Weekend challenge registration for the demo walkthrough.',
+            },
+        )
+        reg_three.user = backup_customer
+        reg_three.captain_name = backup_customer.name
+        reg_three.contact_phone = backup_customer.phone_number
+        reg_three.contact_email = backup_customer.email
+        reg_three.category_name = 'Open'
+        reg_three.fee_amount = 500
+        reg_three.status = 'REGISTERED'
+        reg_three.notes = 'Weekend challenge registration for the demo walkthrough.'
+        reg_three.save()
+        if created_three:
+            award_tournament_registration_rewards(reg_three)
+
         GroundReview.objects.get_or_create(
             ground=primary_ground,
             user=customer,
@@ -312,10 +497,57 @@ class Command(BaseCommand):
                 'comment': 'Good location and easy access. Strong candidate for tournament traffic.',
             },
         )
+        GroundReview.objects.get_or_create(
+            ground=league_ground,
+            user=extra_customer,
+            headline='Demo League Night',
+            defaults={
+                'rating': 5,
+                'comment': 'Great floodlights, proper seating, and the parking is easy.',
+            },
+        )
+        GroundReview.objects.get_or_create(
+            ground=primary_ground,
+            user=backup_customer,
+            headline='Demo Night Session',
+            defaults={
+                'rating': 4,
+                'comment': 'Evening slot looked polished and felt busy in the right way.',
+            },
+        )
+        GroundReview.objects.get_or_create(
+            ground=partner_ground,
+            user=extra_customer,
+            headline='Demo Weekend Vibe',
+            defaults={
+                'rating': 5,
+                'comment': 'Tournament-ready ground with enough scale for team events.',
+            },
+        )
+        GroundReview.objects.get_or_create(
+            ground=league_ground,
+            user=customer,
+            headline='Demo Budget Friendly',
+            defaults={
+                'rating': 4,
+                'comment': 'Great value pricing for repeat weekly games.',
+            },
+        )
 
         AlertSubscription.objects.get_or_create(
             user=customer,
             ground=primary_ground,
+            defaults={
+                'notify_price_drops': True,
+                'notify_last_minute': True,
+                'notify_nearby_tournaments': True,
+                'email_enabled': True,
+                'push_enabled': False,
+            },
+        )
+        AlertSubscription.objects.get_or_create(
+            user=extra_customer,
+            ground=partner_ground,
             defaults={
                 'notify_price_drops': True,
                 'notify_last_minute': True,
@@ -330,8 +562,11 @@ class Command(BaseCommand):
         self.stdout.write('Demo accounts:')
         self.stdout.write('  Admin:    demo_admin@example.com / demo12345')
         self.stdout.write('  Owner:    demo_owner@example.com / demo12345')
+        self.stdout.write('  Owner 2:  demo_owner2@example.com / demo12345')
+        self.stdout.write('  Owner 3:  demo_owner3@example.com / demo12345')
         self.stdout.write('  Customer: demo_customer@example.com / demo12345')
         self.stdout.write('  Player:   demo_player@example.com / demo12345')
+        self.stdout.write('  Guest:    demo_guest@example.com / demo12345')
         self.stdout.write('')
         self.stdout.write('Primary demo story:')
         self.stdout.write(f'  Ground: {primary_ground.name}')

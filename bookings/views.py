@@ -328,7 +328,6 @@ def home(request):
         'total_bookings': customer_bookings.count(),
         'upcoming_bookings': upcoming_bookings.count(),
         'this_month_bookings': customer_bookings.filter(slot__date__month=today.month, slot__date__year=today.year).count(),
-        'money_spent': int(customer_bookings.aggregate(total=Coalesce(Sum('paid_amount'), 0))['total'] or 0),
         'points': user.loyalty_points,
         'free_booking_credits': user.free_booking_credits,
         'booking_count': user.booking_count,
@@ -424,6 +423,14 @@ def ground_slots(request, ground_id):
 
     # fetch slots for that date
     slots_qs = Slot.objects.filter(ground=ground, date=selected_date).order_by('start_time')
+    booked_by_slot_id = {
+        booking.slot_id: booking
+        for booking in Booking.objects.filter(
+            slot__ground=ground,
+            slot__date=selected_date,
+            status='BOOKED',
+        ).select_related('user', 'slot')
+    }
 
     visible_slots = []
     now_dt = timezone.localtime(timezone.now())
@@ -443,8 +450,7 @@ def ground_slots(request, ground_id):
         if discount:
             discounted_slots.append(slot)
 
-        # Check if there's an active booking for this slot
-        booking = Booking.objects.filter(slot=slot, status='BOOKED').first()
+        booking = booked_by_slot_id.get(slot.id)
         user_booking = (booking.user == request.user) if booking else False
         can_cancel = False
         cancel_no_refund = False
@@ -456,6 +462,7 @@ def ground_slots(request, ground_id):
 
         visible_slots.append({
             'slot': slot,
+            'is_booked': slot.is_booked or bool(booking),
             'is_past': is_past,
             'price': _slot_price_for_slot(slot),
             'discount': discount,
