@@ -113,14 +113,20 @@
 <div class="row g-3 mb-4">
   <div class="col-md-4">
     <div class="card p-3 h-100 loyalty-card">
-      <div class="small text-muted">Loyalty Points</div>
+      <div class="small text-muted d-flex align-items-center gap-1">
+        <span>Loyalty Points</span>
+        <span class="badge rounded-pill text-bg-light text-dark" title="Points are earned from completed bookings and can roll over into free booking credits.">?</span>
+      </div>
       <div class="h3 mb-1">{{ stats.points }}</div>
-      <div class="small text-muted">Book 20 times to unlock a free booking through 100-point redemption cycles.</div>
+      <div class="small text-muted">Every booking adds 5 points. 100 points convert into 1 free booking credit.</div>
     </div>
   </div>
   <div class="col-md-4">
     <div class="card p-3 h-100 loyalty-card">
-      <div class="small text-muted">Free Booking Credits</div>
+      <div class="small text-muted d-flex align-items-center gap-1">
+        <span>Free Booking Credits</span>
+        <span class="badge rounded-pill text-bg-light text-dark" title="Each credit is one fully paid-through online booking.">?</span>
+      </div>
       <div class="h3 mb-1">{{ stats.free_booking_credits }}</div>
       <div class="small text-muted">Each credit lets you book one slot without paying online.</div>
     </div>
