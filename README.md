@@ -286,6 +286,12 @@ python manage.py setup_demo --reset
 
 If the environment is not marked as demo-enabled, the command exits with a guard error unless you explicitly pass `--force`.
 
+To remove demo data after turning demo mode off, run:
+
+```bash
+python manage.py purge_demo_data --confirm
+```
+
 High-value features to emphasize:
 
 - Fast booking with date-based slot loading

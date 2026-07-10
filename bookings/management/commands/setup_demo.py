@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import User
+from bookings.demo_data import purge_demo_data
 from bookings.models import Booking, Slot, OwnerExpense, AlertSubscription
 from bookings.rewards import award_booking_rewards, award_tournament_registration_rewards
 from bookings.slot_generation import ensure_slots_for_ground_date
@@ -133,22 +134,7 @@ class Command(BaseCommand):
 
         if options['reset']:
             self.stdout.write('Clearing prior demo data...')
-            prefixes = ('Demo', 'Goa')
-            GroundReview.objects.filter(headline__startswith=prefixes[0]).delete()
-            GroundReview.objects.filter(headline__startswith=prefixes[1]).delete()
-            TournamentRegistration.objects.filter(team_name__startswith=prefixes[0]).delete()
-            TournamentRegistration.objects.filter(team_name__startswith=prefixes[1]).delete()
-            Tournament.objects.filter(title__startswith=prefixes[0]).delete()
-            Tournament.objects.filter(title__startswith=prefixes[1]).delete()
-            OwnerExpense.objects.filter(title__startswith=prefixes[0]).delete()
-            OwnerExpense.objects.filter(title__startswith=prefixes[1]).delete()
-            Booking.objects.filter(customer_name__icontains=prefixes[0]).delete()
-            Booking.objects.filter(customer_name__icontains=prefixes[1]).delete()
-            Slot.objects.filter(ground__name__startswith=prefixes[0]).delete()
-            Slot.objects.filter(ground__name__startswith=prefixes[1]).delete()
-            Ground.objects.filter(name__startswith=prefixes[0]).delete()
-            Ground.objects.filter(name__startswith=prefixes[1]).delete()
-            User.objects.filter(email__startswith='demo_').delete()
+            purge_demo_data()
 
         admin = self._get_or_create_user(
             email='demo_admin@example.com',
