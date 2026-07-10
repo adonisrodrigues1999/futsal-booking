@@ -31,7 +31,7 @@
 
 <nav class="navbar navbar-expand-lg site-navbar">
   <div class="container-fluid">
-    <a class="navbar-brand d-flex align-items-center" href="/">
+    <a class="navbar-brand d-flex align-items-center" href="{% url 'dashboard_redirect' %}">
       <span class="brand-icon"><i class="fas fa-futbol" aria-hidden="true"></i></span>
       <span class="brand-text">FootBook</span>
     </a>
@@ -46,6 +46,7 @@
           {% if user.role == 'admin' %}
             <li class="nav-item"><a class="nav-link" href="{% url 'admin_dashboard' %}"><i class="fas fa-tools me-1"></i>Admin</a></li>
             <li class="nav-item"><a class="nav-link" href="{% url 'create_ground_owner' %}"><i class="fas fa-user-plus me-1"></i>Owners</a></li>
+            <li class="nav-item"><a class="nav-link" href="{% url 'owner_tournaments' %}"><i class="fas fa-trophy me-1"></i>Tournaments</a></li>
           {% elif user.role == 'owner' %}
             <li class="nav-item"><a class="nav-link" href="{% url 'owner_dashboard' %}"><i class="fas fa-store me-1"></i>Owner</a></li>
             <li class="nav-item"><a class="nav-link" href="{% url 'owner_manual_booking' %}"><i class="fas fa-plus me-1"></i>Manual</a></li>

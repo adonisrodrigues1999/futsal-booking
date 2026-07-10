@@ -12,7 +12,7 @@
   </div>
 
   <div class="card p-3 p-md-4 shadow-sm">
-    <form method="post" novalidate>
+    <form method="post" enctype="multipart/form-data" novalidate>
       {% csrf_token %}
       {% if form.non_field_errors %}
         <div class="alert alert-danger">{{ form.non_field_errors }}</div>
@@ -23,6 +23,12 @@
           <label class="form-label" for="{{ form.ground.id_for_label }}">Ground</label>
           {{ form.ground }}
           {{ form.ground.errors }}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="{{ form.image.id_for_label }}">Tournament Image</label>
+          {{ form.image }}
+          <div class="form-text">Upload a poster or banner image for the tournament.</div>
+          {{ form.image.errors }}
         </div>
         <div class="col-md-6">
           <label class="form-label" for="{{ form.title.id_for_label }}">Tournament Title</label>
@@ -83,6 +89,12 @@
           <label class="form-label" for="{{ form.rules.id_for_label }}">Rules</label>
           {{ form.rules }}
           {{ form.rules.errors }}
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="{{ form.category_fees_text.id_for_label }}">Categories and Fees</label>
+          {{ form.category_fees_text }}
+          <div class="form-text">{{ form.category_fees_text.help_text }}</div>
+          {{ form.category_fees_text.errors }}
         </div>
         <div class="col-md-6">
           <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>

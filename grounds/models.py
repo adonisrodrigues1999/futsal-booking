@@ -46,6 +46,7 @@ class Tournament(models.Model):
     )
 
     ground = models.ForeignKey(Ground, on_delete=models.CASCADE, related_name='tournaments')
+    image = models.ImageField(upload_to='tournaments/', blank=True, null=True)
     title = models.CharField(max_length=150)
     description = models.TextField(blank=True)
     start_date = models.DateField()
@@ -57,6 +58,7 @@ class Tournament(models.Model):
     max_teams = models.PositiveIntegerField(null=True, blank=True)
     contact_name = models.CharField(max_length=100, blank=True)
     contact_phone = models.CharField(max_length=20, blank=True)
+    category_fees = models.JSONField(default=list, blank=True)
     rules = models.TextField(blank=True)
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='UPCOMING')
     is_published = models.BooleanField(default=True)

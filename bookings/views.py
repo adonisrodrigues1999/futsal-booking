@@ -60,7 +60,7 @@ def _slot_discount(slot):
         return 0
     minutes_to_start = (_slot_start_datetime(slot) - timezone.localtime(timezone.now())).total_seconds() / 60
     if 0 < minutes_to_start <= 30:
-        return 51 if _is_day_slot(slot.start_time) else 151
+        return 101
     return 0
 
 
@@ -227,6 +227,13 @@ def home(request):
     for booking in upcoming_list:
         booking.hours_left = int(max((_slot_start_datetime(booking.slot) - now_dt).total_seconds() // 3600, 0))
 
+    upcoming_tournaments = (
+        Tournament.objects
+        .filter(is_published=True, status__in=['UPCOMING', 'ONGOING'], end_date__gte=today)
+        .select_related('ground', 'ground__owner')
+        .order_by('start_date', 'start_time', 'title')[:4]
+    )
+
     stats = {
         'total_bookings': customer_bookings.count(),
         'upcoming_bookings': upcoming_bookings.count(),
@@ -237,6 +244,7 @@ def home(request):
     return render(request, 'dashboard/customer_home.html', {
         'stats': stats,
         'upcoming_list': upcoming_list,
+        'upcoming_tournaments': upcoming_tournaments,
     })
 
 
@@ -246,6 +254,15 @@ def ground_list(request):
     return render(request, 'grounds/ground_list.html', {
         'grounds': grounds
     })
+
+
+@login_required
+def dashboard_redirect(request):
+    if request.user.role == 'admin':
+        return redirect('admin_dashboard')
+    if request.user.role == 'owner':
+        return redirect('owner_dashboard')
+    return redirect('customer_home')
 
 
 @login_required
@@ -803,15 +820,13 @@ def owner_dashboard(request):
 
 @login_required
 def owner_tournaments(request):
-    if request.user.role != 'owner':
+    if request.user.role not in {'owner', 'admin'}:
         return redirect('/')
 
-    tournaments = (
-        Tournament.objects
-        .filter(ground__owner=request.user)
-        .select_related('ground')
-        .order_by('start_date', 'start_time', 'title')
-    )
+    tournaments_qs = Tournament.objects.select_related('ground')
+    if request.user.role == 'owner':
+        tournaments_qs = tournaments_qs.filter(ground__owner=request.user)
+    tournaments = tournaments_qs.order_by('start_date', 'start_time', 'title')
     return render(request, 'tournaments/owner_tournaments.html', {
         'tournaments': tournaments,
     })
@@ -819,10 +834,10 @@ def owner_tournaments(request):
 
 @login_required
 def owner_tournament_create(request):
-    if request.user.role != 'owner':
+    if request.user.role not in {'owner', 'admin'}:
         return redirect('/')
 
-    form = TournamentForm(request.POST or None, owner=request.user)
+    form = TournamentForm(request.POST or None, request.FILES or None, owner=request.user)
     if request.method == 'POST' and form.is_valid():
         tournament = form.save()
         messages.success(request, f'Tournament added: {tournament.title}.')
@@ -837,15 +852,14 @@ def owner_tournament_create(request):
 
 @login_required
 def owner_tournament_update(request, tournament_id):
-    if request.user.role != 'owner':
+    if request.user.role not in {'owner', 'admin'}:
         return redirect('/')
 
-    tournament = get_object_or_404(
-        Tournament.objects.select_related('ground'),
-        id=tournament_id,
-        ground__owner=request.user,
-    )
-    form = TournamentForm(request.POST or None, instance=tournament, owner=request.user)
+    tournament_qs = Tournament.objects.select_related('ground')
+    if request.user.role == 'owner':
+        tournament_qs = tournament_qs.filter(ground__owner=request.user)
+    tournament = get_object_or_404(tournament_qs, id=tournament_id)
+    form = TournamentForm(request.POST or None, request.FILES or None, instance=tournament, owner=request.user)
     if request.method == 'POST' and form.is_valid():
         form.save()
         messages.success(request, 'Tournament updated.')
@@ -860,14 +874,13 @@ def owner_tournament_update(request, tournament_id):
 
 @login_required
 def owner_tournament_delete(request, tournament_id):
-    if request.user.role != 'owner':
+    if request.user.role not in {'owner', 'admin'}:
         return redirect('/')
 
-    tournament = get_object_or_404(
-        Tournament,
-        id=tournament_id,
-        ground__owner=request.user,
-    )
+    tournament_qs = Tournament.objects.all()
+    if request.user.role == 'owner':
+        tournament_qs = tournament_qs.filter(ground__owner=request.user)
+    tournament = get_object_or_404(tournament_qs, id=tournament_id)
     if request.method == 'POST':
         title = tournament.title
         tournament.delete()

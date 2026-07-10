@@ -96,6 +96,12 @@ h6,
 
 .navbar-brand {
   font-weight: 700;
+  text-decoration: none;
+}
+
+.navbar-brand:hover .brand-text,
+.navbar-brand:focus .brand-text {
+  color: #0f1c16;
 }
 
 .brand-icon {
@@ -113,6 +119,10 @@ h6,
 .brand-text {
   margin-left: 0.55rem;
   color: #0f1c16;
+}
+
+.calendar-picker {
+  min-width: 180px;
 }
 
 .site-navbar .nav-link {
@@ -385,6 +395,47 @@ h6,
 .ground-card:hover {
   transform: translateY(-6px);
   box-shadow: 0 20px 40px rgba(12, 28, 18, 0.22);
+}
+
+.tournament-strip {
+  border: 1px solid rgba(25, 195, 125, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(243, 250, 246, 0.94));
+}
+
+.tournament-card {
+  overflow: hidden;
+}
+
+.tournament-image {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  background: linear-gradient(135deg, rgba(25, 195, 125, 0.18), rgba(246, 168, 0, 0.16));
+}
+
+.tournament-image--empty {
+  display: block;
+}
+
+.tournament-thumb {
+  width: 72px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 0.5rem;
+}
+
+.policy-note,
+.policy-note-inline {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(90, 108, 98, 0.92);
+}
+
+.policy-note {
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.7rem;
+  background: rgba(15, 28, 22, 0.04);
+  border: 1px solid rgba(18, 37, 28, 0.08);
 }
 
 .ground-media {

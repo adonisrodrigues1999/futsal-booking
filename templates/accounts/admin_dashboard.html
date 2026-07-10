@@ -7,6 +7,7 @@
     <h2>Admin Dashboard</h2>
     <div class="btn-group">
       <a href="{% url 'create_ground_owner' %}" class="btn btn-success">Create Ground Owner</a>
+      <a href="{% url 'owner_tournaments' %}" class="btn btn-outline-primary">Manage Tournaments</a>
       <a href="{% url 'admin_invoices' %}" class="btn btn-outline-primary">Invoices</a>
     </div>
   </div>
@@ -111,22 +112,22 @@
     <div class="col-lg-4">
       <div class="card h-100">
         <div class="card-body">
-          <h5 class="mb-3">Top Grounds</h5>
+          <h5 class="mb-3">Top Grounds by Income</h5>
           <div class="table-responsive">
             <table class="table table-sm align-middle mb-0">
               <thead>
                 <tr>
                   <th>Ground</th>
                   <th>Bookings</th>
-                  <th>GMV</th>
+                  <th>Income</th>
                 </tr>
               </thead>
               <tbody>
-                {% for row in top_grounds %}
+                {% for row in ground_income_ranking %}
                 <tr>
                   <td>{{ row.slot__ground__name }}</td>
                   <td>{{ row.bookings_count }}</td>
-                  <td>₹{{ row.gmv }}</td>
+                  <td>₹{{ row.revenue }}</td>
                 </tr>
                 {% empty %}
                 <tr>

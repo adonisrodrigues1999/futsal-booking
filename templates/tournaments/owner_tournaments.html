@@ -19,6 +19,8 @@
             <th>Tournament</th>
             <th>Ground</th>
             <th>Date</th>
+            <th>Image</th>
+            <th>Categories</th>
             <th>Entry</th>
             <th>Status</th>
             <th>Published</th>
@@ -34,6 +36,22 @@
               </td>
               <td>{{ tournament.ground.name }}</td>
               <td>{{ tournament.start_date }}{% if tournament.start_time %}<br><span class="small text-muted">{{ tournament.start_time|time:"g:i A" }}</span>{% endif %}</td>
+              <td>
+                {% if tournament.image %}
+                  <img src="{{ tournament.image.url }}" alt="{{ tournament.title }}" class="tournament-thumb">
+                {% else %}
+                  <span class="small text-muted">No image</span>
+                {% endif %}
+              </td>
+              <td class="small">
+                {% if tournament.category_fees %}
+                  {% for category in tournament.category_fees %}
+                    <div>{{ category.name }} - ₹{{ category.fee }}</div>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted">Not added</span>
+                {% endif %}
+              </td>
               <td>{% if tournament.entry_fee %}₹{{ tournament.entry_fee }}{% else %}Free{% endif %}</td>
               <td><span class="badge text-bg-info">{{ tournament.get_status_display }}</span></td>
               <td>{% if tournament.is_published %}<span class="badge text-bg-success">Yes</span>{% else %}<span class="badge text-bg-secondary">No</span>{% endif %}</td>
@@ -47,7 +65,7 @@
             </tr>
           {% empty %}
             <tr>
-              <td colspan="7" class="text-center text-muted py-4">No tournaments added yet.</td>
+              <td colspan="9" class="text-center text-muted py-4">No tournaments added yet.</td>
             </tr>
           {% endfor %}
         </tbody>

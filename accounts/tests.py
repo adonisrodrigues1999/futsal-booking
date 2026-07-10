@@ -130,3 +130,65 @@ class AdminDashboardSettlementSplitTests(TestCase):
         self.assertEqual(response.context['month_online_collected'], 99)
         self.assertEqual(response.context['month_online_collected_at_ground'], 401)
         self.assertEqual(response.context['month_online_due'], 0)
+
+    def test_admin_dashboard_orders_grounds_by_income(self):
+        today = timezone.localdate()
+        second_ground = Ground.objects.create(
+            name='Admin Test Ground 2',
+            location='City',
+            owner=self.owner,
+            day_price=500,
+            night_price=700,
+            opening_time=time(6, 0),
+            closing_time=time(23, 0),
+        )
+        slot_one = Slot.objects.create(
+            ground=self.ground,
+            date=today,
+            start_time=time(12, 0),
+            end_time=time(13, 0),
+            is_booked=True,
+        )
+        slot_two = Slot.objects.create(
+            ground=second_ground,
+            date=today,
+            start_time=time(14, 0),
+            end_time=time(15, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=slot_one,
+            user=self.customer,
+            customer_name='Ground One',
+            customer_phone='7000000101',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='FULL',
+            payment_status='PAID',
+            paid_amount=500,
+            due_amount=0,
+            status='BOOKED',
+        )
+        Booking.objects.create(
+            slot=slot_two,
+            user=self.customer,
+            customer_name='Ground Two',
+            customer_phone='7000000102',
+            total_amount=900,
+            owner_payout=900,
+            booking_source='ONLINE',
+            payment_mode='FULL',
+            payment_status='PAID',
+            paid_amount=900,
+            due_amount=0,
+            status='BOOKED',
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.get('/accounts/admin-dashboard/')
+        self.assertEqual(response.status_code, 200)
+
+        ranking = list(response.context['ground_income_ranking'])
+        self.assertEqual(ranking[0]['slot__ground__name'], 'Admin Test Ground 2')
+        self.assertEqual(ranking[0]['revenue'], 900)

@@ -372,7 +372,7 @@ class BookingFlowTests(TestCase):
         )
 
         with patch('bookings.views.timezone.now', return_value=fixed_now):
-            self.assertEqual(_slot_price_for_slot(slot), self.ground.night_price - 151)
+            self.assertEqual(_slot_price_for_slot(slot), self.ground.night_price - 101)
 
     def test_booked_slot_does_not_receive_dynamic_discount(self):
         fixed_now = timezone.make_aware(datetime(2026, 6, 25, 9, 40), timezone.get_current_timezone())

@@ -256,11 +256,24 @@ def admin_dashboard(request):
             gmv=Coalesce(Sum('total_amount'), 0),
             owner_payout=Coalesce(Sum('owner_payout'), 0),
         )
-        .order_by('-bookings_count', '-gmv')[:5]
+        .order_by('-gmv', '-bookings_count')[:5]
     )
     for row in top_grounds:
         row['gmv'] = int(row['gmv'] or 0)
         row['platform_revenue'] = int((row['gmv'] or 0) - (row['owner_payout'] or 0))
+
+    ground_income_ranking = (
+        booked.values('slot__ground_id', 'slot__ground__name', 'slot__ground__owner__name')
+        .annotate(
+            bookings_count=Count('id'),
+            revenue=Coalesce(Sum('owner_payout'), 0),
+            gmv=Coalesce(Sum('total_amount'), 0),
+        )
+        .order_by('-revenue', '-bookings_count', 'slot__ground__name')
+    )
+    for row in ground_income_ranking:
+        row['revenue'] = int(row['revenue'] or 0)
+        row['gmv'] = int(row['gmv'] or 0)
 
     owner_leaderboard = (
         ground_owners
@@ -302,6 +315,7 @@ def admin_dashboard(request):
         'trend_labels': trend_labels,
         'trend_data': trend_data,
         'top_grounds': top_grounds,
+        'ground_income_ranking': ground_income_ranking,
         'owner_leaderboard': owner_leaderboard,
     }
     return render(request, 'accounts/admin_dashboard.html', context)
