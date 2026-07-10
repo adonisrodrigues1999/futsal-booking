@@ -22,7 +22,7 @@ def _svg_file(label, fill="#19c37d"):
   <circle cx="980" cy="620" r="260" fill="#f6a800" fill-opacity="0.18"/>
   <rect x="120" y="110" width="960" height="580" rx="36" fill="#173326" stroke="rgba(255,255,255,0.16)" stroke-width="3"/>
   <text x="600" y="355" text-anchor="middle" font-family="Arial, sans-serif" font-size="78" font-weight="700" fill="#ffffff">{label}</text>
-  <text x="600" y="430" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" fill="rgba(255,255,255,0.82)">FootBook Demo Event</text>
+  <text x="600" y="430" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" fill="rgba(255,255,255,0.82)">FootBook Goa Event</text>
 </svg>"""
     return ContentFile(svg.encode('utf-8'))
 
@@ -127,19 +127,27 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options['reset']:
             self.stdout.write('Clearing prior demo data...')
-            GroundReview.objects.filter(headline__startswith='Demo').delete()
-            TournamentRegistration.objects.filter(team_name__startswith='Demo').delete()
-            Tournament.objects.filter(title__startswith='Demo').delete()
-            OwnerExpense.objects.filter(title__startswith='Demo').delete()
-            Booking.objects.filter(customer_name__icontains='Demo').delete()
-            Slot.objects.filter(ground__name__startswith='Demo').delete()
-            Ground.objects.filter(name__startswith='Demo').delete()
+            prefixes = ('Demo', 'Goa')
+            GroundReview.objects.filter(headline__startswith=prefixes[0]).delete()
+            GroundReview.objects.filter(headline__startswith=prefixes[1]).delete()
+            TournamentRegistration.objects.filter(team_name__startswith=prefixes[0]).delete()
+            TournamentRegistration.objects.filter(team_name__startswith=prefixes[1]).delete()
+            Tournament.objects.filter(title__startswith=prefixes[0]).delete()
+            Tournament.objects.filter(title__startswith=prefixes[1]).delete()
+            OwnerExpense.objects.filter(title__startswith=prefixes[0]).delete()
+            OwnerExpense.objects.filter(title__startswith=prefixes[1]).delete()
+            Booking.objects.filter(customer_name__icontains=prefixes[0]).delete()
+            Booking.objects.filter(customer_name__icontains=prefixes[1]).delete()
+            Slot.objects.filter(ground__name__startswith=prefixes[0]).delete()
+            Slot.objects.filter(ground__name__startswith=prefixes[1]).delete()
+            Ground.objects.filter(name__startswith=prefixes[0]).delete()
+            Ground.objects.filter(name__startswith=prefixes[1]).delete()
             User.objects.filter(email__startswith='demo_').delete()
 
         admin = self._get_or_create_user(
             email='demo_admin@example.com',
             phone_number='9000000001',
-            name='Demo Admin',
+            name='Goa Admin',
             role='admin',
             password='demo12345',
             is_staff=True,
@@ -147,28 +155,28 @@ class Command(BaseCommand):
         owner = self._get_or_create_user(
             email='demo_owner@example.com',
             phone_number='9000000002',
-            name='Demo Owner',
+            name='Goa Turf Owner',
             role='owner',
             password='demo12345',
         )
         assistant_owner = self._get_or_create_user(
             email='demo_owner2@example.com',
             phone_number='9000000003',
-            name='Demo Ground Partner',
+            name='Goa Beachside Owner',
             role='owner',
             password='demo12345',
         )
         referrer = self._get_or_create_user(
             email='demo_referrer@example.com',
             phone_number='9000000004',
-            name='Demo Referrer',
+            name='Goa Referrer',
             role='customer',
             password='demo12345',
         )
         customer = self._get_or_create_user(
             email='demo_customer@example.com',
             phone_number='9000000005',
-            name='Demo Customer',
+            name='Goa Captain',
             role='customer',
             password='demo12345',
         )
@@ -181,7 +189,7 @@ class Command(BaseCommand):
         backup_customer = self._get_or_create_user(
             email='demo_player@example.com',
             phone_number='9000000006',
-            name='Demo Player',
+            name='Goa Player',
             role='customer',
             password='demo12345',
         )
@@ -189,7 +197,7 @@ class Command(BaseCommand):
         extra_customer = self._get_or_create_user(
             email='demo_guest@example.com',
             phone_number='9000000007',
-            name='Demo Guest',
+            name='Goa Guest',
             role='customer',
             password='demo12345',
         )
@@ -197,30 +205,30 @@ class Command(BaseCommand):
         support_owner = self._get_or_create_user(
             email='demo_owner3@example.com',
             phone_number='9000000008',
-            name='Demo League Owner',
+            name='Goa League Owner',
             role='owner',
             password='demo12345',
         )
 
         today = timezone.localdate()
         primary_ground = self._upsert_ground(
-            name='Demo Turf Arena',
+            name='Goa Turf Arena',
             owner=owner,
-            location='Koramangala, Bengaluru',
+            location='Panaji, Goa',
             day_price=1000,
             night_price=1500,
         )
         partner_ground = self._upsert_ground(
-            name='Demo City Arena',
+            name='Goa Beach Arena',
             owner=assistant_owner,
-            location='Indiranagar, Bengaluru',
+            location='Calangute, Goa',
             day_price=1200,
             night_price=1500,
         )
         league_ground = self._upsert_ground(
-            name='Demo League Hub',
+            name='Goa League Hub',
             owner=support_owner,
-            location='HSR Layout, Bengaluru',
+            location='Margao, Goa',
             day_price=500,
             night_price=1000,
         )
@@ -228,34 +236,34 @@ class Command(BaseCommand):
         self._seed_slots_and_bookings(primary_ground, [
             (today + timedelta(days=1), time(7, 0), 'ONLINE', 'FULL', 1000, 0, customer, customer.name, customer.phone_number),
             (today + timedelta(days=1), time(19, 0), 'ONLINE', 'PARTIAL_99', 99, 1401, customer, customer.name, customer.phone_number),
-            (today + timedelta(days=2), time(8, 0), 'MANUAL', 'FULL', 1000, 0, backup_customer, 'Walk-in Wednesday Crew', '9000000101'),
+            (today + timedelta(days=2), time(8, 0), 'MANUAL', 'FULL', 1000, 0, backup_customer, 'Goa Wednesday Crew', '9000000101'),
         ])
         self._seed_slots_and_bookings(partner_ground, [
             (today + timedelta(days=1), time(9, 0), 'ONLINE', 'FULL', 1200, 0, extra_customer, extra_customer.name, extra_customer.phone_number),
             (today + timedelta(days=1), time(20, 0), 'ONLINE', 'PARTIAL_99', 99, 1401, referrer, referrer.name, referrer.phone_number),
-            (today + timedelta(days=3), time(10, 0), 'MANUAL', 'FULL', 1200, 0, customer, 'Weekend League Team', '9000000102'),
+            (today + timedelta(days=3), time(10, 0), 'MANUAL', 'FULL', 1200, 0, customer, 'Goa Weekend Team', '9000000102'),
         ])
         self._seed_slots_and_bookings(league_ground, [
             (today + timedelta(days=1), time(7, 0), 'ONLINE', 'FULL', 500, 0, backup_customer, backup_customer.name, backup_customer.phone_number),
             (today + timedelta(days=1), time(19, 0), 'ONLINE', 'FULL', 1000, 0, extra_customer, extra_customer.name, extra_customer.phone_number),
-            (today + timedelta(days=2), time(8, 0), 'MANUAL', 'FULL', 500, 0, customer, 'Early Kickoff Crew', '9000000103'),
+            (today + timedelta(days=2), time(8, 0), 'MANUAL', 'FULL', 500, 0, customer, 'Goa Early Kickoff Crew', '9000000103'),
         ])
 
         OwnerExpense.objects.get_or_create(
             owner=owner,
             ground=primary_ground,
-            title='Demo Turf Lighting Repair',
+            title='Goa Turf Lighting Repair',
             defaults={
                 'category': 'MAINTENANCE',
                 'amount': 2500,
                 'spent_on': today - timedelta(days=2),
-                'note': 'Used for demo expense reporting.',
+                'note': 'Used for Goa showcase expense reporting.',
             },
         )
         OwnerExpense.objects.get_or_create(
             owner=assistant_owner,
             ground=partner_ground,
-            title='Demo City Turf Deep Clean',
+            title='Goa Beach Turf Deep Clean',
             defaults={
                 'category': 'MAINTENANCE',
                 'amount': 3500,
@@ -266,7 +274,7 @@ class Command(BaseCommand):
         OwnerExpense.objects.get_or_create(
             owner=support_owner,
             ground=league_ground,
-            title='Demo League Scoreboard Upgrade',
+            title='Goa League Scoreboard Upgrade',
             defaults={
                 'category': 'EQUIPMENT',
                 'amount': 1500,
@@ -277,9 +285,9 @@ class Command(BaseCommand):
 
         tournament, _ = Tournament.objects.get_or_create(
             ground=primary_ground,
-            title='Demo Weekend Cup',
+            title='Goa Weekend Cup',
             defaults={
-                'description': 'Fast-paced 7-a-side futsal tournament for the demo walkthrough.',
+                'description': 'Fast-paced 7-a-side futsal tournament for the Goa walkthrough.',
                 'start_date': today + timedelta(days=10),
                 'end_date': today + timedelta(days=11),
                 'start_time': time(9, 0),
@@ -287,18 +295,18 @@ class Command(BaseCommand):
                 'entry_fee': 500,
                 'prize_details': 'Winner trophy + branded kit',
                 'max_teams': 16,
-                'contact_name': 'Aarav Sharma',
+                'contact_name': 'Aarav Fernandes',
                 'contact_phone': '9000011111',
                 'category_fees': [
                     {'name': 'Open Men', 'fee': 500},
-                    {'name': 'Women Open', 'fee': 300},
+                    {'name': 'Women Open', 'fee': 500},
                 ],
                 'rules': 'Knockout format. 10-minute halves.',
                 'status': 'UPCOMING',
                 'is_published': True,
             },
         )
-        tournament.description = 'Fast-paced 7-a-side futsal tournament for the demo walkthrough.'
+        tournament.description = 'Fast-paced 7-a-side futsal tournament for the Goa walkthrough.'
         tournament.start_date = today + timedelta(days=10)
         tournament.end_date = today + timedelta(days=11)
         tournament.start_time = time(9, 0)
@@ -306,7 +314,7 @@ class Command(BaseCommand):
         tournament.entry_fee = 500
         tournament.prize_details = 'Winner trophy + branded kit'
         tournament.max_teams = 16
-        tournament.contact_name = 'Aarav Sharma'
+        tournament.contact_name = 'Aarav Fernandes'
         tournament.contact_phone = '9000011111'
         tournament.category_fees = [
             {'name': 'Open Men', 'fee': 500},
@@ -319,9 +327,9 @@ class Command(BaseCommand):
 
         tournament_two, _ = Tournament.objects.get_or_create(
             ground=partner_ground,
-            title='Demo City Night League',
+            title='Goa City Night League',
             defaults={
-                'description': 'A local 5-a-side league with strong weekday signups.',
+                'description': 'A local 5-a-side league with strong weekday signups in Goa.',
                 'start_date': today + timedelta(days=14),
                 'end_date': today + timedelta(days=15),
                 'start_time': time(20, 0),
@@ -329,7 +337,7 @@ class Command(BaseCommand):
                 'entry_fee': 1000,
                 'prize_details': 'Trophy, medals, and sponsored kits',
                 'max_teams': 12,
-                'contact_name': 'Nikhil Rao',
+                'contact_name': 'Nikhil Fernandes',
                 'contact_phone': '9000012222',
                 'category_fees': [
                     {'name': 'Corporate', 'fee': 1000},
@@ -340,7 +348,7 @@ class Command(BaseCommand):
                 'is_published': True,
             },
         )
-        tournament_two.description = 'A local 5-a-side league with strong weekday signups.'
+        tournament_two.description = 'A local 5-a-side league with strong weekday signups in Goa.'
         tournament_two.start_date = today + timedelta(days=14)
         tournament_two.end_date = today + timedelta(days=15)
         tournament_two.start_time = time(20, 0)
@@ -348,7 +356,7 @@ class Command(BaseCommand):
         tournament_two.entry_fee = 1000
         tournament_two.prize_details = 'Trophy, medals, and sponsored kits'
         tournament_two.max_teams = 12
-        tournament_two.contact_name = 'Nikhil Rao'
+        tournament_two.contact_name = 'Nikhil Fernandes'
         tournament_two.contact_phone = '9000012222'
         tournament_two.category_fees = [
             {'name': 'Corporate', 'fee': 1000},
@@ -361,9 +369,9 @@ class Command(BaseCommand):
 
         tournament_three, _ = Tournament.objects.get_or_create(
             ground=league_ground,
-            title='Demo League Challenge',
+            title='Goa League Challenge',
             defaults={
-                'description': 'Weekend challenge series for teams who want more match time.',
+                'description': 'Weekend challenge series for teams who want more match time in Goa.',
                 'start_date': today + timedelta(days=18),
                 'end_date': today + timedelta(days=19),
                 'start_time': time(9, 0),
@@ -371,7 +379,7 @@ class Command(BaseCommand):
                 'entry_fee': 500,
                 'prize_details': 'Winning jersey set and a trophy',
                 'max_teams': 16,
-                'contact_name': 'Imran Ali',
+                'contact_name': 'Imran Shaikh',
                 'contact_phone': '9000013333',
                 'category_fees': [
                     {'name': 'Open', 'fee': 500},
@@ -382,7 +390,7 @@ class Command(BaseCommand):
                 'is_published': True,
             },
         )
-        tournament_three.description = 'Weekend challenge series for teams who want more match time.'
+        tournament_three.description = 'Weekend challenge series for teams who want more match time in Goa.'
         tournament_three.start_date = today + timedelta(days=18)
         tournament_three.end_date = today + timedelta(days=19)
         tournament_three.start_time = time(9, 0)
@@ -390,7 +398,7 @@ class Command(BaseCommand):
         tournament_three.entry_fee = 500
         tournament_three.prize_details = 'Winning jersey set and a trophy'
         tournament_three.max_teams = 16
-        tournament_three.contact_name = 'Imran Ali'
+        tournament_three.contact_name = 'Imran Shaikh'
         tournament_three.contact_phone = '9000013333'
         tournament_three.category_fees = [
             {'name': 'Open', 'fee': 500},
@@ -403,7 +411,7 @@ class Command(BaseCommand):
 
         reg, created = TournamentRegistration.objects.get_or_create(
             tournament=tournament,
-            team_name='Demo Strikers',
+            team_name='Goa Strikers',
             defaults={
                 'user': customer,
                 'captain_name': customer.name,
@@ -412,7 +420,7 @@ class Command(BaseCommand):
                 'category_name': 'Open Men',
                 'fee_amount': 500,
                 'status': 'REGISTERED',
-                'notes': 'Demo registration for pitch-day walkthrough.',
+                'notes': 'Goa registration for pitch-day walkthrough.',
             },
         )
         reg.user = customer
@@ -422,14 +430,14 @@ class Command(BaseCommand):
         reg.category_name = 'Open Men'
         reg.fee_amount = 500
         reg.status = 'REGISTERED'
-        reg.notes = 'Demo registration for pitch-day walkthrough.'
+        reg.notes = 'Goa registration for pitch-day walkthrough.'
         reg.save()
         if created:
             award_tournament_registration_rewards(reg)
 
         reg_two, created_two = TournamentRegistration.objects.get_or_create(
             tournament=tournament_two,
-            team_name='Demo United',
+            team_name='Goa United',
             defaults={
                 'user': extra_customer,
                 'captain_name': extra_customer.name,
@@ -438,7 +446,7 @@ class Command(BaseCommand):
                 'category_name': 'Corporate',
                 'fee_amount': 1000,
                 'status': 'REGISTERED',
-                'notes': 'Weeknight league registration for demo exploration.',
+                'notes': 'Weeknight league registration for Goa exploration.',
             },
         )
         reg_two.user = extra_customer
@@ -448,14 +456,14 @@ class Command(BaseCommand):
         reg_two.category_name = 'Corporate'
         reg_two.fee_amount = 1000
         reg_two.status = 'REGISTERED'
-        reg_two.notes = 'Weeknight league registration for demo exploration.'
+        reg_two.notes = 'Weeknight league registration for Goa exploration.'
         reg_two.save()
         if created_two:
             award_tournament_registration_rewards(reg_two)
 
         reg_three, created_three = TournamentRegistration.objects.get_or_create(
             tournament=tournament_three,
-            team_name='Demo Phoenix',
+            team_name='Goa Phoenix',
             defaults={
                 'user': backup_customer,
                 'captain_name': backup_customer.name,
@@ -464,7 +472,7 @@ class Command(BaseCommand):
                 'category_name': 'Open',
                 'fee_amount': 500,
                 'status': 'REGISTERED',
-                'notes': 'Weekend challenge registration for the demo walkthrough.',
+                'notes': 'Weekend challenge registration for the Goa walkthrough.',
             },
         )
         reg_three.user = backup_customer
@@ -474,7 +482,7 @@ class Command(BaseCommand):
         reg_three.category_name = 'Open'
         reg_three.fee_amount = 500
         reg_three.status = 'REGISTERED'
-        reg_three.notes = 'Weekend challenge registration for the demo walkthrough.'
+        reg_three.notes = 'Weekend challenge registration for the Goa walkthrough.'
         reg_three.save()
         if created_three:
             award_tournament_registration_rewards(reg_three)
@@ -482,16 +490,16 @@ class Command(BaseCommand):
         GroundReview.objects.get_or_create(
             ground=primary_ground,
             user=customer,
-            headline='Demo Crowd Favorite',
+            headline='Goa Crowd Favorite',
             defaults={
                 'rating': 5,
-                'comment': 'Bright lights, clean turf, and quick booking flow. Excellent for demo.',
+                'comment': 'Bright lights, clean turf, and quick booking flow. Excellent for Goa match days.',
             },
         )
         GroundReview.objects.get_or_create(
             ground=partner_ground,
             user=backup_customer,
-            headline='Demo Match Day',
+            headline='Goa Match Day',
             defaults={
                 'rating': 4,
                 'comment': 'Good location and easy access. Strong candidate for tournament traffic.',
@@ -500,7 +508,7 @@ class Command(BaseCommand):
         GroundReview.objects.get_or_create(
             ground=league_ground,
             user=extra_customer,
-            headline='Demo League Night',
+            headline='Goa League Night',
             defaults={
                 'rating': 5,
                 'comment': 'Great floodlights, proper seating, and the parking is easy.',
@@ -509,7 +517,7 @@ class Command(BaseCommand):
         GroundReview.objects.get_or_create(
             ground=primary_ground,
             user=backup_customer,
-            headline='Demo Night Session',
+            headline='Goa Night Session',
             defaults={
                 'rating': 4,
                 'comment': 'Evening slot looked polished and felt busy in the right way.',
@@ -518,7 +526,7 @@ class Command(BaseCommand):
         GroundReview.objects.get_or_create(
             ground=partner_ground,
             user=extra_customer,
-            headline='Demo Weekend Vibe',
+            headline='Goa Weekend Vibe',
             defaults={
                 'rating': 5,
                 'comment': 'Tournament-ready ground with enough scale for team events.',
@@ -527,7 +535,7 @@ class Command(BaseCommand):
         GroundReview.objects.get_or_create(
             ground=league_ground,
             user=customer,
-            headline='Demo Budget Friendly',
+            headline='Goa Budget Friendly',
             defaults={
                 'rating': 4,
                 'comment': 'Great value pricing for repeat weekly games.',
@@ -557,9 +565,9 @@ class Command(BaseCommand):
             },
         )
 
-        self.stdout.write(self.style.SUCCESS('Demo data created successfully.'))
+        self.stdout.write(self.style.SUCCESS('Goa data created successfully.'))
         self.stdout.write('')
-        self.stdout.write('Demo accounts:')
+        self.stdout.write('Goa accounts:')
         self.stdout.write('  Admin:    demo_admin@example.com / demo12345')
         self.stdout.write('  Owner:    demo_owner@example.com / demo12345')
         self.stdout.write('  Owner 2:  demo_owner2@example.com / demo12345')
