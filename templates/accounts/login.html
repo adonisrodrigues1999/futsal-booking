@@ -82,6 +82,45 @@
   </div>
 </div>
 
+<div class="row g-3 mt-4">
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <h6 class="mb-3">Trending Grounds</h6>
+      {% for row in public_top_grounds %}
+        <div class="d-flex justify-content-between border-bottom py-2">
+          <span>{{ row.slot__ground__name }}</span><strong>{{ row.bookings_count }}</strong>
+        </div>
+      {% empty %}
+        <div class="text-muted small">No data yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <h6 class="mb-3">Trending Tournaments</h6>
+      {% for row in public_top_tournaments %}
+        <div class="d-flex justify-content-between border-bottom py-2">
+          <span>{{ row.tournament__title }}</span><strong>{{ row.registrations_count }}</strong>
+        </div>
+      {% empty %}
+        <div class="text-muted small">No data yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <h6 class="mb-3">Top Players</h6>
+      {% for player in public_top_players %}
+        <div class="d-flex justify-content-between border-bottom py-2">
+          <span>{{ player.name }}</span><strong>{{ player.total_bookings }}</strong>
+        </div>
+      {% empty %}
+        <div class="text-muted small">No data yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}

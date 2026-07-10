@@ -70,3 +70,46 @@ class Tournament(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.ground.name}"
+
+
+class TournamentRegistration(models.Model):
+    STATUS_CHOICES = (
+        ('REGISTERED', 'Registered'),
+        ('CANCELLED', 'Cancelled'),
+    )
+
+    tournament = models.ForeignKey(Tournament, on_delete=models.CASCADE, related_name='registrations')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='tournament_registrations')
+    team_name = models.CharField(max_length=120)
+    captain_name = models.CharField(max_length=100, blank=True)
+    contact_phone = models.CharField(max_length=20)
+    contact_email = models.EmailField(blank=True)
+    category_name = models.CharField(max_length=120)
+    fee_amount = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='REGISTERED')
+    notes = models.TextField(blank=True)
+    referral_bonus_applied = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ('tournament', 'contact_phone', 'category_name')
+
+    def __str__(self):
+        return f"{self.team_name} | {self.tournament.title}"
+
+
+class GroundReview(models.Model):
+    ground = models.ForeignKey(Ground, on_delete=models.CASCADE, related_name='reviews')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    rating = models.PositiveSmallIntegerField(default=5)
+    headline = models.CharField(max_length=120, blank=True)
+    comment = models.TextField()
+    photo = models.ImageField(upload_to='ground-reviews/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.ground.name} review by {self.user or 'Guest'}"

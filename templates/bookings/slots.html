@@ -6,6 +6,11 @@
     <div>
       <h4>{{ ground.name }} Slots</h4>
       <p class="page-subtitle">Choose a time window and confirm your booking in one tap.</p>
+      <div class="d-flex flex-wrap gap-2 mt-2">
+        <span class="badge text-bg-success">Points: {{ user_loyalty_points }}</span>
+        <span class="badge text-bg-warning text-dark">Free Credits: {{ user_free_booking_credits }}</span>
+        <a href="https://wa.me/?text={{ ground.share_url|urlencode }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success">Share Ground</a>
+      </div>
     </div>
     <form class="d-flex align-items-center gap-2 flex-wrap" method="get">
       <label class="small text-muted mb-0" for="slot-date-picker">Pick date</label>
@@ -126,6 +131,14 @@
               Pay ₹99 now, remaining at venue
             </label>
           </div>
+          {% if user_free_booking_credits > 0 %}
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="cm-payment-mode" id="cm-payment-free" value="FREE_REWARD">
+              <label class="form-check-label" for="cm-payment-free">
+                Use 1 free booking credit
+              </label>
+            </div>
+          {% endif %}
         </div>
         <div class="policy-note mb-2">
           Online payments are non-refundable.
@@ -141,6 +154,89 @@
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-success" id="cm-confirm-btn">Proceed to Pay</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mt-4">
+  <div class="col-lg-7">
+    <div class="card p-3 p-md-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">Reviews</h5>
+        <span class="badge text-bg-light text-dark">{{ reviews|length }} latest</span>
+      </div>
+      {% for review in reviews %}
+        <div class="border-bottom pb-3 mb-3">
+          <div class="d-flex justify-content-between">
+            <div class="fw-semibold">{{ review.headline|default:"Player Review" }}</div>
+            <div class="text-warning">{{ review.rating }}/5</div>
+          </div>
+          <div class="small text-muted">{{ review.user.name|default:"Anonymous" }} • {{ review.created_at|date:"M d, Y" }}</div>
+          <div class="mt-2">{{ review.comment }}</div>
+          {% if review.photo %}
+            <img src="{{ review.photo.url }}" alt="Review photo" class="img-fluid rounded mt-2">
+          {% endif %}
+        </div>
+      {% empty %}
+        <p class="text-muted mb-0">No reviews yet. Be the first to share your experience.</p>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card p-3 p-md-4 mb-3">
+      <h5 class="mb-3">Leave a Review</h5>
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="review">
+        <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+        <div class="mb-2">
+          <label class="form-label">Rating</label>
+          {{ review_form.rating }}
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Headline</label>
+          {{ review_form.headline }}
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Comment</label>
+          {{ review_form.comment }}
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Photo</label>
+          {{ review_form.photo }}
+        </div>
+        <button class="btn btn-primary w-100" type="submit">Post Review</button>
+      </form>
+    </div>
+
+    <div class="card p-3 p-md-4">
+      <h5 class="mb-3">Alert Preferences</h5>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="alert">
+        <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="notify_price_drops" id="notify-price-drops" {% if alert_subscription.notify_price_drops %}checked{% endif %}>
+          <label class="form-check-label" for="notify-price-drops">Price drop alerts</label>
+        </div>
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="notify_last_minute" id="notify-last-minute" {% if alert_subscription.notify_last_minute %}checked{% endif %}>
+          <label class="form-check-label" for="notify-last-minute">Last-minute opening alerts</label>
+        </div>
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="notify_nearby_tournaments" id="notify-nearby-tournaments" {% if alert_subscription.notify_nearby_tournaments %}checked{% endif %}>
+          <label class="form-check-label" for="notify-nearby-tournaments">Nearby tournament alerts</label>
+        </div>
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="email_enabled" id="notify-email" {% if not alert_subscription or alert_subscription.email_enabled %}checked{% endif %}>
+          <label class="form-check-label" for="notify-email">Email alerts</label>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" name="push_enabled" id="notify-push" {% if alert_subscription and alert_subscription.push_enabled %}checked{% endif %}>
+          <label class="form-check-label" for="notify-push">Push alerts</label>
+        </div>
+        <button class="btn btn-outline-primary w-100" type="submit">Save Preferences</button>
+      </form>
     </div>
   </div>
 </div>

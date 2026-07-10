@@ -1,0 +1,68 @@
+{% extends 'base/base.html' %}
+{% block title %}Register Tournament{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="page-shell">
+      <div class="page-header">
+        <div>
+          <h3 class="mb-0">Register for {{ tournament.title }}</h3>
+          <p class="page-subtitle">{{ tournament.ground.name }} • {{ tournament.ground.location }}</p>
+        </div>
+        <a href="{% url 'tournament_list' %}" class="btn btn-outline-secondary">Back</a>
+      </div>
+
+      <div class="card p-3 p-md-4 mb-4">
+        <div class="row g-3">
+          <div class="col-md-6"><div class="small text-muted">Date</div><div class="fw-semibold">{{ tournament.start_date }}</div></div>
+          <div class="col-md-6"><div class="small text-muted">Entry Fee</div><div class="fw-semibold">{% if tournament.entry_fee %}₹{{ tournament.entry_fee }}{% else %}Free{% endif %}</div></div>
+          <div class="col-md-6"><div class="small text-muted">Contact</div><div class="fw-semibold">{% if tournament.contact_phone %}<a href="tel:{{ tournament.contact_phone }}">{{ tournament.contact_phone }}</a>{% else %}-{% endif %}</div></div>
+          <div class="col-md-6"><div class="small text-muted">Share</div><div class="fw-semibold"><a href="https://wa.me/?text={{ tournament.share_url|urlencode }}" target="_blank" rel="noopener">WhatsApp</a></div></div>
+        </div>
+      </div>
+
+      <form method="post" class="card p-3 p-md-4" novalidate>
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Team Name</label>
+            {{ form.team_name }}
+            {{ form.team_name.errors }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Captain Name</label>
+            {{ form.captain_name }}
+            {{ form.captain_name.errors }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Contact Phone</label>
+            {{ form.contact_phone }}
+            {{ form.contact_phone.errors }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Contact Email</label>
+            {{ form.contact_email }}
+            {{ form.contact_email.errors }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Category</label>
+            {{ form.category_name }}
+            {{ form.category_name.errors }}
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            {{ form.notes }}
+            {{ form.notes.errors }}
+          </div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-4">
+          <a href="{% url 'tournament_list' %}" class="btn btn-outline-secondary">Cancel</a>
+          <button type="submit" class="btn btn-primary">Confirm Registration</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

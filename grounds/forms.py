@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Tournament
+from .models import Tournament, TournamentRegistration, GroundReview
 
 
 class TournamentForm(forms.ModelForm):
@@ -103,3 +103,53 @@ class TournamentForm(forms.ModelForm):
         if commit:
             tournament.save()
         return tournament
+
+
+class TournamentRegistrationForm(forms.ModelForm):
+    class Meta:
+        model = TournamentRegistration
+        fields = [
+            'team_name',
+            'captain_name',
+            'contact_phone',
+            'contact_email',
+            'category_name',
+            'notes',
+        ]
+        widgets = {
+            'notes': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        categories = kwargs.pop('categories', [])
+        super().__init__(*args, **kwargs)
+        if categories:
+            self.fields['category_name'].widget = forms.Select(choices=categories)
+        for field in self.fields.values():
+            existing = field.widget.attrs.get('class', '')
+            field.widget.attrs['class'] = f'{existing} form-control'.strip()
+        self.fields['category_name'].widget.attrs['class'] = 'form-select'
+
+    def clean_contact_phone(self):
+        phone = (self.cleaned_data.get('contact_phone') or '').strip()
+        if len(phone) < 8:
+            raise forms.ValidationError('Enter a valid contact number.')
+        return phone
+
+
+class GroundReviewForm(forms.ModelForm):
+    class Meta:
+        model = GroundReview
+        fields = ['rating', 'headline', 'comment', 'photo']
+        widgets = {
+            'comment': forms.Textarea(attrs={'rows': 4}),
+            'photo': forms.ClearableFileInput(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            existing = field.widget.attrs.get('class', '')
+            field.widget.attrs['class'] = f'{existing} form-control'.strip()
+        self.fields['rating'].widget = forms.Select(choices=[(i, i) for i in range(5, 0, -1)])
+        self.fields['rating'].widget.attrs['class'] = 'form-select'

@@ -4,7 +4,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from accounts.models import User
-from grounds.models import Ground
+from grounds.models import Ground, Tournament, TournamentRegistration
 from django.utils import timezone
 
 from .models import Slot, Booking, OwnerExpense, BookingAttendance
@@ -386,6 +386,79 @@ class BookingFlowTests(TestCase):
 
         with patch('bookings.views.timezone.now', return_value=fixed_now):
             self.assertEqual(_slot_price_for_slot(slot), self.ground.day_price)
+
+    def test_free_booking_credit_redeems_without_razorpay(self):
+        self.customer.free_booking_credits = 1
+        self.customer.save(update_fields=['free_booking_credits'])
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=1),
+            start_time=time(18, 0),
+            end_time=time(19, 0),
+            is_booked=False,
+        )
+
+        self.client.force_login(self.customer)
+        response = self.client.post(
+            '/payments/razorpay/create-order/',
+            data='{"slot_id": %s, "payment_mode": "FREE_REWARD"}' % slot.id,
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['success'])
+        self.assertTrue(payload['free_booking'])
+
+        booking = Booking.objects.get(slot=slot, status='BOOKED')
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.free_booking_credits, 0)
+        self.assertEqual(self.customer.booking_count, 1)
+        self.assertEqual(self.customer.loyalty_points, 5)
+        self.assertTrue(booking.loyalty_reward_redeemed)
+        self.assertEqual(booking.reward_discount_amount, booking.total_amount)
+
+    def test_tournament_registration_awards_points(self):
+        referrer = User.objects.create_user(
+            email='referrer@example.com',
+            phone_number='6666000000',
+            name='Referrer',
+            password='password123',
+            role='customer',
+            email_verified=True,
+        )
+        self.customer.referred_by = referrer
+        self.customer.save(update_fields=['referred_by'])
+
+        tournament = Tournament.objects.create(
+            ground=self.ground,
+            title='Weekend Cup',
+            description='Fast-paced tournament',
+            start_date=timezone.localdate() + timedelta(days=10),
+            end_date=timezone.localdate() + timedelta(days=11),
+            entry_fee=500,
+            contact_phone='9999912345',
+            category_fees=[{'name': 'Open', 'fee': 500}],
+            is_published=True,
+        )
+
+        self.client.force_login(self.customer)
+        response = self.client.post(f'/tournaments/{tournament.id}/register/', {
+            'team_name': 'Storm FC',
+            'captain_name': 'Captain',
+            'contact_phone': '8888800000',
+            'contact_email': 'team@example.com',
+            'category_name': 'Open',
+            'notes': 'See you there',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        registration = TournamentRegistration.objects.get(tournament=tournament, team_name='Storm FC')
+        self.customer.refresh_from_db()
+        referrer.refresh_from_db()
+        self.assertEqual(registration.fee_amount, 500)
+        self.assertEqual(self.customer.loyalty_points, 20)
+        self.assertEqual(referrer.loyalty_points, 20)
 
 
 class OwnerExpenseTests(TestCase):

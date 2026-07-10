@@ -64,12 +64,19 @@
               </div>
             {% endif %}
             <div class="mt-auto border-top pt-3">
+              <div class="d-flex gap-2 mb-2">
+                <a href="https://wa.me/?text={{ tournament.share_url|urlencode }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success flex-grow-1">Share</a>
+                {% if tournament.contact_phone %}
+                  <a href="tel:{{ tournament.contact_phone }}" class="btn btn-sm btn-outline-primary flex-grow-1">Call</a>
+                {% endif %}
+              </div>
               {% if tournament.contact_phone %}
                 <a href="tel:{{ tournament.contact_phone }}" class="btn btn-primary w-100">Call to Register</a>
                 {% if tournament.contact_name %}<div class="small text-muted text-center mt-2">Contact: {{ tournament.contact_name }}</div>{% endif %}
               {% else %}
                 <a href="/grounds/{{ tournament.ground.id }}/" class="btn btn-outline-primary w-100">View Ground</a>
               {% endif %}
+              <a href="{% url 'register_tournament' tournament.id %}" class="btn btn-outline-dark w-100 mt-2">Register Online</a>
             </div>
           </div>
         </div>

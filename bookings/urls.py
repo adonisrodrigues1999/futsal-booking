@@ -11,6 +11,7 @@ urlpatterns = [
     path('grounds/<int:ground_id>/slot-status/', views.ground_slots_status, name='ground_slots_status'),
     path('grounds/<int:ground_id>/image/', views.ground_image, name='ground_image'),
     path('tournaments/', views.tournament_list, name='tournament_list'),
+    path('tournaments/<int:tournament_id>/register/', views.register_tournament, name='register_tournament'),
 
     path('book/<int:slot_id>/', views.book_slot, name='book_slot'),
     path('payments/razorpay/create-order/', views.create_razorpay_order, name='create_razorpay_order'),

@@ -21,7 +21,7 @@ class Slot(models.Model):
 class Booking(models.Model):
     SOURCE = (('ONLINE','Online'), ('MANUAL','Manual'))
     STATUS = (('BOOKED','Booked'), ('CANCELLED','Cancelled'))
-    PAYMENT_MODE = (('FULL', 'Full Payment'), ('PARTIAL_99', 'Advance ₹99'))
+    PAYMENT_MODE = (('FULL', 'Full Payment'), ('PARTIAL_99', 'Advance ₹99'), ('FREE_REWARD', 'Free Booking Credit'))
     PAYMENT_STATUS = (
         ('PENDING', 'Pending'),
         ('PARTIALLY_PAID', 'Partially Paid'),
@@ -48,6 +48,9 @@ class Booking(models.Model):
     payment_status = models.CharField(max_length=16, choices=PAYMENT_STATUS, default='PAID')
     paid_amount = models.PositiveIntegerField(default=0)
     due_amount = models.PositiveIntegerField(default=0)
+    reward_discount_amount = models.PositiveIntegerField(default=0)
+    reward_points_earned = models.PositiveIntegerField(default=0)
+    loyalty_reward_redeemed = models.BooleanField(default=False)
     payment_paid_at = models.DateTimeField(null=True, blank=True)
     razorpay_order_id = models.CharField(max_length=100, blank=True, null=True)
     razorpay_payment_id = models.CharField(max_length=100, blank=True, null=True)
@@ -159,6 +162,67 @@ class OwnerExpense(models.Model):
 
     def __str__(self):
         return f"{self.owner} | {self.category} | {self.amount}"
+
+
+class RewardTransaction(models.Model):
+    REASON_CHOICES = (
+        ('BOOKING', 'Booking'),
+        ('FIRST_BOOKING_REFERRAL', 'First Booking Referral'),
+        ('FIRST_TOURNAMENT_REGISTRATION', 'First Tournament Registration'),
+        ('LOYALTY_REDEMPTION', 'Loyalty Redemption'),
+    )
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reward_transactions')
+    reason = models.CharField(max_length=40, choices=REASON_CHOICES)
+    points = models.PositiveIntegerField()
+    booking = models.ForeignKey(Booking, null=True, blank=True, on_delete=models.CASCADE)
+    notes = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user} | {self.reason} | {self.points}"
+
+
+class AlertSubscription(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='alert_subscriptions')
+    ground = models.ForeignKey(Ground, null=True, blank=True, on_delete=models.CASCADE, related_name='alert_subscriptions')
+    notify_price_drops = models.BooleanField(default=True)
+    notify_last_minute = models.BooleanField(default=True)
+    notify_nearby_tournaments = models.BooleanField(default=True)
+    email_enabled = models.BooleanField(default=True)
+    push_enabled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'ground')
+
+    def __str__(self):
+        scope = self.ground.name if self.ground else 'Global'
+        return f"{self.user} | {scope}"
+
+
+class AlertDispatchLog(models.Model):
+    REASON_CHOICES = (
+        ('PRICE_DROP', 'Price Drop'),
+        ('LAST_MINUTE_OPENING', 'Last Minute Opening'),
+        ('TOURNAMENT_PUBLISHED', 'Tournament Published'),
+    )
+
+    ground = models.ForeignKey(Ground, null=True, blank=True, on_delete=models.CASCADE)
+    tournament = models.ForeignKey('grounds.Tournament', null=True, blank=True, on_delete=models.CASCADE)
+    reason = models.CharField(max_length=32, choices=REASON_CHOICES)
+    alert_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('ground', 'tournament', 'reason', 'alert_date')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.reason} | {self.ground or self.tournament}"
 
 
 class ActivityLog(models.Model):

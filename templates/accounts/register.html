@@ -55,6 +55,14 @@
 
         <div class="row">
           <div class="col-md-6 mb-3">
+            <label for="{{ form.referral_code.id_for_label }}" class="form-label">Referral Code</label>
+            {{ form.referral_code }}
+            <div class="form-text">Optional. Earn rewards when your referred user books or registers.</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-6 mb-3">
             <label for="id_password" class="form-label">Password</label>
             <div class="input-group">
               <input type="password" name="password" id="id_password" class="form-control" required aria-describedby="pw-toggle">

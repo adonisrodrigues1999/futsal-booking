@@ -5,6 +5,7 @@ from grounds.models import Ground
 
 
 class UserRegistrationForm(forms.ModelForm):
+    referral_code = forms.CharField(required=False, label="Referral Code")
     password = forms.CharField(widget=forms.PasswordInput)
     password_confirm = forms.CharField(widget=forms.PasswordInput, label="Confirm Password")
 
@@ -22,10 +23,21 @@ class UserRegistrationForm(forms.ModelForm):
 
         return cleaned_data
 
+    def clean_referral_code(self):
+        referral_code = (self.cleaned_data.get('referral_code') or '').strip()
+        if referral_code and not User.objects.filter(referral_code=referral_code).exists():
+            raise forms.ValidationError("Referral code not found.")
+        return referral_code
+
     def save(self, commit=True):
         user = super().save(commit=False)
         user.role = 'customer'  # Default role for self-registration
         user.set_password(self.cleaned_data['password'])
+        referral_code = (self.cleaned_data.get('referral_code') or '').strip()
+        if referral_code:
+            referrer = User.objects.filter(referral_code=referral_code).exclude(email=user.email).first()
+            if referrer:
+                user.referred_by = referrer
         if commit:
             user.save()
         return user
@@ -48,6 +60,12 @@ class GroundOwnerCreationForm(forms.ModelForm):
             raise forms.ValidationError("Passwords don't match")
 
         return cleaned_data
+
+    def clean_referral_code(self):
+        referral_code = (self.cleaned_data.get('referral_code') or '').strip()
+        if referral_code and not User.objects.filter(referral_code=referral_code).exists():
+            raise forms.ValidationError("Referral code not found.")
+        return referral_code
 
     def save(self, commit=True):
         user = super().save(commit=False)

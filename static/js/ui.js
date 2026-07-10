@@ -484,12 +484,13 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
-    if (typeof Razorpay === 'undefined') {
+    var paymentMode = getSelectedPaymentMode();
+    var isFreeReward = paymentMode === 'FREE_REWARD';
+    if (!isFreeReward && typeof Razorpay === 'undefined') {
       showAppToast('Payment gateway not loaded. Refresh and try again.', 'danger', 3200);
       return;
     }
 
-    var paymentMode = getSelectedPaymentMode();
     var csrftoken = getCookie('csrftoken');
 
     confirmBtn.disabled = true;
@@ -513,6 +514,18 @@ document.addEventListener('DOMContentLoaded', function() {
         return data;
       });
     }).then(function(orderData) {
+      if (orderData.free_booking) {
+        showAppToast(orderData.message || 'Free booking redeemed successfully.', 'success', 2800);
+        setTimeout(function() {
+          window.location = orderData.redirect_url || '/my-bookings/';
+        }, 350);
+        return;
+      }
+
+      if (typeof Razorpay === 'undefined') {
+        throw new Error('Payment gateway not loaded. Refresh and try again.');
+      }
+
       var options = {
         key: orderData.key_id,
         amount: orderData.pay_now_amount * 100,

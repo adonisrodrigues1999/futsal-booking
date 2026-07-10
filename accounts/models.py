@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 from django.utils import timezone
+import secrets
 from .managers import UserManager
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -19,6 +20,17 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
 
     email_verified = models.BooleanField(default=False)
+    referral_code = models.CharField(max_length=12, unique=True, null=True, blank=True, editable=False)
+    referred_by = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='referrals',
+    )
+    booking_count = models.PositiveIntegerField(default=0)
+    loyalty_points = models.PositiveIntegerField(default=0)
+    free_booking_credits = models.PositiveIntegerField(default=0)
 
     date_joined = models.DateTimeField(default=timezone.now)
 
@@ -26,6 +38,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ['phone_number', 'name']
 
     objects = UserManager()
+
+    def save(self, *args, **kwargs):
+        if not self.referral_code:
+            code = secrets.token_hex(3).upper()
+            self.referral_code = f'FB{code}'
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.email})"

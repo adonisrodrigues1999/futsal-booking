@@ -67,14 +67,16 @@
               </div>
             {% endif %}
             <div class="mt-auto">
-              {% if tournament.contact_phone %}
-                <a href="tel:{{ tournament.contact_phone }}" class="btn btn-primary w-100">Call to Register</a>
-              {% else %}
-                <a href="{% url 'tournament_list' %}" class="btn btn-primary w-100">View Details</a>
-              {% endif %}
-            </div>
+            {% if tournament.contact_phone %}
+              <a href="tel:{{ tournament.contact_phone }}" class="btn btn-primary w-100">Call to Register</a>
+              <a href="{% url 'register_tournament' tournament.id %}" class="btn btn-sm btn-outline-primary w-100 mt-2">Register Online</a>
+            {% else %}
+              <a href="{% url 'register_tournament' tournament.id %}" class="btn btn-primary w-100">Register Online</a>
+            {% endif %}
+            <a href="https://wa.me/?text={{ tournament.share_url|urlencode }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success w-100 mt-2">Share</a>
           </div>
         </div>
+      </div>
       </div>
     {% empty %}
       <div class="col-12 text-muted">No tournaments published yet.</div>
@@ -114,6 +116,69 @@
     <div class="card p-3 metric-card h-100">
       <div class="small text-muted">Amount Paid</div>
       <div class="h4 mb-0">₹{{ stats.money_spent }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card p-3 h-100 loyalty-card">
+      <div class="small text-muted">Loyalty Points</div>
+      <div class="h3 mb-1">{{ stats.points }}</div>
+      <div class="small text-muted">Book 20 times to unlock a free booking through 100-point redemption cycles.</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100 loyalty-card">
+      <div class="small text-muted">Free Booking Credits</div>
+      <div class="h3 mb-1">{{ stats.free_booking_credits }}</div>
+      <div class="small text-muted">Redeem credits directly in the booking modal.</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100 loyalty-card">
+      <div class="small text-muted">Your Booking Rank</div>
+      <div class="h3 mb-1">{{ stats.booking_count }}</div>
+      <div class="small text-muted">Every completed booking adds 5 loyalty points.</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card p-3 p-md-4 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">Trending Grounds This Week</h5>
+        <span class="badge text-bg-light text-dark">Public leaderboard</span>
+      </div>
+      <div class="list-group list-group-flush">
+        {% for row in weekly_ground_leaderboard %}
+          <div class="list-group-item px-0 py-2 d-flex justify-content-between">
+            <span>{{ row.slot__ground__name }}</span>
+            <strong>{{ row.bookings_count }}</strong>
+          </div>
+        {% empty %}
+          <div class="text-muted">No ground trend data yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card p-3 p-md-4 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">Trending Tournaments This Week</h5>
+        <span class="badge text-bg-light text-dark">Registrations</span>
+      </div>
+      <div class="list-group list-group-flush">
+        {% for row in weekly_tournament_leaderboard %}
+          <div class="list-group-item px-0 py-2 d-flex justify-content-between">
+            <span>{{ row.tournament__title }}</span>
+            <strong>{{ row.registrations_count }}</strong>
+          </div>
+        {% empty %}
+          <div class="text-muted">No tournament trend data yet.</div>
+        {% endfor %}
+      </div>
     </div>
   </div>
 </div>
@@ -170,6 +235,25 @@
         <li>If within 4 hours, call the ground owner for emergency change.</li>
       </ul>
     </div>
+  </div>
+</div>
+
+<div class="card p-3 p-md-4 mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">Top Players This Week</h5>
+    <span class="badge text-bg-light text-dark">5 points per booking</span>
+  </div>
+  <div class="row g-2">
+    {% for player in top_players %}
+      <div class="col-md-4 col-lg-2">
+        <div class="card p-3 text-center h-100">
+          <div class="fw-semibold">{{ player.name }}</div>
+          <div class="small text-muted">{{ player.total_bookings }} bookings</div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="text-muted">No player rankings available yet.</div>
+    {% endfor %}
   </div>
 </div>
 {% endblock %}

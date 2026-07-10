@@ -7,6 +7,9 @@ from .models import (
     BookingAttendance,
     ActivityLog,
     OwnerExpense,
+    RewardTransaction,
+    AlertSubscription,
+    AlertDispatchLog,
 )
 from .models import GroundInvoice
 from grounds.models import Ground
@@ -156,3 +159,22 @@ class OwnerExpenseAdmin(admin.ModelAdmin):
     )
     list_filter = ('category', 'spent_on', 'ground')
     search_fields = ('owner__name', 'title', 'note')
+
+
+@admin.register(RewardTransaction)
+class RewardTransactionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'reason', 'points', 'booking', 'created_at')
+    list_filter = ('reason',)
+    search_fields = ('user__name', 'user__email', 'notes')
+
+
+@admin.register(AlertSubscription)
+class AlertSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'ground', 'notify_price_drops', 'notify_last_minute', 'notify_nearby_tournaments', 'email_enabled', 'push_enabled')
+    list_filter = ('email_enabled', 'push_enabled', 'notify_price_drops', 'notify_last_minute', 'notify_nearby_tournaments')
+
+
+@admin.register(AlertDispatchLog)
+class AlertDispatchLogAdmin(admin.ModelAdmin):
+    list_display = ('reason', 'ground', 'tournament', 'alert_date', 'created_at')
+    list_filter = ('reason', 'alert_date')

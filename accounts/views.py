@@ -20,7 +20,7 @@ from bookings.models import Booking
 from bookings.money import ground_collected_amount_expression, online_collected_amount_expression
 from bookings.slot_generation import create_initial_slots_for_ground
 from .forms import UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm, GroundCreationForm
-from grounds.models import Ground
+from grounds.models import Ground, Tournament, TournamentRegistration
 
 
 def register(request):
@@ -69,6 +69,26 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect('home')
 
+    today = timezone.localdate()
+    week_start = today - timedelta(days=6)
+    public_top_grounds = (
+        Booking.objects.filter(status='BOOKED', slot__date__gte=week_start)
+        .values('slot__ground__name')
+        .annotate(bookings_count=Count('id'))
+        .order_by('-bookings_count', 'slot__ground__name')[:5]
+    )
+    public_top_tournaments = (
+        TournamentRegistration.objects.filter(status='REGISTERED', created_at__date__gte=week_start)
+        .values('tournament__title')
+        .annotate(registrations_count=Count('id'))
+        .order_by('-registrations_count', 'tournament__title')[:5]
+    )
+    public_top_players = (
+        User.objects.filter(role='customer')
+        .annotate(total_bookings=Count('booking', filter=Q(booking__status='BOOKED')))
+        .order_by('-total_bookings', 'name')[:5]
+    )
+
     if request.method == 'POST':
         form = UserLoginForm(request.POST)
         if form.is_valid():
@@ -111,7 +131,12 @@ def login_view(request):
     else:
         form = UserLoginForm()
 
-    return render(request, 'accounts/login.html', {'form': form})
+    return render(request, 'accounts/login.html', {
+        'form': form,
+        'public_top_grounds': public_top_grounds,
+        'public_top_tournaments': public_top_tournaments,
+        'public_top_players': public_top_players,
+    })
 
 
 @login_required

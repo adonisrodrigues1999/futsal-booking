@@ -6,7 +6,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction, OperationalError, IntegrityError
-from django.db.models import Count, Sum
+from django.db.models import Count, Sum, Q
 from django.db.models.functions import Coalesce
 import time
 from django.core.mail import send_mail
@@ -18,6 +18,7 @@ from decimal import Decimal
 from decimal import InvalidOperation
 from calendar import month_name, month_abbr
 from django.views.decorators.csrf import csrf_exempt
+from accounts.models import User
 
 try:
     import stripe
@@ -29,11 +30,12 @@ try:
 except Exception:
     razorpay = None
 
-from .models import Ground, Slot, Booking, ActivityLog, OwnerExpense, BookingAttendance
+from .models import Ground, Slot, Booking, ActivityLog, OwnerExpense, BookingAttendance, AlertSubscription, RewardTransaction, AlertDispatchLog
 from .money import ground_collected_amount_expression, online_collected_amount_expression
-from grounds.forms import TournamentForm
-from grounds.models import Tournament
+from grounds.forms import TournamentForm, TournamentRegistrationForm, GroundReviewForm
+from grounds.models import Tournament, TournamentRegistration, GroundReview
 from .slot_generation import ensure_slots_for_ground_date, ensure_next_month_slots_for_ground
+from .rewards import award_booking_rewards, award_tournament_registration_rewards, redeem_free_booking_credit
 import os
 from django.http import FileResponse, Http404
 from django.conf import settings as djsettings
@@ -166,6 +168,70 @@ def _operating_window_for_date(ground, target_date):
     return window_start, window_end
 
 
+def _send_email(subject, body, recipients):
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
+    send_mail(subject, body, from_email, recipients, fail_silently=True)
+
+
+def _dispatch_ground_alerts(ground, slot=None, reason='PRICE_DROP'):
+    alert_date = slot.date if slot else timezone.localdate()
+    if AlertDispatchLog.objects.filter(ground=ground, reason=reason, alert_date=alert_date).exists():
+        return
+    subscribers = AlertSubscription.objects.filter(
+        ground=ground,
+        email_enabled=True,
+    ).select_related('user')
+    if not subscribers.exists():
+        return
+
+    if reason == 'PRICE_DROP' and slot:
+        subject = f'Last-minute price drop at {ground.name}'
+        body = (
+            f"A last-minute discounted slot is available at {ground.name}.\n"
+            f"Date: {slot.date}\n"
+            f"Time: {slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}\n"
+            f"Book quickly before it gets taken."
+        )
+    else:
+        subject = f'New opening at {ground.name}'
+        body = (
+            f"A slot has just opened at {ground.name}.\n"
+            f"Check availability and book quickly."
+        )
+
+    for subscription in subscribers:
+        _send_email(subject, body, [subscription.user.email])
+    AlertDispatchLog.objects.create(ground=ground, reason=reason, alert_date=alert_date)
+
+
+def _dispatch_tournament_alerts(tournament):
+    alert_date = tournament.start_date
+    if AlertDispatchLog.objects.filter(tournament=tournament, reason='TOURNAMENT_PUBLISHED', alert_date=alert_date).exists():
+        return
+    subscriptions = AlertSubscription.objects.filter(
+        notify_nearby_tournaments=True,
+        email_enabled=True,
+    ).select_related('user')
+    if not subscriptions.exists():
+        return
+
+    subject = f'Nearby tournament: {tournament.title}'
+    body = (
+        f"New tournament published at {tournament.ground.name}.\n"
+        f"Location: {tournament.ground.location}\n"
+        f"Date: {tournament.start_date}\n"
+        f"Contact: {tournament.contact_phone or '-'}"
+    )
+    for subscription in subscriptions:
+        _send_email(subject, body, [subscription.user.email])
+    AlertDispatchLog.objects.create(tournament=tournament, reason='TOURNAMENT_PUBLISHED', alert_date=alert_date)
+
+
+def _weekly_start():
+    today = timezone.localdate()
+    return today - timedelta(days=6)
+
+
 def ground_image(request, ground_id):
     # Serve a ground image from the project `groundsimages` folder if available.
     try:
@@ -216,6 +282,7 @@ def home(request):
         return redirect('owner_dashboard')
     today = timezone.localdate()
     now_dt = timezone.localtime(timezone.now())
+    week_start = _weekly_start()
     customer_bookings = (
         Booking.objects
         .filter(user=user, status='BOOKED')
@@ -233,24 +300,58 @@ def home(request):
         .select_related('ground', 'ground__owner')
         .order_by('start_date', 'start_time', 'title')[:4]
     )
+    for tournament in upcoming_tournaments:
+        tournament.share_url = request.build_absolute_uri(f'/tournaments/{tournament.id}/register/')
+
+    alerts = AlertSubscription.objects.filter(user=user).select_related('ground')
+    weekly_ground_leaderboard = (
+        Booking.objects
+        .filter(status='BOOKED', slot__date__gte=week_start)
+        .values('slot__ground__name')
+        .annotate(bookings_count=Count('id'))
+        .order_by('-bookings_count', 'slot__ground__name')[:5]
+    )
+    weekly_tournament_leaderboard = (
+        TournamentRegistration.objects
+        .filter(created_at__date__gte=week_start, status='REGISTERED')
+        .values('tournament__title', 'tournament__ground__name')
+        .annotate(registrations_count=Count('id'))
+        .order_by('-registrations_count', 'tournament__title')[:5]
+    )
+    top_players = (
+        User.objects.filter(role='customer')
+        .annotate(total_bookings=Count('booking', filter=Q(booking__status='BOOKED')))
+        .order_by('-total_bookings', 'name')[:5]
+    )
 
     stats = {
         'total_bookings': customer_bookings.count(),
         'upcoming_bookings': upcoming_bookings.count(),
         'this_month_bookings': customer_bookings.filter(slot__date__month=today.month, slot__date__year=today.year).count(),
         'money_spent': int(customer_bookings.aggregate(total=Coalesce(Sum('paid_amount'), 0))['total'] or 0),
+        'points': user.loyalty_points,
+        'free_booking_credits': user.free_booking_credits,
+        'booking_count': user.booking_count,
     }
 
     return render(request, 'dashboard/customer_home.html', {
         'stats': stats,
         'upcoming_list': upcoming_list,
         'upcoming_tournaments': upcoming_tournaments,
+        'weekly_ground_leaderboard': weekly_ground_leaderboard,
+        'weekly_tournament_leaderboard': weekly_tournament_leaderboard,
+        'top_players': top_players,
+        'alerts': alerts,
     })
 
 
 @login_required
 def ground_list(request):
-    grounds = Ground.objects.all()
+    grounds = Ground.objects.annotate(
+        review_count=Count('reviews', distinct=True),
+    )
+    for ground in grounds:
+        ground.share_url = request.build_absolute_uri(f'/grounds/{ground.id}/')
     return render(request, 'grounds/ground_list.html', {
         'grounds': grounds
     })
@@ -274,6 +375,8 @@ def tournament_list(request):
         .select_related('ground', 'ground__owner')
         .order_by('start_date', 'start_time', 'title')
     )
+    for tournament in tournaments:
+        tournament.share_url = request.build_absolute_uri(f'/tournaments/{tournament.id}/register/')
     return render(request, 'tournaments/tournament_list.html', {
         'tournaments': tournaments,
     })
@@ -282,6 +385,29 @@ def tournament_list(request):
 @login_required
 def ground_slots(request, ground_id):
     ground = get_object_or_404(Ground, id=ground_id)
+    if request.method == 'POST' and request.user.is_authenticated:
+        action = (request.POST.get('action') or '').strip()
+        if action == 'review':
+            form = GroundReviewForm(request.POST, request.FILES)
+            if form.is_valid():
+                review = form.save(commit=False)
+                review.ground = ground
+                review.user = request.user
+                review.save()
+                messages.success(request, 'Your review was posted.')
+            else:
+                messages.error(request, 'Please fix the review form and try again.')
+            return redirect(f'/grounds/{ground.id}/?date={(request.POST.get("date") or timezone.localdate().isoformat())}')
+        if action == 'alert':
+            subscription, _ = AlertSubscription.objects.get_or_create(user=request.user, ground=ground)
+            subscription.notify_price_drops = request.POST.get('notify_price_drops') == 'on'
+            subscription.notify_last_minute = request.POST.get('notify_last_minute') == 'on'
+            subscription.notify_nearby_tournaments = request.POST.get('notify_nearby_tournaments') == 'on'
+            subscription.email_enabled = request.POST.get('email_enabled') == 'on'
+            subscription.push_enabled = request.POST.get('push_enabled') == 'on'
+            subscription.save()
+            messages.success(request, 'Alert preferences updated for this ground.')
+            return redirect(f'/grounds/{ground.id}/?date={(request.POST.get("date") or timezone.localdate().isoformat())}')
     # date navigation: ?date=YYYY-MM-DD
     date_str = request.GET.get('date')
     try:
@@ -303,6 +429,7 @@ def ground_slots(request, ground_id):
     now_dt = timezone.localtime(timezone.now())
     today = timezone.localdate()
     window_start, window_end = _operating_window_for_date(ground, selected_date)
+    discounted_slots = []
     for slot in slots_qs:
         slot_dt = _slot_start_datetime(slot)
         if not (window_start <= slot_dt < window_end):
@@ -312,6 +439,9 @@ def ground_slots(request, ground_id):
         is_past = slot_dt <= now_dt
         if is_past:
             continue
+        discount = _slot_discount(slot)
+        if discount:
+            discounted_slots.append(slot)
 
         # Check if there's an active booking for this slot
         booking = Booking.objects.filter(slot=slot, status='BOOKED').first()
@@ -328,7 +458,7 @@ def ground_slots(request, ground_id):
             'slot': slot,
             'is_past': is_past,
             'price': _slot_price_for_slot(slot),
-            'discount': _slot_discount(slot),
+            'discount': discount,
             'time_icon': '☀️' if _is_day_slot(slot.start_time) else '🌙',
             'booking': booking,
             'user_booking': user_booking,
@@ -342,12 +472,27 @@ def ground_slots(request, ground_id):
     if prev_date < timezone.localdate():
         prev_date = None
 
+    if discounted_slots:
+        _dispatch_ground_alerts(ground, slot=discounted_slots[0], reason='PRICE_DROP')
+
+    reviews = GroundReview.objects.filter(ground=ground).select_related('user')[:12]
+    review_form = GroundReviewForm()
+    alert_subscription = None
+    if request.user.is_authenticated:
+        alert_subscription = AlertSubscription.objects.filter(user=request.user, ground=ground).first()
+    ground.share_url = request.build_absolute_uri(f'/grounds/{ground.id}/')
+
     return render(request, 'bookings/slots.html', {
         'ground': ground,
         'slots': visible_slots,
         'selected_date': selected_date,
         'prev_date': prev_date,
         'next_date': next_date,
+        'reviews': reviews,
+        'review_form': review_form,
+        'alert_subscription': alert_subscription,
+        'user_loyalty_points': getattr(request.user, 'loyalty_points', 0) if request.user.is_authenticated else 0,
+        'user_free_booking_credits': getattr(request.user, 'free_booking_credits', 0) if request.user.is_authenticated else 0,
     })
 
 
@@ -412,7 +557,7 @@ def create_razorpay_order(request):
 
     slot_id = payload.get('slot_id')
     payment_mode = payload.get('payment_mode') or 'FULL'
-    if payment_mode not in {'FULL', 'PARTIAL_99'}:
+    if payment_mode not in {'FULL', 'PARTIAL_99', 'FREE_REWARD'}:
         return JsonResponse({'success': False, 'error': 'Invalid payment mode'}, status=400)
 
     slot = get_object_or_404(Slot, id=slot_id)
@@ -431,6 +576,46 @@ def create_razorpay_order(request):
     ).count()
     if existing_bookings >= 5:
         return JsonResponse({'success': False, 'error': 'You can only book up to 5 slots per day per ground.'}, status=400)
+
+    if payment_mode == 'FREE_REWARD':
+        if getattr(request.user, 'free_booking_credits', 0) <= 0:
+            return JsonResponse({'success': False, 'error': 'No free booking credits available'}, status=400)
+        with transaction.atomic():
+            slot = Slot.objects.select_for_update().get(id=slot_id)
+            user = User.objects.select_for_update().get(id=request.user.id)
+            if user.free_booking_credits <= 0:
+                return JsonResponse({'success': False, 'error': 'No free booking credits available'}, status=400)
+            if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
+                return JsonResponse({'success': False, 'error': 'Slot is already booked'}, status=409)
+            total_amount = _slot_price_for_slot(slot)
+            booking = Booking.objects.create(
+                user=user,
+                slot=slot,
+                customer_name=user.name,
+                customer_phone=user.phone_number,
+                total_amount=total_amount,
+                owner_payout=total_amount,
+                booking_source='ONLINE',
+                payment_mode='FREE_REWARD',
+                payment_status='PAID',
+                paid_amount=0,
+                due_amount=0,
+                payment_paid_at=timezone.now(),
+                reward_discount_amount=total_amount,
+                loyalty_reward_redeemed=True,
+            )
+            slot.is_booked = True
+            slot.save(update_fields=['is_booked'])
+            redeem_free_booking_credit(user, booking)
+            award_booking_rewards(booking)
+            ActivityLog.objects.create(user=user, action='BOOKED', booking=booking, slot=slot, meta={'reward': 'FREE_REWARD'})
+            return JsonResponse({
+                'success': True,
+                'free_booking': True,
+                'booking_id': str(booking.id),
+                'redirect_url': '/my-bookings/',
+                'message': 'Free booking redeemed successfully.',
+            })
 
     total_amount = _slot_price_for_slot(slot)
     pay_now_amount, due_amount, resolved_mode = _payment_amounts(total_amount, payment_mode)
@@ -573,6 +758,8 @@ def verify_razorpay_payment_and_book(request):
                     booking=booking,
                     slot=slot
                 )
+
+                award_booking_rewards(booking)
 
                 try:
                     _owner_booking_email(booking)
@@ -840,6 +1027,8 @@ def owner_tournament_create(request):
     form = TournamentForm(request.POST or None, request.FILES or None, owner=request.user)
     if request.method == 'POST' and form.is_valid():
         tournament = form.save()
+        if tournament.is_published:
+            _dispatch_tournament_alerts(tournament)
         messages.success(request, f'Tournament added: {tournament.title}.')
         return redirect('owner_tournaments')
 
@@ -862,6 +1051,8 @@ def owner_tournament_update(request, tournament_id):
     form = TournamentForm(request.POST or None, request.FILES or None, instance=tournament, owner=request.user)
     if request.method == 'POST' and form.is_valid():
         form.save()
+        if tournament.is_published:
+            _dispatch_tournament_alerts(tournament)
         messages.success(request, 'Tournament updated.')
         return redirect('owner_tournaments')
 
@@ -886,6 +1077,51 @@ def owner_tournament_delete(request, tournament_id):
         tournament.delete()
         messages.success(request, f'Tournament deleted: {title}.')
     return redirect('owner_tournaments')
+
+
+@login_required
+def register_tournament(request, tournament_id):
+    tournament = get_object_or_404(
+        Tournament.objects.select_related('ground'),
+        id=tournament_id,
+        is_published=True,
+    )
+    categories = [(item.get('name', ''), f"{item.get('name', '')} - ₹{item.get('fee', 0)}") for item in tournament.category_fees if item.get('name')]
+    if not categories:
+        categories = [('', 'General Entry')]
+    tournament.share_url = request.build_absolute_uri(f'/tournaments/{tournament.id}/register/')
+
+    if request.method == 'POST':
+        form = TournamentRegistrationForm(request.POST, categories=categories)
+        if form.is_valid():
+            registration = form.save(commit=False)
+            registration.tournament = tournament
+            registration.user = request.user
+            selected_category = form.cleaned_data['category_name']
+            selected_fee = 0
+            for item in tournament.category_fees:
+                if item.get('name') == selected_category:
+                    selected_fee = int(item.get('fee') or 0)
+                    break
+            registration.fee_amount = selected_fee or tournament.entry_fee
+            registration.save()
+            award_tournament_registration_rewards(registration)
+            messages.success(request, f"You are registered for {tournament.title}.")
+            return redirect('tournament_list')
+    else:
+        form = TournamentRegistrationForm(categories=categories, initial={
+            'contact_phone': getattr(request.user, 'phone_number', ''),
+            'contact_email': getattr(request.user, 'email', ''),
+            'captain_name': getattr(request.user, 'name', ''),
+            'team_name': f"{getattr(request.user, 'name', 'Team')} Team",
+            'category_name': categories[0][0] if categories else '',
+        })
+
+    return render(request, 'tournaments/register.html', {
+        'form': form,
+        'tournament': tournament,
+        'categories': categories,
+    })
 
 
 @login_required
@@ -1813,6 +2049,7 @@ def cancel_booking(request, booking_id):
 
     slot.is_booked = False
     slot.save()
+    _dispatch_ground_alerts(slot.ground, slot=slot, reason='LAST_MINUTE_OPENING')
 
     ActivityLog.objects.create(
         user=request.user,
@@ -1852,6 +2089,7 @@ def owner_cancel_booking(request, booking_id):
 
     slot.is_booked = False
     slot.save()
+    _dispatch_ground_alerts(slot.ground, slot=slot, reason='LAST_MINUTE_OPENING')
 
     ActivityLog.objects.create(
         user=request.user,
