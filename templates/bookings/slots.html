@@ -37,7 +37,12 @@
         >
           <div class="slot-meta">
             <div class="slot-time">{{ obj.time_icon }} {{ slot.start_time|time:"g:i A" }} to {{ slot.end_time|time:"g:i A" }}</div>
-            <div class="slot-price">₹{{ obj.price }}</div>
+            <div class="slot-price">
+              ₹{{ obj.price }}
+              {% if obj.discount %}
+                <span class="badge text-bg-warning ms-1">Last-minute ₹{{ obj.discount }} off</span>
+              {% endif %}
+            </div>
           </div>
 
           {% if slot.is_booked %}

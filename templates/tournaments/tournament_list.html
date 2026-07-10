@@ -1,0 +1,70 @@
+{% extends 'base/base.html' %}
+{% block title %}Upcoming Tournaments{% endblock %}
+{% block content %}
+
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h3 class="mb-0">Upcoming Futsal Tournaments</h3>
+      <p class="page-subtitle">Discover tournaments hosted by FootBook grounds.</p>
+    </div>
+    <a href="/grounds/" class="btn btn-outline-primary">Browse Grounds</a>
+  </div>
+
+  <div class="row g-4">
+    {% for tournament in tournaments %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex justify-content-between gap-2 mb-2">
+              <span class="badge text-bg-success">{{ tournament.get_status_display }}</span>
+              {% if tournament.entry_fee %}
+                <span class="badge text-bg-warning">Entry ₹{{ tournament.entry_fee }}</span>
+              {% else %}
+                <span class="badge text-bg-light text-dark">Free Entry</span>
+              {% endif %}
+            </div>
+            <h5 class="mb-1">{{ tournament.title }}</h5>
+            <div class="text-muted small mb-2">{{ tournament.ground.name }} • {{ tournament.ground.location }}</div>
+            <div class="small mb-2">
+              <strong>Date:</strong> {{ tournament.start_date }}{% if tournament.end_date != tournament.start_date %} - {{ tournament.end_date }}{% endif %}
+              {% if tournament.start_time %} • {{ tournament.start_time|time:"g:i A" }}{% endif %}
+            </div>
+            {% if tournament.registration_deadline %}
+              <div class="small mb-2"><strong>Register by:</strong> {{ tournament.registration_deadline }}</div>
+            {% endif %}
+            {% if tournament.prize_details %}
+              <div class="small mb-2"><strong>Prize:</strong> {{ tournament.prize_details }}</div>
+            {% endif %}
+            {% if tournament.max_teams %}
+              <div class="small mb-2"><strong>Max teams:</strong> {{ tournament.max_teams }}</div>
+            {% endif %}
+            {% if tournament.description %}
+              <p class="text-muted small">{{ tournament.description|linebreaksbr }}</p>
+            {% endif %}
+            {% if tournament.rules %}
+              <div class="small text-muted mb-3"><strong>Rules:</strong> {{ tournament.rules|truncatechars:140 }}</div>
+            {% endif %}
+            <div class="mt-auto border-top pt-3">
+              {% if tournament.contact_phone %}
+                <a href="tel:{{ tournament.contact_phone }}" class="btn btn-primary w-100">Call to Register</a>
+                {% if tournament.contact_name %}<div class="small text-muted text-center mt-2">Contact: {{ tournament.contact_name }}</div>{% endif %}
+              {% else %}
+                <a href="/grounds/{{ tournament.ground.id }}/" class="btn btn-outline-primary w-100">View Ground</a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="col-12">
+        <div class="card p-4 text-center shadow-sm">
+          <h5>No upcoming tournaments yet</h5>
+          <p class="text-muted mb-0">Check again soon or browse available futsal grounds.</p>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% endblock %}

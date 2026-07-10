@@ -51,7 +51,7 @@ def merged_env_list(name, default=None):
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-local-dev-key-change-me")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env_bool("DJANGO_DEBUG", default=False)
+DEBUG = env_bool("DJANGO_DEBUG", default=True)
 
 ALLOWED_HOSTS = merged_env_list(
     "ALLOWED_HOSTS",
@@ -228,6 +228,6 @@ STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_PUBLIC_KEY = os.getenv("STRIPE_PUBLIC_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "inr")
-SECURE_SSL_REDIRECT = True
+SECURE_SSL_REDIRECT = False
 
 PREPEND_WWW = env_bool("PREPEND_WWW", default=False)

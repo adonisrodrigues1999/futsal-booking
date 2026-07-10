@@ -60,7 +60,12 @@ jobs:
             --name "$AZURE_WEBAPP_NAME" \
             --settings \
               ALLOWED_HOSTS="$AZURE_WEBAPP_NAME.azurewebsites.net,.azurewebsites.net,footbook.online,www.footbook.online" \
-              CSRF_TRUSTED_ORIGINS="https://$AZURE_WEBAPP_NAME.azurewebsites.net,https://*.azurewebsites.net,https://footbook.online,https://www.footbook.online"
+              CSRF_TRUSTED_ORIGINS="https://$AZURE_WEBAPP_NAME.azurewebsites.net,https://*.azurewebsites.net,https://footbook.online,https://www.footbook.online" \
+              EMAIL_HOST=smtp.gmail.com \
+              EMAIL_PORT=587 \
+              EMAIL_USE_TLS=True \
+              EMAIL_HOST_USER=foo.book.online.india@gmail.com \
+              DEFAULT_FROM_EMAIL=foo.book.online.india@gmail.com
 
       - uses: azure/webapps-deploy@v3
         with:

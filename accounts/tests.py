@@ -98,3 +98,35 @@ class AdminDashboardSettlementSplitTests(TestCase):
         self.assertEqual(response.context['month_manual_bookings'], 1)
         self.assertEqual(response.context['month_manual_collected'], 200)
         self.assertEqual(response.context['month_manual_due'], 500)
+
+    def test_admin_dashboard_keeps_online_and_ground_collections_separate(self):
+        today = timezone.localdate()
+        partial_slot = Slot.objects.create(
+            ground=self.ground,
+            date=today,
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=partial_slot,
+            user=self.customer,
+            customer_name='Partial Online User',
+            customer_phone='7000000003',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='PARTIAL_99',
+            payment_status='PAID_AT_GROUND',
+            paid_amount=500,
+            due_amount=0,
+            status='BOOKED',
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.get('/accounts/admin-dashboard/')
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(response.context['month_online_collected'], 99)
+        self.assertEqual(response.context['month_online_collected_at_ground'], 401)
+        self.assertEqual(response.context['month_online_due'], 0)

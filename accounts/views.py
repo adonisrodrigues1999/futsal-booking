@@ -17,6 +17,7 @@ from django import forms
 from .models import User
 from bookings.models import EmailVerification
 from bookings.models import Booking
+from bookings.money import ground_collected_amount_expression, online_collected_amount_expression
 from bookings.slot_generation import create_initial_slots_for_ground
 from .forms import UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm, GroundCreationForm
 from grounds.models import Ground
@@ -40,10 +41,11 @@ def register(request):
             verification_url = request.build_absolute_uri(
                 reverse('verify_email', args=[verification.token])
             )
+            from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
             send_mail(
                 'Verify your email - FootBook',
                 f'Click the link to verify your email: {verification_url}',
-                settings.EMAIL_HOST_USER,
+                from_email,
                 [user.email],
                 fail_silently=False,
             )
@@ -228,13 +230,14 @@ def admin_dashboard(request):
     )
     month_online_sums = month_bookings.filter(booking_source='ONLINE').aggregate(
         bookings=Count('id'),
-        paid=Coalesce(Sum('paid_amount'), 0),
+        paid=Coalesce(Sum(online_collected_amount_expression()), 0),
         due=Coalesce(Sum('due_amount'), 0),
+        collected_at_ground=Coalesce(Sum(ground_collected_amount_expression()), 0),
         owner_payout=Coalesce(Sum('owner_payout'), 0),
     )
     month_manual_sums = month_bookings.filter(booking_source='MANUAL').aggregate(
         bookings=Count('id'),
-        paid=Coalesce(Sum('paid_amount'), 0),
+        paid=Coalesce(Sum(ground_collected_amount_expression()), 0),
         due=Coalesce(Sum('due_amount'), 0),
         owner_payout=Coalesce(Sum('owner_payout'), 0),
     )
@@ -289,11 +292,12 @@ def admin_dashboard(request):
         'month_online_bookings': int(month_online_sums['bookings'] or 0),
         'month_online_collected': int(month_online_sums['paid'] or 0),
         'month_online_due': int(month_online_sums['due'] or 0),
+        'month_online_collected_at_ground': int(month_online_sums['collected_at_ground'] or 0),
         'month_online_owner_payable': int(month_online_sums['owner_payout'] or 0),
         'month_manual_bookings': int(month_manual_sums['bookings'] or 0),
         'month_manual_collected': int(month_manual_sums['paid'] or 0),
         'month_manual_due': int(month_manual_sums['due'] or 0),
-        'month_manual_owner_collected': int(month_manual_sums['owner_payout'] or 0),
+        'month_manual_owner_collected': int(month_manual_sums['paid'] or 0),
         'active_owners_this_month': month_bookings.values('slot__ground__owner').distinct().count(),
         'trend_labels': trend_labels,
         'trend_data': trend_data,

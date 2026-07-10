@@ -146,6 +146,11 @@ az webapp config appsettings set \
     SECRET_KEY="$DJANGO_SECRET_KEY" \
     ALLOWED_HOSTS="$WEBAPP_NAME.azurewebsites.net,.azurewebsites.net,footbook.online,www.footbook.online" \
     CSRF_TRUSTED_ORIGINS="https://$WEBAPP_NAME.azurewebsites.net,https://*.azurewebsites.net,https://footbook.online,https://www.footbook.online" \
+    EMAIL_HOST=smtp.gmail.com \
+    EMAIL_PORT=587 \
+    EMAIL_USE_TLS=True \
+    EMAIL_HOST_USER=foo.book.online.india@gmail.com \
+    DEFAULT_FROM_EMAIL=foo.book.online.india@gmail.com \
     DB_HOST="$PG_SERVER.postgres.database.azure.com" \
     DB_NAME="$PG_DB" \
     DB_USER="$PG_ADMIN" \

@@ -9,6 +9,7 @@ urlpatterns = [
     path('grounds/<int:ground_id>/', views.ground_slots),
     path('grounds/<int:ground_id>/slot-status/', views.ground_slots_status, name='ground_slots_status'),
     path('grounds/<int:ground_id>/image/', views.ground_image, name='ground_image'),
+    path('tournaments/', views.tournament_list, name='tournament_list'),
 
     path('book/<int:slot_id>/', views.book_slot, name='book_slot'),
     path('payments/razorpay/create-order/', views.create_razorpay_order, name='create_razorpay_order'),
@@ -24,8 +25,13 @@ urlpatterns = [
     path('owner/cancel/<uuid:booking_id>/', views.owner_cancel_booking, name='owner_cancel_booking'),
     path('owner/reschedule/<uuid:booking_id>/', views.owner_reschedule_booking, name='owner_reschedule_booking'),
     path('owner/mark-paid/<uuid:booking_id>/', views.owner_mark_paid_at_ground, name='owner_mark_paid_at_ground'),
+    path('owner/attendance/<uuid:booking_id>/', views.owner_mark_attendance, name='owner_mark_attendance'),
     path('owner/manual/', views.owner_manual_booking, name='owner_manual_booking'),
     path('owner/manual-booking/', views.owner_manual_booking, name='owner_manual_booking_alias'),
+    path('owner/tournaments/', views.owner_tournaments, name='owner_tournaments'),
+    path('owner/tournaments/add/', views.owner_tournament_create, name='owner_tournament_create'),
+    path('owner/tournaments/<int:tournament_id>/edit/', views.owner_tournament_update, name='owner_tournament_update'),
+    path('owner/tournaments/<int:tournament_id>/delete/', views.owner_tournament_delete, name='owner_tournament_delete'),
 
     path('notifications/latest/', views.latest_notification),
     path('dashboard/admin/invoices/', views.admin_invoices, name='admin_invoices'),

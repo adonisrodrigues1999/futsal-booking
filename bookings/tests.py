@@ -1,5 +1,5 @@
 from django.test import TestCase
-from datetime import time, date
+from datetime import datetime, time, date
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -7,8 +7,9 @@ from accounts.models import User
 from grounds.models import Ground
 from django.utils import timezone
 
-from .models import Slot, Booking, OwnerExpense
+from .models import Slot, Booking, OwnerExpense, BookingAttendance
 from .slot_generation import create_initial_slots_for_ground, ensure_slots_for_ground_date
+from .views import _slot_price_for_slot
 
 
 class SlotGenerationTests(TestCase):
@@ -309,6 +310,8 @@ class BookingFlowTests(TestCase):
         stats = response.context['stats']
         self.assertEqual(stats['period_online_collection'], 99)
         self.assertEqual(stats['period_online_due_at_ground'], 401)
+        self.assertEqual(stats['period_ground_collected'], 0)
+        self.assertEqual(stats['period_ground_pending'], 401)
         self.assertEqual(stats['period_collected_at_ground_tally'], 0)
 
         mark_response = self.client.post(f'/owner/mark-paid/{booking.id}/')
@@ -323,7 +326,66 @@ class BookingFlowTests(TestCase):
         stats_after = response_after.context['stats']
         self.assertEqual(stats_after['period_online_collection'], 99)
         self.assertEqual(stats_after['period_online_due_at_ground'], 0)
+        self.assertEqual(stats_after['period_ground_collected'], 401)
+        self.assertEqual(stats_after['period_ground_pending'], 0)
         self.assertEqual(stats_after['period_collected_at_ground_tally'], 401)
+
+    def test_owner_can_mark_booking_attendance(self):
+        started_at = timezone.localtime(timezone.now()) - timedelta(minutes=10)
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=started_at.date(),
+            start_time=started_at.time().replace(second=0, microsecond=0),
+            end_time=(started_at + timedelta(hours=1)).time().replace(second=0, microsecond=0),
+            is_booked=True,
+        )
+        booking = Booking.objects.create(
+            slot=slot,
+            user=self.customer,
+            customer_name=self.customer.name,
+            customer_phone=self.customer.phone_number,
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='FULL',
+            payment_status='PAID',
+            paid_amount=500,
+            due_amount=0,
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.post(f'/owner/attendance/{booking.id}/', {'status': 'NO_SHOW'})
+        self.assertEqual(response.status_code, 302)
+
+        attendance = BookingAttendance.objects.get(booking=booking)
+        self.assertEqual(attendance.status, 'NO_SHOW')
+        self.assertEqual(attendance.marked_by, self.owner)
+
+    def test_last_minute_dynamic_pricing_discount(self):
+        fixed_now = timezone.make_aware(datetime(2026, 6, 25, 17, 40), timezone.get_current_timezone())
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=fixed_now.date(),
+            start_time=time(18, 0),
+            end_time=time(19, 0),
+            is_booked=False,
+        )
+
+        with patch('bookings.views.timezone.now', return_value=fixed_now):
+            self.assertEqual(_slot_price_for_slot(slot), self.ground.night_price - 151)
+
+    def test_booked_slot_does_not_receive_dynamic_discount(self):
+        fixed_now = timezone.make_aware(datetime(2026, 6, 25, 9, 40), timezone.get_current_timezone())
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=fixed_now.date(),
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            is_booked=True,
+        )
+
+        with patch('bookings.views.timezone.now', return_value=fixed_now):
+            self.assertEqual(_slot_price_for_slot(slot), self.ground.day_price)
 
 
 class OwnerExpenseTests(TestCase):

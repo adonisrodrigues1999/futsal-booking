@@ -7,7 +7,10 @@
       <h3 class="mb-0">Owner Dashboard</h3>
       <p class="page-subtitle">Overview of activity across your grounds</p>
     </div>
-    <a href="/owner/manual-booking/" class="btn btn-primary">Manual Booking</a>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{% url 'owner_tournament_create' %}" class="btn btn-outline-primary">Add Tournament</a>
+      <a href="/owner/manual-booking/" class="btn btn-primary">Manual Booking</a>
+    </div>
   </div>
 
 
@@ -121,10 +124,9 @@
     </div>
     <div class="col-md-6">
       <div class="card p-3 shadow-sm h-100 border-start border-4 border-success">
-        <div class="small text-muted mb-1">Ground Money</div>
-        <div class="small">Collected at ground: <strong class="text-success">₹{{ stats.manual_paid_amount }}</strong></div>
-        <div class="small">Pending at ground: <strong class="text-warning">₹{{ stats.manual_due_amount }}</strong></div>
-        <div class="small">Collected at ground ({{ report_label }}): <strong class="text-success">₹{{ stats.period_collected_at_ground_tally }}</strong></div>
+        <div class="small text-muted mb-1">Ground Money ({{ report_label }})</div>
+        <div class="small">Collected at ground: <strong class="text-success">₹{{ stats.period_ground_collected }}</strong></div>
+        <div class="small">Pending at ground: <strong class="text-warning">₹{{ stats.period_ground_pending }}</strong></div>
       </div>
     </div>
   </div>
@@ -205,10 +207,36 @@
                 </div>
                 <div class="small text-muted">Paid: ₹{{ booking.paid_amount }} • Due: ₹{{ booking.due_amount }}</div>
                 <div class="small text-muted">Payment Time: {% if booking.payment_paid_at %}{{ booking.payment_paid_at|date:"Y-m-d g:i A" }}{% else %}-{% endif %}</div>
+                <div class="small mt-1">
+                  Attendance:
+                  {% if booking.attendance_status == 'SHOWED_UP' %}
+                    <span class="badge text-bg-success">Showed Up</span>
+                  {% elif booking.attendance_status == 'NO_SHOW' %}
+                    <span class="badge text-bg-danger">No Show</span>
+                  {% else %}
+                    <span class="badge text-bg-secondary">Unmarked</span>
+                  {% endif %}
+                  {% if booking.no_show_risk %}
+                    <span class="badge text-bg-warning">Call & Confirm</span>
+                    <span class="text-muted">History: {{ booking.no_show_history_count }} no-show{{ booking.no_show_history_count|pluralize }}</span>
+                  {% endif %}
+                </div>
               </div>
               <div class="text-end">
                 <div class="small text-muted">₹{{ booking.total_amount }}</div>
                 <div class="d-flex flex-column align-items-end gap-2 mt-2">
+                  {% if booking.can_mark_attendance %}
+                    <form method="post" action="{% url 'owner_mark_attendance' booking.id %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="status" value="SHOWED_UP">
+                      <button type="submit" class="btn btn-sm btn-outline-success">Showed Up</button>
+                    </form>
+                    <form method="post" action="{% url 'owner_mark_attendance' booking.id %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="status" value="NO_SHOW">
+                      <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm-message="Mark this booking as no-show?">No Show</button>
+                    </form>
+                  {% endif %}
                   {% if booking.can_owner_reschedule %}
                     <a href="{% url 'owner_reschedule_booking' booking.id %}" class="btn btn-sm btn-outline-primary">Emergency Reschedule</a>
                   {% endif %}
@@ -270,7 +298,47 @@
         <h6>Quick Actions</h6>
         <div class="d-grid gap-2">
           <a href="/owner/manual-booking/" class="btn btn-outline-primary">Create manual booking</a>
+          <a href="{% url 'owner_tournaments' %}" class="btn btn-outline-primary">Manage tournaments</a>
           <a href="/grounds/" class="btn btn-outline-secondary">Manage Grounds</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mt-1">
+    <div class="col-12">
+      <div class="card p-3 shadow-sm">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+          <h6 class="mb-0">Upcoming Tournaments</h6>
+          <a href="{% url 'owner_tournament_create' %}" class="btn btn-sm btn-outline-primary">Add Tournament</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Tournament</th>
+                <th>Ground</th>
+                <th>Dates</th>
+                <th>Status</th>
+                <th>Visibility</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tournament in owner_tournaments %}
+                <tr>
+                  <td><a href="{% url 'owner_tournament_update' tournament.id %}">{{ tournament.title }}</a></td>
+                  <td>{{ tournament.ground.name }}</td>
+                  <td>{{ tournament.start_date }}{% if tournament.end_date != tournament.start_date %} - {{ tournament.end_date }}{% endif %}</td>
+                  <td><span class="badge text-bg-info">{{ tournament.get_status_display }}</span></td>
+                  <td>{% if tournament.is_published %}<span class="badge text-bg-success">Published</span>{% else %}<span class="badge text-bg-secondary">Hidden</span>{% endif %}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="5" class="text-muted text-center">No tournaments added yet.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

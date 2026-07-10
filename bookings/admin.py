@@ -4,6 +4,7 @@ from .models import (
     Slot,
     Booking,
     BookingActivityLog,
+    BookingAttendance,
     ActivityLog,
     OwnerExpense,
 )
@@ -68,6 +69,20 @@ class BookingActivityLogAdmin(admin.ModelAdmin):
         'performed_by__phone_number',
         'booking__id',
     )
+
+
+@admin.register(BookingAttendance)
+class BookingAttendanceAdmin(admin.ModelAdmin):
+    list_display = (
+        'booking',
+        'status',
+        'marked_by',
+        'marked_at',
+        'updated_at',
+    )
+    list_filter = ('status', 'marked_at')
+    search_fields = ('booking__id', 'booking__customer_name', 'booking__customer_phone')
+    autocomplete_fields = ('booking', 'marked_by')
 
 @admin.register(ActivityLog)
 class ActivityLogAdmin(admin.ModelAdmin):

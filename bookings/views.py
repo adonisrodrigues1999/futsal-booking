@@ -6,7 +6,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction, OperationalError, IntegrityError
-from django.db.models import Count, Sum, Case, When, Value, IntegerField, F
+from django.db.models import Count, Sum
 from django.db.models.functions import Coalesce
 import time
 from django.core.mail import send_mail
@@ -29,7 +29,10 @@ try:
 except Exception:
     razorpay = None
 
-from .models import Ground, Slot, Booking, ActivityLog, OwnerExpense
+from .models import Ground, Slot, Booking, ActivityLog, OwnerExpense, BookingAttendance
+from .money import ground_collected_amount_expression, online_collected_amount_expression
+from grounds.forms import TournamentForm
+from grounds.models import Tournament
 from .slot_generation import ensure_slots_for_ground_date, ensure_next_month_slots_for_ground
 import os
 from django.http import FileResponse, Http404
@@ -50,6 +53,20 @@ def _is_day_slot(slot_time):
 
 def _slot_price(ground, slot_time):
     return ground.day_price if _is_day_slot(slot_time) else ground.night_price
+
+
+def _slot_discount(slot):
+    if slot.is_booked:
+        return 0
+    minutes_to_start = (_slot_start_datetime(slot) - timezone.localtime(timezone.now())).total_seconds() / 60
+    if 0 < minutes_to_start <= 30:
+        return 51 if _is_day_slot(slot.start_time) else 151
+    return 0
+
+
+def _slot_price_for_slot(slot):
+    base_price = _slot_price(slot.ground, slot.start_time)
+    return max(base_price - _slot_discount(slot), 0)
 
 
 def _payment_amounts(total_amount, payment_mode):
@@ -91,7 +108,7 @@ def _available_reschedule_slots(booking, selected_date):
             continue
         if _slot_start_datetime(slot) <= now_dt:
             continue
-        slots.append({'slot': slot, 'price': _slot_price(ground, slot.start_time)})
+        slots.append({'slot': slot, 'price': _slot_price_for_slot(slot)})
     return slots
 
 
@@ -232,6 +249,20 @@ def ground_list(request):
 
 
 @login_required
+def tournament_list(request):
+    today = timezone.localdate()
+    tournaments = (
+        Tournament.objects
+        .filter(is_published=True, status__in=['UPCOMING', 'ONGOING'], end_date__gte=today)
+        .select_related('ground', 'ground__owner')
+        .order_by('start_date', 'start_time', 'title')
+    )
+    return render(request, 'tournaments/tournament_list.html', {
+        'tournaments': tournaments,
+    })
+
+
+@login_required
 def ground_slots(request, ground_id):
     ground = get_object_or_404(Ground, id=ground_id)
     # date navigation: ?date=YYYY-MM-DD
@@ -279,7 +310,8 @@ def ground_slots(request, ground_id):
         visible_slots.append({
             'slot': slot,
             'is_past': is_past,
-            'price': _slot_price(ground, slot.start_time),
+            'price': _slot_price_for_slot(slot),
+            'discount': _slot_discount(slot),
             'time_icon': '☀️' if _is_day_slot(slot.start_time) else '🌙',
             'booking': booking,
             'user_booking': user_booking,
@@ -383,7 +415,7 @@ def create_razorpay_order(request):
     if existing_bookings >= 5:
         return JsonResponse({'success': False, 'error': 'You can only book up to 5 slots per day per ground.'}, status=400)
 
-    total_amount = _slot_price(slot.ground, slot.start_time)
+    total_amount = _slot_price_for_slot(slot)
     pay_now_amount, due_amount, resolved_mode = _payment_amounts(total_amount, payment_mode)
 
     client, key_id = _razorpay_client()
@@ -489,7 +521,7 @@ def verify_razorpay_payment_and_book(request):
                 if existing_bookings >= 5:
                     return JsonResponse({'success': False, 'error': 'You can only book up to 5 slots per day per ground.'}, status=400)
 
-                total_amount = _slot_price(slot.ground, slot.start_time)
+                total_amount = _slot_price_for_slot(slot)
                 paid_amount, due_amount, resolved_mode = _payment_amounts(total_amount, payment_mode)
                 expected_amount_paise = paid_amount * 100
                 if int(payment.get('amount') or 0) != expected_amount_paise:
@@ -636,6 +668,18 @@ def owner_dashboard(request):
         booking.can_mark_paid_at_ground = booking.status == 'BOOKED' and (
             booking.booking_source == 'MANUAL' or booking.due_amount > 0
         )
+        try:
+            booking.attendance_status = booking.attendance.status
+        except BookingAttendance.DoesNotExist:
+            booking.attendance_status = 'UNMARKED'
+        booking.can_mark_attendance = booking.status == 'BOOKED' and _slot_start_datetime(booking.slot) <= now_dt
+        booking.no_show_history_count = BookingAttendance.objects.filter(
+            booking__customer_phone=booking.customer_phone,
+            status='NO_SHOW',
+        ).exclude(booking=booking).count()
+        booking.no_show_risk = booking.no_show_history_count > 0 or (
+            booking.payment_mode == 'PARTIAL_99' and booking.due_amount > 0
+        )
 
     sums = bookings.aggregate(
         gross_revenue=Coalesce(Sum('total_amount'), 0),
@@ -645,21 +689,15 @@ def owner_dashboard(request):
     )
     online_sums = bookings.filter(booking_source='ONLINE').aggregate(
         bookings_count=Count('id'),
-        total_amount=Coalesce(Sum('total_amount'), 0),
-        paid_amount=Coalesce(Sum(
-            Case(
-                When(payment_mode='PARTIAL_99', then=Value(99)),
-                default=F('paid_amount'),
-                output_field=IntegerField(),
-            )
-        ), 0),
+        gross_amount=Coalesce(Sum('total_amount'), 0),
+        paid_amount=Coalesce(Sum(online_collected_amount_expression()), 0),
         due_amount=Coalesce(Sum('due_amount'), 0),
         owner_payout=Coalesce(Sum('owner_payout'), 0),
     )
     manual_sums = bookings.filter(booking_source='MANUAL').aggregate(
         bookings_count=Count('id'),
-        total_amount=Coalesce(Sum('total_amount'), 0),
-        paid_amount=Coalesce(Sum('paid_amount'), 0),
+        gross_amount=Coalesce(Sum('total_amount'), 0),
+        paid_amount=Coalesce(Sum(ground_collected_amount_expression()), 0),
         due_amount=Coalesce(Sum('due_amount'), 0),
         owner_payout=Coalesce(Sum('owner_payout'), 0),
     )
@@ -670,34 +708,13 @@ def owner_dashboard(request):
         pending_amount=Coalesce(Sum('due_amount'), 0),
     )
     period_online_sums = period_bookings.filter(booking_source='ONLINE').aggregate(
-        online_collection=Coalesce(Sum(
-            Case(
-                When(payment_mode='PARTIAL_99', then=Value(99)),
-                default=F('paid_amount'),
-                output_field=IntegerField(),
-            )
-        ), 0),
+        online_collection=Coalesce(Sum(online_collected_amount_expression()), 0),
         online_due_at_ground=Coalesce(Sum('due_amount'), 0),
     )
-    period_collected_at_ground = period_bookings.aggregate(
-        total=Coalesce(Sum(
-            Case(
-                When(
-                    booking_source='ONLINE',
-                    payment_mode='PARTIAL_99',
-                    payment_status='PAID_AT_GROUND',
-                    then=F('total_amount') - Value(99),
-                ),
-                When(
-                    booking_source='MANUAL',
-                    payment_status='PAID_AT_GROUND',
-                    then=F('total_amount'),
-                ),
-                default=Value(0),
-                output_field=IntegerField(),
-            )
-        ), 0)
-    )['total'] or 0
+    period_ground_sums = period_bookings.aggregate(
+        collected=Coalesce(Sum(ground_collected_amount_expression()), 0),
+        pending=Coalesce(Sum('due_amount'), 0),
+    )
 
     expense_total = expense_qs.aggregate(total=Coalesce(Sum('amount'), Decimal('0.00')))['total'] or Decimal('0.00')
     expense_by_category = expense_qs.values('category').annotate(total=Coalesce(Sum('amount'), Decimal('0.00'))).order_by('-total')
@@ -727,6 +744,12 @@ def owner_dashboard(request):
 
     selected_grounds = grounds.values('id', 'name').order_by('name')
     recent_expenses = OwnerExpense.objects.filter(owner=owner).select_related('ground').order_by('-spent_on', '-created_at')[:12]
+    owner_tournaments = (
+        Tournament.objects
+        .filter(ground__owner=owner)
+        .select_related('ground')
+        .order_by('start_date', 'start_time', 'title')[:10]
+    )
 
     context = {
         'stats': {
@@ -737,17 +760,19 @@ def owner_dashboard(request):
             'pending_amount': int(sums['pending_amount'] or 0),
             'online_bookings': source_map.get('ONLINE', 0),
             'manual_bookings': source_map.get('MANUAL', 0),
-            'online_total_amount': int(online_sums['total_amount'] or 0),
+            'online_total_amount': int(online_sums['gross_amount'] or 0),
             'online_paid_amount': int(online_sums['paid_amount'] or 0),
             'online_due_amount': int(online_sums['due_amount'] or 0),
             'online_owner_payable': int(online_sums['owner_payout'] or 0),
             'period_online_collection': int(period_online_sums['online_collection'] or 0),
             'period_online_due_at_ground': int(period_online_sums['online_due_at_ground'] or 0),
-            'period_collected_at_ground_tally': int(period_collected_at_ground or 0),
-            'manual_total_amount': int(manual_sums['total_amount'] or 0),
+            'period_ground_collected': int(period_ground_sums['collected'] or 0),
+            'period_ground_pending': int(period_ground_sums['pending'] or 0),
+            'period_collected_at_ground_tally': int(period_ground_sums['collected'] or 0),
+            'manual_total_amount': int(manual_sums['gross_amount'] or 0),
             'manual_paid_amount': int(manual_sums['paid_amount'] or 0),
             'manual_due_amount': int(manual_sums['due_amount'] or 0),
-            'manual_owner_collected': int(manual_sums['owner_payout'] or 0),
+            'manual_owner_collected': int(manual_sums['paid_amount'] or 0),
             'peak_hour': max(heatmap, key=heatmap.get) if heatmap else 'N/A',
             'active_grounds': grounds.count(),
             'period_income': period_income,
@@ -770,9 +795,84 @@ def owner_dashboard(request):
         'recent_expenses': recent_expenses,
         'expense_categories': OwnerExpense.CATEGORY_CHOICES,
         'expense_by_category': expense_category_summary,
+        'owner_tournaments': owner_tournaments,
     }
 
     return render(request, 'dashboard/owner_dashboard.html', context)
+
+
+@login_required
+def owner_tournaments(request):
+    if request.user.role != 'owner':
+        return redirect('/')
+
+    tournaments = (
+        Tournament.objects
+        .filter(ground__owner=request.user)
+        .select_related('ground')
+        .order_by('start_date', 'start_time', 'title')
+    )
+    return render(request, 'tournaments/owner_tournaments.html', {
+        'tournaments': tournaments,
+    })
+
+
+@login_required
+def owner_tournament_create(request):
+    if request.user.role != 'owner':
+        return redirect('/')
+
+    form = TournamentForm(request.POST or None, owner=request.user)
+    if request.method == 'POST' and form.is_valid():
+        tournament = form.save()
+        messages.success(request, f'Tournament added: {tournament.title}.')
+        return redirect('owner_tournaments')
+
+    return render(request, 'tournaments/tournament_form.html', {
+        'form': form,
+        'page_title': 'Add Tournament',
+        'submit_label': 'Create Tournament',
+    })
+
+
+@login_required
+def owner_tournament_update(request, tournament_id):
+    if request.user.role != 'owner':
+        return redirect('/')
+
+    tournament = get_object_or_404(
+        Tournament.objects.select_related('ground'),
+        id=tournament_id,
+        ground__owner=request.user,
+    )
+    form = TournamentForm(request.POST or None, instance=tournament, owner=request.user)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Tournament updated.')
+        return redirect('owner_tournaments')
+
+    return render(request, 'tournaments/tournament_form.html', {
+        'form': form,
+        'page_title': 'Edit Tournament',
+        'submit_label': 'Save Changes',
+    })
+
+
+@login_required
+def owner_tournament_delete(request, tournament_id):
+    if request.user.role != 'owner':
+        return redirect('/')
+
+    tournament = get_object_or_404(
+        Tournament,
+        id=tournament_id,
+        ground__owner=request.user,
+    )
+    if request.method == 'POST':
+        title = tournament.title
+        tournament.delete()
+        messages.success(request, f'Tournament deleted: {title}.')
+    return redirect('owner_tournaments')
 
 
 @login_required
@@ -1319,7 +1419,7 @@ def owner_manual_booking(request):
                         return redirect('/owner/manual-booking/')
 
                 for slot in slots_qs:
-                    total_amount = _slot_price(slot.ground, slot.start_time)
+                    total_amount = _slot_price_for_slot(slot)
                     owner_payout = total_amount
 
                     booking = Booking.objects.create(
@@ -1382,7 +1482,7 @@ def owner_manual_booking(request):
                 continue
             if _is_restricted_manual_hour(s.start_time):
                 continue
-            price = _slot_price(s.ground, s.start_time)
+            price = _slot_price_for_slot(s)
             slots.append({'slot': s, 'price': price})
     else:
         # default: show all available upcoming slots across grounds owned by this owner
@@ -1392,7 +1492,7 @@ def owner_manual_booking(request):
                 continue
             if _is_restricted_manual_hour(s.start_time):
                 continue
-            price = _slot_price(s.ground, s.start_time)
+            price = _slot_price_for_slot(s)
             slots.append({'slot': s, 'price': price})
 
     return render(request, 'owner/manual_booking.html', {
@@ -1462,7 +1562,7 @@ def customer_reschedule_booking(request, booking_id):
                 new_slot.is_booked = True
                 new_slot.save(update_fields=['is_booked'])
 
-                new_total = _slot_price(new_slot.ground, new_slot.start_time)
+                new_total = _slot_price_for_slot(new_slot)
                 locked_booking.slot = new_slot
                 locked_booking.total_amount = new_total
                 locked_booking.owner_payout = new_total
@@ -1558,7 +1658,7 @@ def owner_reschedule_booking(request, booking_id):
                 new_slot.is_booked = True
                 new_slot.save(update_fields=['is_booked'])
 
-                new_total = _slot_price(new_slot.ground, new_slot.start_time)
+                new_total = _slot_price_for_slot(new_slot)
                 locked_booking.slot = new_slot
                 locked_booking.total_amount = new_total
                 locked_booking.owner_payout = new_total
@@ -1627,6 +1727,50 @@ def owner_mark_paid_at_ground(request, booking_id):
         meta={'marked_at_ground': True},
     )
     messages.success(request, f'Payment marked as paid at ground for {booking.customer_name}.')
+    return redirect('/dashboard/owner/')
+
+
+@login_required
+def owner_mark_attendance(request, booking_id):
+    if request.method != 'POST':
+        return redirect('/dashboard/owner/')
+
+    booking = get_object_or_404(
+        Booking.objects.select_related('slot__ground__owner'),
+        id=booking_id
+    )
+    if booking.slot.ground.owner != request.user or booking.status != 'BOOKED':
+        messages.error(request, 'Booking not found.')
+        return redirect('/dashboard/owner/')
+
+    if _slot_start_datetime(booking.slot) > timezone.localtime(timezone.now()):
+        messages.error(request, 'Attendance can be marked only after the slot starts.')
+        return redirect('/dashboard/owner/')
+
+    status = request.POST.get('status')
+    if status not in {'SHOWED_UP', 'NO_SHOW'}:
+        messages.error(request, 'Invalid attendance status.')
+        return redirect('/dashboard/owner/')
+
+    note = (request.POST.get('note') or '').strip()
+    attendance, _ = BookingAttendance.objects.update_or_create(
+        booking=booking,
+        defaults={
+            'status': status,
+            'marked_by': request.user,
+            'marked_at': timezone.now(),
+            'note': note,
+        },
+    )
+
+    ActivityLog.objects.create(
+        user=request.user,
+        action='OWNER_MARKED_ATTENDANCE',
+        booking=booking,
+        slot=booking.slot,
+        meta={'attendance_status': attendance.status},
+    )
+    messages.success(request, f'Attendance marked as {attendance.get_status_display()} for {booking.customer_name}.')
     return redirect('/dashboard/owner/')
 
 

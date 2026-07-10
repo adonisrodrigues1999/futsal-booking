@@ -144,6 +144,11 @@ az webapp config appsettings set \
     SECRET_KEY="$DJANGO_SECRET_KEY" \
     ALLOWED_HOSTS="$WEBAPP_NAME.azurewebsites.net,.azurewebsites.net" \
     CSRF_TRUSTED_ORIGINS="https://$WEBAPP_NAME.azurewebsites.net,https://*.azurewebsites.net" \
+    EMAIL_HOST=smtp.gmail.com \
+    EMAIL_PORT=587 \
+    EMAIL_USE_TLS=True \
+    EMAIL_HOST_USER=foo.book.online.india@gmail.com \
+    DEFAULT_FROM_EMAIL=foo.book.online.india@gmail.com \
     DB_HOST="$PG_SERVER.postgres.database.azure.com" \
     DB_NAME="$PG_DB" \
     DB_USER="$PG_ADMIN" \
@@ -161,9 +166,9 @@ az webapp config appsettings set \
   --resource-group "$RESOURCE_GROUP" \
   --name "$WEBAPP_NAME" \
   --settings \
-    EMAIL_HOST_USER="<gmail-address>" \
+    EMAIL_HOST_USER="foo.book.online.india@gmail.com" \
     EMAIL_HOST_PASSWORD="<gmail-app-password>" \
-    DEFAULT_FROM_EMAIL="<gmail-address>" \
+    DEFAULT_FROM_EMAIL="foo.book.online.india@gmail.com" \
     RAZORPAY_KEY_ID="<razorpay-key-id>" \
     RAZORPAY_KEY_SECRET="<razorpay-key-secret>" \
     RAZORPAY_WEBHOOK_SECRET="<razorpay-webhook-secret>"

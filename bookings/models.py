@@ -74,6 +74,28 @@ class BookingActivityLog(models.Model):
         return f"{self.action} by {self.performed_by} on {self.booking}"
 
 
+class BookingAttendance(models.Model):
+    STATUS_CHOICES = (
+        ('SHOWED_UP', 'Showed Up'),
+        ('NO_SHOW', 'No Show'),
+        ('UNMARKED', 'Unmarked'),
+    )
+
+    booking = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name='attendance')
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='UNMARKED')
+    marked_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    marked_at = models.DateTimeField(null=True, blank=True)
+    note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"{self.booking_id} - {self.get_status_display()}"
+
+
 
 class CommissionLedger(models.Model):
     ground = models.ForeignKey(Ground, on_delete=models.CASCADE)
@@ -148,6 +170,7 @@ class ActivityLog(models.Model):
         ('CUSTOMER_RESCHEDULED', 'Customer Rescheduled'),
         ('OWNER_RESCHEDULED', 'Owner Rescheduled'),
         ('OWNER_MARKED_PAID', 'Owner Marked Paid'),
+        ('OWNER_MARKED_ATTENDANCE', 'Owner Marked Attendance'),
         ('ADMIN_ACTION', 'Admin Action'),
     )
 

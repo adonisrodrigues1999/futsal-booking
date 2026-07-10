@@ -698,6 +698,77 @@ h6,
   text-align: right;
 }
 
+.ad-cta-banner,
+.ad-cta-strip,
+.ad-spot {
+  border: 1px dashed rgba(22, 101, 52, 0.35);
+  background:
+    linear-gradient(135deg, rgba(236, 253, 245, 0.96), rgba(255, 251, 235, 0.92)),
+    #ffffff;
+  box-shadow: 0 14px 28px rgba(12, 28, 18, 0.08);
+}
+
+.ad-cta-banner {
+  border-radius: 1.25rem;
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ad-cta-kicker,
+.ad-spot-label,
+.ad-cta-strip span {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  background: rgba(22, 101, 52, 0.11);
+  color: #166534;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.28rem 0.62rem;
+  margin-bottom: 0.45rem;
+}
+
+.ad-cta-banner p,
+.ad-spot p {
+  color: #647067;
+  font-size: 0.92rem;
+}
+
+.ad-spot {
+  border-radius: 1.1rem;
+  padding: 1rem;
+}
+
+.ad-spot h6 {
+  margin-bottom: 0.4rem;
+}
+
+.ad-spot a,
+.ad-cta-strip a {
+  color: #166534;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.ad-spot a:hover,
+.ad-cta-strip a:hover {
+  text-decoration: underline;
+}
+
+.ad-cta-strip {
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+}
+
 .app-loader {
   position: fixed;
   inset: 0;
@@ -1063,5 +1134,10 @@ h6,
 
   .footer-note {
     text-align: left;
+  }
+
+  .ad-cta-banner {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
