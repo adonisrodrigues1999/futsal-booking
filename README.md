@@ -244,7 +244,7 @@ What they are for:
 
 On Azure Web App, the `main` branch deploy workflow does not reseed demo data automatically, so the same demo content stays in place across pushes.
 
-For a clean demo environment on any environment, run:
+For a clean Goa-focused demo environment on any environment, run:
 
 ```bash
 python manage.py migrate
@@ -257,11 +257,12 @@ Demo login accounts created by the command:
 - Owner: `demo_owner@example.com` / `demo12345`
 - Customer: `demo_customer@example.com` / `demo12345`
 - Player: `demo_player@example.com` / `demo12345`
+- Guest: `demo_guest@example.com` / `demo12345`
 
 Best demo flow:
 
 1. Log in as `demo_customer@example.com` and show the customer home page.
-2. Open the ground slot page and show direct date selection, booking, loyalty points, free credit, reviews, and share button.
+2. Open `Goa Turf Arena` or `Goa Beach Arena` and show direct date selection, booking, loyalty points, free credit, reviews, and share button.
 3. Show the tournament cards and register one team online to demonstrate category fees and contact links.
 4. Log in as `demo_owner@example.com` and show the owner dashboard, tournaments, and revenue/expense view.
 5. Log in as `demo_admin@example.com` and show the top-income grounds dashboard and overall analytics.
@@ -273,7 +274,7 @@ python manage.py migrate
 python manage.py setup_demo --reset
 ```
 
-The command is idempotent enough for repeated demos, but `--reset` is the cleanest way to ensure the sample users, grounds, bookings, tournaments, reviews, alerts, and rewards are recreated consistently.
+The command is idempotent enough for repeated demos, but `--reset` is the cleanest way to ensure the old demo data is deleted first and the sample users, grounds, bookings, tournaments, reviews, alerts, and rewards are recreated consistently.
 
 If you need to seed or refresh the demo data on Azure App Service, open an SSH session or use a one-off command inside the app container and run:
 
