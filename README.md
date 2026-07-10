@@ -156,6 +156,10 @@ Recommended values to externalize:
 
 - `SECRET_KEY`
 - database host, name, user, password, port
+- `EMAIL_HOST`
+- `EMAIL_PORT`
+- `EMAIL_USE_TLS`
+- `EMAIL_BACKEND`
 - `EMAIL_HOST_USER`
 - `EMAIL_HOST_PASSWORD`
 - `DEFAULT_FROM_EMAIL`
@@ -165,6 +169,8 @@ Recommended values to externalize:
 - `STRIPE_SECRET_KEY`
 - `STRIPE_PUBLIC_KEY`
 - `STRIPE_WEBHOOK_SECRET`
+
+For Gmail SMTP, create an app password and set `EMAIL_HOST_PASSWORD`. For Razorpay, add the dashboard keys plus the webhook secret so payment verification can work end to end.
 
 ### 5. Apply migrations
 
@@ -218,6 +224,7 @@ Available project-specific commands include:
 
 ```bash
 python manage.py create_admin
+python manage.py setup_demo
 python manage.py populate_data
 python manage.py sync_ground_images
 python manage.py clear_bookings
@@ -229,8 +236,43 @@ What they are for:
 - `sync_ground_images`: copies files from `groundsimages/` into static assets and updates `Ground.image`
 - `send_reminders`: sends reminder emails roughly 45 minutes before booked slots
 - `clear_bookings`: utility cleanup command for booking data
-- `populate_data`: seed/demo data helper
+- `setup_demo`: creates a full demo environment with dummy admin, owner, grounds, bookings, tournaments, reviews, rewards, and alerts
+- `populate_data`: legacy seed/demo helper kept for reference
 - `create_admin`: custom admin bootstrap command
+
+## Demo Setup
+
+For a clean demo environment, run:
+
+```bash
+python manage.py migrate
+python manage.py setup_demo --reset
+```
+
+Demo login accounts created by the command:
+
+- Admin: `demo_admin@example.com` / `demo12345`
+- Owner: `demo_owner@example.com` / `demo12345`
+- Customer: `demo_customer@example.com` / `demo12345`
+- Player: `demo_player@example.com` / `demo12345`
+
+Best demo flow:
+
+1. Log in as `demo_customer@example.com` and show the customer home page.
+2. Open the ground slot page and show direct date selection, booking, loyalty points, free credit, reviews, and share button.
+3. Show the tournament cards and register one team online to demonstrate category fees and contact links.
+4. Log in as `demo_owner@example.com` and show the owner dashboard, tournaments, and revenue/expense view.
+5. Log in as `demo_admin@example.com` and show the top-income grounds dashboard and overall analytics.
+
+High-value features to emphasize:
+
+- Fast booking with date-based slot loading
+- Loyalty points and free-booking rewards
+- Referral rewards for booking and tournament registration
+- Tournament promotion with call/share actions
+- Ground reviews with photos and social proof
+- Public trending leaderboards
+- Admin revenue ranking by ground
 
 ## Deployment Notes
 

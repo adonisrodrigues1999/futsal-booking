@@ -147,7 +147,9 @@ az webapp config appsettings set \
     EMAIL_HOST=smtp.gmail.com \
     EMAIL_PORT=587 \
     EMAIL_USE_TLS=True \
+    EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend \
     EMAIL_HOST_USER=foo.book.online.india@gmail.com \
+    EMAIL_HOST_PASSWORD="<gmail-app-password>" \
     DEFAULT_FROM_EMAIL=foo.book.online.india@gmail.com \
     DB_HOST="$PG_SERVER.postgres.database.azure.com" \
     DB_NAME="$PG_DB" \
@@ -169,6 +171,7 @@ az webapp config appsettings set \
     EMAIL_HOST_USER="foo.book.online.india@gmail.com" \
     EMAIL_HOST_PASSWORD="<gmail-app-password>" \
     DEFAULT_FROM_EMAIL="foo.book.online.india@gmail.com" \
+    EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend" \
     RAZORPAY_KEY_ID="<razorpay-key-id>" \
     RAZORPAY_KEY_SECRET="<razorpay-key-secret>" \
     RAZORPAY_WEBHOOK_SECRET="<razorpay-webhook-secret>"
