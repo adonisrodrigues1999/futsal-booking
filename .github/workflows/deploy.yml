@@ -68,6 +68,13 @@ jobs:
               EMAIL_HOST_PASSWORD="${{ secrets.EMAIL_HOST_PASSWORD }}" \
               DEFAULT_FROM_EMAIL=foo.book.online.india@gmail.com
 
+      - name: Configure startup command
+        run: |
+          az webapp config set \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_WEBAPP_NAME" \
+            --startup-file "bash /home/site/wwwroot/startup.sh"
+
       - uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
