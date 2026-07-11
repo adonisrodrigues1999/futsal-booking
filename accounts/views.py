@@ -42,17 +42,28 @@ def register(request):
                 reverse('verify_email', args=[verification.token])
             )
             from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
-            send_mail(
-                'Verify your email - FootBook',
-                f'Click the link to verify your email: {verification_url}',
-                from_email,
-                [user.email],
-                fail_silently=False,
-            )
+            email_sent = False
+            try:
+                send_mail(
+                    'Verify your email - FootBook',
+                    f'Click the link to verify your email: {verification_url}',
+                    from_email,
+                    [user.email],
+                    fail_silently=False,
+                )
+                email_sent = True
+            except Exception:
+                messages.warning(
+                    request,
+                    'Registration succeeded, but the verification email could not be sent right now. '
+                    'Please contact support if you do not receive the email.'
+                )
 
             # Instead of redirecting immediately, render the register page
             # and set a flag so the frontend shows a prominent popup and
             # then redirects the user to the login page.
+            if email_sent:
+                messages.success(request, 'Registration successful! Please check your email to verify your account.')
             form = UserRegistrationForm()
             return render(request, 'accounts/register.html', {
                 'form': form,

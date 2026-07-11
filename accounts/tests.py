@@ -1,11 +1,14 @@
 from datetime import time, timedelta
 
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import User
 from bookings.models import Booking, Slot
 from grounds.models import Ground
+from bookings.models import EmailVerification
 
 
 class AdminDashboardSettlementSplitTests(TestCase):
@@ -192,3 +195,19 @@ class AdminDashboardSettlementSplitTests(TestCase):
         ranking = list(response.context['ground_income_ranking'])
         self.assertEqual(ranking[0]['slot__ground__name'], 'Admin Test Ground 2')
         self.assertEqual(ranking[0]['revenue'], 900)
+
+
+class RegistrationResilienceTests(TestCase):
+    @patch('accounts.views.send_mail', side_effect=Exception('SMTP down'))
+    def test_register_succeeds_when_email_sending_fails(self, mocked_send_mail):
+        response = self.client.post('/accounts/register/', {
+            'email': 'newuser@example.com',
+            'phone_number': '9999912345',
+            'name': 'New User',
+            'password': 'password123',
+            'password_confirm': 'password123',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(User.objects.filter(email='newuser@example.com').exists())
+        self.assertTrue(EmailVerification.objects.filter(user__email='newuser@example.com').exists())
