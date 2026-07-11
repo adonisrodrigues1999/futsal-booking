@@ -166,6 +166,8 @@ Recommended values to externalize:
 - `EMAIL_SENDER_ADDRESS`
 - `EMAIL_SUBJECT_PREFIX`
 - `DEFAULT_FROM_EMAIL`
+- `DB_CONN_MAX_AGE`
+- `PREGENERATE_FUTURE_SLOTS`
 - `RAZORPAY_KEY_ID`
 - `RAZORPAY_KEY_SECRET`
 - `RAZORPAY_WEBHOOK_SECRET`
@@ -175,6 +177,7 @@ Recommended values to externalize:
 
 For Gmail SMTP, create an app password and set `EMAIL_HOST_PASSWORD`. For Razorpay, add the dashboard keys plus the webhook secret so payment verification can work end to end.
 Outbound mail now uses a consistent sender identity: `FootBook <foo.book.online.india@gmail.com>`, with a short `[FootBook]` subject prefix to improve recognition in inboxes.
+For production, keep `PREGENERATE_FUTURE_SLOTS=False` unless you run a background job that prebuilds slots off the request path.
 
 ### 5. Apply migrations
 

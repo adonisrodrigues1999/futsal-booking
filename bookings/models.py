@@ -13,6 +13,9 @@ class Slot(models.Model):
 
     class Meta:
         unique_together = ('ground', 'date', 'start_time')
+        indexes = [
+            models.Index(fields=['ground', 'date']),
+        ]
 
     def __str__(self):
         return f"{self.ground.name} - {self.date} {self.start_time}-{self.end_time}"
@@ -59,6 +62,13 @@ class Booking(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     reminder_sent = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['status', 'slot']),
+            models.Index(fields=['booking_source', 'created_at']),
+        ]
 
     def __str__(self):
         return f"Booking {self.id} - {self.customer_name}"
@@ -159,6 +169,9 @@ class OwnerExpense(models.Model):
 
     class Meta:
         ordering = ['-spent_on', '-created_at']
+        indexes = [
+            models.Index(fields=['owner', 'spent_on']),
+        ]
 
     def __str__(self):
         return f"{self.owner} | {self.category} | {self.amount}"
@@ -181,6 +194,9 @@ class RewardTransaction(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+        ]
 
     def __str__(self):
         return f"{self.user} | {self.reason} | {self.points}"
@@ -198,6 +214,9 @@ class AlertSubscription(models.Model):
 
     class Meta:
         unique_together = ('user', 'ground')
+        indexes = [
+            models.Index(fields=['user', 'ground']),
+        ]
 
     def __str__(self):
         scope = self.ground.name if self.ground else 'Global'
@@ -220,6 +239,10 @@ class AlertDispatchLog(models.Model):
     class Meta:
         unique_together = ('ground', 'tournament', 'reason', 'alert_date')
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['ground', 'alert_date']),
+            models.Index(fields=['tournament', 'alert_date']),
+        ]
 
     def __str__(self):
         return f"{self.reason} | {self.ground or self.tournament}"
@@ -251,6 +274,12 @@ class ActivityLog(models.Model):
 
     meta = models.JSONField(blank=True, null=True)
     timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['action', 'timestamp']),
+            models.Index(fields=['booking', 'timestamp']),
+        ]
 
     def __str__(self):
         return f"{self.action} | {self.user} | {self.timestamp}"

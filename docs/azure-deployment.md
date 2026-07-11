@@ -154,6 +154,8 @@ az webapp config appsettings set \
     EMAIL_SENDER_ADDRESS=foo.book.online.india@gmail.com \
     EMAIL_SUBJECT_PREFIX="[FootBook] " \
     DEFAULT_FROM_EMAIL="FootBook <foo.book.online.india@gmail.com>" \
+    DB_CONN_MAX_AGE=60 \
+    PREGENERATE_FUTURE_SLOTS=False \
     DB_HOST="$PG_SERVER.postgres.database.azure.com" \
     DB_NAME="$PG_DB" \
     DB_USER="$PG_ADMIN" \
@@ -177,6 +179,8 @@ az webapp config appsettings set \
     EMAIL_SENDER_ADDRESS="foo.book.online.india@gmail.com" \
     EMAIL_SUBJECT_PREFIX="[FootBook] " \
     DEFAULT_FROM_EMAIL="FootBook <foo.book.online.india@gmail.com>" \
+    DB_CONN_MAX_AGE=60 \
+    PREGENERATE_FUTURE_SLOTS=False \
     EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend" \
     RAZORPAY_KEY_ID="<razorpay-key-id>" \
     RAZORPAY_KEY_SECRET="<razorpay-key-secret>" \

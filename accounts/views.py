@@ -1,3 +1,5 @@
+import logging
+
 from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout, authenticate
 from django.contrib import messages
@@ -23,6 +25,9 @@ from .forms import UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm,
 from grounds.models import Ground, Tournament, TournamentRegistration
 
 
+logger = logging.getLogger(__name__)
+
+
 def register(request):
     if request.user.is_authenticated:
         return redirect('home')
@@ -43,6 +48,12 @@ def register(request):
             )
             from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
             email_sent = False
+            logger.info(
+                "Register verification email attempt backend=%s from=%s to=%s",
+                getattr(settings, 'EMAIL_BACKEND', 'unknown'),
+                from_email,
+                user.email,
+            )
             try:
                 send_mail(
                     'Verify your email - FootBook',
@@ -52,7 +63,9 @@ def register(request):
                     fail_silently=False,
                 )
                 email_sent = True
+                logger.info("Register verification email sent to %s", user.email)
             except Exception:
+                logger.exception("Register verification email failed for %s", user.email)
                 messages.warning(
                     request,
                     'Registration succeeded, but the verification email could not be sent right now. '
@@ -63,12 +76,19 @@ def register(request):
             # and set a flag so the frontend shows a prominent popup and
             # then redirects the user to the login page.
             if email_sent:
-                messages.success(request, 'Registration successful! Please check your email to verify your account.')
+                messages.success(
+                    request,
+                    'Registration successful! Please check your email to verify your account. '
+                    'Also check your spam or junk folder if you do not see it in your inbox.'
+                )
             form = UserRegistrationForm()
             return render(request, 'accounts/register.html', {
                 'form': form,
                 'show_verification_popup': True,
-                'verification_message': 'Registration successful! Please check your email to verify your account.'
+                'verification_message': (
+                    'Registration successful! Please check your email to verify your account. '
+                    'Also check your spam or junk folder if you do not see it in your inbox.'
+                )
             })
     else:
         form = UserRegistrationForm()
@@ -246,14 +266,20 @@ def password_reset_complete(request):
     return render(request, 'accounts/password_reset_complete.html')
 
 
+def terms_conditions(request):
+    return render(request, 'accounts/terms.html')
+
+
 @login_required
 def admin_dashboard(request):
     if request.user.role != 'admin':
         messages.error(request, 'Access denied.')
         return redirect('home')
 
-    ground_owners = User.objects.filter(role='owner')
-    grounds = Ground.objects.all()
+    ground_owners = User.objects.filter(role='owner').annotate(
+        grounds_count=Count('ground', distinct=True),
+    )
+    grounds = Ground.objects.select_related('owner').all()
     customers = User.objects.filter(role='customer')
     booked = Booking.objects.filter(status='BOOKED')
 

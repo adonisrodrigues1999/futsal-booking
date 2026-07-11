@@ -346,7 +346,7 @@ def home(request):
 
 @login_required
 def ground_list(request):
-    grounds = Ground.objects.annotate(
+    grounds = Ground.objects.select_related('owner').annotate(
         review_count=Count('reviews', distinct=True),
     )
     for ground in grounds:
@@ -419,7 +419,8 @@ def ground_slots(request, ground_id):
 
     # Ensure slots exist for the selected date and precreate next month if missing
     ensure_slots_for_ground_date(ground=ground, slot_date=selected_date)
-    ensure_next_month_slots_for_ground(ground=ground)
+    if getattr(settings, 'PREGENERATE_FUTURE_SLOTS', False):
+        ensure_next_month_slots_for_ground(ground=ground)
 
     # fetch slots for that date
     slots_qs = Slot.objects.filter(ground=ground, date=selected_date).order_by('start_time')
@@ -820,11 +821,9 @@ def my_bookings(request):
 @login_required
 def owner_dashboard(request):
     owner = request.user
-    grounds = Ground.objects.filter(owner=owner)
-    for g in grounds:
-        ensure_next_month_slots_for_ground(ground=g)
+    grounds = Ground.objects.filter(owner=owner).select_related('owner')
 
-    bookings = Booking.objects.filter(slot__ground__in=grounds, status='BOOKED')
+    bookings = Booking.objects.filter(slot__ground__in=grounds, status='BOOKED').select_related('slot__ground', 'attendance')
     today = timezone.localdate()
 
     period = request.GET.get('period', 'month')
@@ -1017,7 +1016,7 @@ def owner_tournaments(request):
     if request.user.role not in {'owner', 'admin'}:
         return redirect('/')
 
-    tournaments_qs = Tournament.objects.select_related('ground')
+    tournaments_qs = Tournament.objects.select_related('ground', 'ground__owner')
     if request.user.role == 'owner':
         tournaments_qs = tournaments_qs.filter(ground__owner=request.user)
     tournaments = tournaments_qs.order_by('start_date', 'start_time', 'title')
@@ -1728,7 +1727,7 @@ def owner_manual_booking(request):
 
     now_dt = timezone.localtime(timezone.now())
 
-    if selected_ground:
+    if selected_ground and getattr(settings, 'PREGENERATE_FUTURE_SLOTS', False):
         ensure_next_month_slots_for_ground(ground=selected_ground)
 
     if selected_ground and selected_date:

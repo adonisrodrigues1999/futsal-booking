@@ -85,6 +85,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "django.middleware.gzip.GZipMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -130,6 +131,7 @@ if os.getenv("DB_HOST"):
             "OPTIONS": {
                 "sslmode": os.getenv("DB_SSLMODE", "require"),
             },
+            "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
         }
     }
 else:
@@ -137,6 +139,7 @@ else:
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
+            "CONN_MAX_AGE": 0,
         }
     }
 
@@ -188,6 +191,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = 'accounts.User'
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/dashboard/'
 CSRF_TRUSTED_ORIGINS = merged_env_list(
     "CSRF_TRUSTED_ORIGINS",
     default=[
@@ -229,6 +234,7 @@ SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
 CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax")
 # If behind a proxy/load balancer that sets X-Forwarded-Proto, enable this so Django knows requests are secure
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+PREGENERATE_FUTURE_SLOTS = env_bool("PREGENERATE_FUTURE_SLOTS", default=False)
 
 
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
@@ -242,3 +248,20 @@ SECURE_SSL_REDIRECT = False
 
 PREPEND_WWW = env_bool("PREPEND_WWW", default=False)
 FOOTBOOK_DEMO_MODE = env_bool("FOOTBOOK_DEMO_MODE", default=False)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        "accounts.views": {
+            "handlers": ["console"],
+            "level": os.getenv("FOOTBOOK_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+    },
+}

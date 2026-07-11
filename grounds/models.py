@@ -67,6 +67,10 @@ class Tournament(models.Model):
 
     class Meta:
         ordering = ['start_date', 'start_time', 'title']
+        indexes = [
+            models.Index(fields=['is_published', 'status', 'start_date']),
+            models.Index(fields=['ground', 'start_date']),
+        ]
 
     def __str__(self):
         return f"{self.title} - {self.ground.name}"
@@ -94,6 +98,10 @@ class TournamentRegistration(models.Model):
     class Meta:
         ordering = ['-created_at']
         unique_together = ('tournament', 'contact_phone', 'category_name')
+        indexes = [
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['tournament', 'created_at']),
+        ]
 
     def __str__(self):
         return f"{self.team_name} | {self.tournament.title}"
@@ -110,6 +118,9 @@ class GroundReview(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['ground', '-created_at']),
+        ]
 
     def __str__(self):
         return f"{self.ground.name} review by {self.user or 'Guest'}"
