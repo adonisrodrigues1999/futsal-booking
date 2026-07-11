@@ -211,3 +211,5 @@ class RegistrationResilienceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(User.objects.filter(email='newuser@example.com').exists())
         self.assertTrue(EmailVerification.objects.filter(user__email='newuser@example.com').exists())
+        self.assertContains(response, 'wa.me/918625877270')
+        self.assertContains(response, 'newuser%40example.com')

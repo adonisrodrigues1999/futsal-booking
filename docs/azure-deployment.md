@@ -130,7 +130,7 @@ Set the startup command:
 az webapp config set \
   --resource-group "$RESOURCE_GROUP" \
   --name "$WEBAPP_NAME" \
-  --startup-file "bash startup.sh"
+  --startup-file "bash /home/site/wwwroot/startup.sh"
 ```
 
 Set production app settings:

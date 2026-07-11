@@ -1,3 +1,5 @@
+import logging
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -39,6 +41,8 @@ from .rewards import award_booking_rewards, award_tournament_registration_reward
 import os
 from django.http import FileResponse, Http404
 from django.conf import settings as djsettings
+
+logger = logging.getLogger(__name__)
 
 
 def _slot_start_datetime(slot):
@@ -141,7 +145,10 @@ def _owner_booking_email(booking):
         "Regards,\nFootBook"
     )
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
-    send_mail(subject, body, from_email, [owner.email], fail_silently=True)
+    try:
+        send_mail(subject, body, from_email, [owner.email], fail_silently=False)
+    except Exception:
+        logger.exception("Failed to send owner booking email for booking %s", booking.id)
 
 
 def _razorpay_client():
@@ -170,7 +177,10 @@ def _operating_window_for_date(ground, target_date):
 
 def _send_email(subject, body, recipients):
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
-    send_mail(subject, body, from_email, recipients, fail_silently=True)
+    try:
+        send_mail(subject, body, from_email, recipients, fail_silently=False)
+    except Exception:
+        logger.exception("Failed to send email subject=%s recipients=%s", subject, recipients)
 
 
 def _dispatch_ground_alerts(ground, slot=None, reason='PRICE_DROP'):

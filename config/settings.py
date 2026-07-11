@@ -35,6 +35,20 @@ def env_list(name, default=None):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def env_text(name, default=""):
+    value = os.getenv(name, default)
+    if value is None:
+        return default
+    return value.strip()
+
+
+def env_secret(name, default=""):
+    value = os.getenv(name, default)
+    if value is None:
+        return default
+    return "".join(value.split())
+
+
 def merged_env_list(name, default=None):
     values = env_list(name, default=[])
     merged = list(default or [])
@@ -205,13 +219,13 @@ CSRF_TRUSTED_ORIGINS = merged_env_list(
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", default=True)
-EMAIL_HOST_USER = "foo.book.online.india@gmail.com"
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-EMAIL_SENDER_NAME = os.getenv("EMAIL_SENDER_NAME", "FootBook")
-EMAIL_SENDER_ADDRESS = os.getenv("EMAIL_SENDER_ADDRESS", "foo.book.online.india@gmail.com")
+EMAIL_HOST_USER = env_text("EMAIL_HOST_USER", "foo.book.online.india@gmail.com")
+EMAIL_HOST_PASSWORD = env_secret("EMAIL_HOST_PASSWORD", "")
+EMAIL_SENDER_NAME = env_text("EMAIL_SENDER_NAME", "FootBook")
+EMAIL_SENDER_ADDRESS = env_text("EMAIL_SENDER_ADDRESS", EMAIL_HOST_USER)
 DEFAULT_FROM_EMAIL = f"{EMAIL_SENDER_NAME} <{EMAIL_SENDER_ADDRESS}>"
 SERVER_EMAIL = EMAIL_SENDER_ADDRESS
-EMAIL_SUBJECT_PREFIX = os.getenv("EMAIL_SUBJECT_PREFIX", "[FootBook] ")
+EMAIL_SUBJECT_PREFIX = env_text("EMAIL_SUBJECT_PREFIX", "[FootBook] ")
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     (

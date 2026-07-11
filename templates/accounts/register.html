@@ -111,6 +111,16 @@
           <div class="modal-body p-4 text-center">
             <h4 class="mb-3">Registration Successful</h4>
             <p class="mb-3">{{ verification_message }}</p>
+            {% if show_whatsapp_fallback %}
+              <p class="mb-3">
+                If the email still does not arrive, send the same details on WhatsApp for manual help.
+              </p>
+              <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center mb-3">
+                <a href="{{ whatsapp_support_link }}" target="_blank" rel="noopener" class="btn btn-success">
+                  Send WhatsApp Message
+                </a>
+              </div>
+            {% endif %}
             <div class="d-flex justify-content-center">
               <button id="verify-ok" class="btn btn-primary">Go to Login</button>
             </div>

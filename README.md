@@ -330,7 +330,7 @@ Before production deployment, you should still address:
 - database migration workflow
 - static file collection with `python manage.py collectstatic`
 
-For Azure App Service, set the startup command to `bash startup.sh`. That keeps database migrations and static collection in the boot path so the app comes up cleanly after each deployment.
+For Azure App Service, set the startup command to `bash /home/site/wwwroot/startup.sh`. That keeps database migrations and static collection in the boot path so the app comes up cleanly after each deployment.
 
 ## Known Gaps and Cleanup Areas
 

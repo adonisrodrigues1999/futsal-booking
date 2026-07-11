@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import quote
 
 from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout, authenticate
@@ -26,6 +27,17 @@ from grounds.models import Ground, Tournament, TournamentRegistration
 
 
 logger = logging.getLogger(__name__)
+WHATSAPP_SUPPORT_NUMBER = "918625877270"
+
+
+def _whatsapp_support_link(*, email, verification_url):
+    message = (
+        "Hi FootBook, my verification email did not arrive.\n\n"
+        f"Registered email: {email}\n"
+        f"Verification link: {verification_url}\n\n"
+        "Please help me verify my account."
+    )
+    return f"https://wa.me/{WHATSAPP_SUPPORT_NUMBER}?text={quote(message)}"
 
 
 def register(request):
@@ -69,8 +81,13 @@ def register(request):
                 messages.warning(
                     request,
                     'Registration succeeded, but the verification email could not be sent right now. '
-                    'Please contact support if you do not receive the email.'
+                    'You can use WhatsApp support if needed.'
                 )
+
+            whatsapp_support_link = _whatsapp_support_link(
+                email=user.email,
+                verification_url=verification_url,
+            )
 
             # Instead of redirecting immediately, render the register page
             # and set a flag so the frontend shows a prominent popup and
@@ -85,6 +102,8 @@ def register(request):
             return render(request, 'accounts/register.html', {
                 'form': form,
                 'show_verification_popup': True,
+                'show_whatsapp_fallback': not email_sent,
+                'whatsapp_support_link': whatsapp_support_link,
                 'verification_message': (
                     'Registration successful! Please check your email to verify your account. '
                     'Also check your spam or junk folder if you do not see it in your inbox.'
