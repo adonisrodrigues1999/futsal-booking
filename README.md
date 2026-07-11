@@ -171,6 +171,7 @@ Recommended values to externalize:
 - `STRIPE_WEBHOOK_SECRET`
 
 For Gmail SMTP, create an app password and set `EMAIL_HOST_PASSWORD`. For Razorpay, add the dashboard keys plus the webhook secret so payment verification can work end to end.
+All outbound mail should use `foo.book.online.india@gmail.com` as both the Gmail account and the from-address.
 
 ### 5. Apply migrations
 
