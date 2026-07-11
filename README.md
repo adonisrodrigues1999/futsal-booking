@@ -162,6 +162,9 @@ Recommended values to externalize:
 - `EMAIL_BACKEND`
 - `EMAIL_HOST_USER`
 - `EMAIL_HOST_PASSWORD`
+- `EMAIL_SENDER_NAME`
+- `EMAIL_SENDER_ADDRESS`
+- `EMAIL_SUBJECT_PREFIX`
 - `DEFAULT_FROM_EMAIL`
 - `RAZORPAY_KEY_ID`
 - `RAZORPAY_KEY_SECRET`
@@ -171,7 +174,7 @@ Recommended values to externalize:
 - `STRIPE_WEBHOOK_SECRET`
 
 For Gmail SMTP, create an app password and set `EMAIL_HOST_PASSWORD`. For Razorpay, add the dashboard keys plus the webhook secret so payment verification can work end to end.
-All outbound mail should use `foo.book.online.india@gmail.com` as both the Gmail account and the from-address.
+Outbound mail now uses a consistent sender identity: `FootBook <foo.book.online.india@gmail.com>`, with a short `[FootBook]` subject prefix to improve recognition in inboxes.
 
 ### 5. Apply migrations
 

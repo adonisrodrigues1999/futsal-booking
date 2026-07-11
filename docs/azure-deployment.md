@@ -150,7 +150,10 @@ az webapp config appsettings set \
     EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend \
     EMAIL_HOST_USER=foo.book.online.india@gmail.com \
     EMAIL_HOST_PASSWORD="<gmail-app-password>" \
-    DEFAULT_FROM_EMAIL=foo.book.online.india@gmail.com \
+    EMAIL_SENDER_NAME=FootBook \
+    EMAIL_SENDER_ADDRESS=foo.book.online.india@gmail.com \
+    EMAIL_SUBJECT_PREFIX="[FootBook] " \
+    DEFAULT_FROM_EMAIL="FootBook <foo.book.online.india@gmail.com>" \
     DB_HOST="$PG_SERVER.postgres.database.azure.com" \
     DB_NAME="$PG_DB" \
     DB_USER="$PG_ADMIN" \
@@ -170,7 +173,10 @@ az webapp config appsettings set \
   --settings \
     EMAIL_HOST_USER="foo.book.online.india@gmail.com" \
     EMAIL_HOST_PASSWORD="<gmail-app-password>" \
-    DEFAULT_FROM_EMAIL="foo.book.online.india@gmail.com" \
+    EMAIL_SENDER_NAME="FootBook" \
+    EMAIL_SENDER_ADDRESS="foo.book.online.india@gmail.com" \
+    EMAIL_SUBJECT_PREFIX="[FootBook] " \
+    DEFAULT_FROM_EMAIL="FootBook <foo.book.online.india@gmail.com>" \
     EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend" \
     RAZORPAY_KEY_ID="<razorpay-key-id>" \
     RAZORPAY_KEY_SECRET="<razorpay-key-secret>" \

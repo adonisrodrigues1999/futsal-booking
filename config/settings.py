@@ -202,8 +202,11 @@ EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", default=True)
 EMAIL_HOST_USER = "foo.book.online.india@gmail.com"
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = "foo.book.online.india@gmail.com"
-SERVER_EMAIL = "foo.book.online.india@gmail.com"
+EMAIL_SENDER_NAME = os.getenv("EMAIL_SENDER_NAME", "FootBook")
+EMAIL_SENDER_ADDRESS = os.getenv("EMAIL_SENDER_ADDRESS", "foo.book.online.india@gmail.com")
+DEFAULT_FROM_EMAIL = f"{EMAIL_SENDER_NAME} <{EMAIL_SENDER_ADDRESS}>"
+SERVER_EMAIL = EMAIL_SENDER_ADDRESS
+EMAIL_SUBJECT_PREFIX = os.getenv("EMAIL_SUBJECT_PREFIX", "[FootBook] ")
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     (
