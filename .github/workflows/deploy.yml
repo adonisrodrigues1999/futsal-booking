@@ -73,7 +73,7 @@ jobs:
           az webapp config set \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --name "$AZURE_WEBAPP_NAME" \
-            --startup-file "bash /home/site/wwwroot/startup.sh"
+            --startup-file "python -m config.startup"
 
       - uses: azure/webapps-deploy@v3
         with:

@@ -135,7 +135,7 @@ fi
 az webapp config set \
   --resource-group "$RESOURCE_GROUP" \
   --name "$WEBAPP_NAME" \
-  --startup-file "bash /home/site/wwwroot/startup.sh" \
+  --startup-file "python -m config.startup" \
   --output none
 
 az webapp config appsettings set \
