@@ -7,11 +7,11 @@
     <div class="col-lg-7">
       <span class="customer-home-chip">Customer Hub</span>
       <h2 class="mb-2 mt-2">Plan smarter. Play more.</h2>
-      <p class="text-muted mb-3">Track upcoming slots, manage bookings quickly, and jump back into action in one click.</p>
+      <p class="text-muted mb-3">Track upcoming slots and manage bookings quickly.</p>
       <div class="d-flex flex-wrap gap-2">
         <a href="/grounds/" class="btn btn-primary btn-lg">Explore Grounds</a>
         <a href="/my-bookings/" class="btn btn-outline-light btn-lg">View My Bookings</a>
-        <a href="{% url 'tournament_list' %}" class="btn btn-outline-light btn-lg">Nearby Tournaments</a>
+        <a href="{% url 'customer_profile' %}" class="btn btn-outline-light btn-lg">My Profile</a>
       </div>
     </div>
     <div class="col-lg-5">
@@ -80,15 +80,6 @@
   </div>
 </div>
 
-<div class="ad-cta-banner mb-4">
-  <div>
-    <div class="ad-cta-kicker">Advertise here</div>
-    <h5 class="mb-1">Put your brand in front of active futsal players.</h5>
-    <p class="mb-0">Promote tournaments, grounds, sports gear, coaching, cafes, or local offers.</p>
-  </div>
-  <a href="https://wa.me/918625877270?text=Hi%20FootBook%2C%20I%20want%20to%20know%20more%20about%20advertising%20on%20FootBook." target="_blank" rel="noopener" class="btn btn-success">To know more click here</a>
-</div>
-
 <div class="row g-3 mb-4">
   <div class="col-md-3 col-6">
     <div class="card p-3 metric-card h-100">
@@ -106,75 +97,6 @@
     <div class="card p-3 metric-card h-100">
       <div class="small text-muted">This Month</div>
       <div class="h4 mb-0">{{ stats.this_month_bookings }}</div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-3 mb-4">
-  <div class="col-md-4">
-    <div class="card p-3 h-100 loyalty-card">
-      <div class="small text-muted d-flex align-items-center gap-1">
-        <span>Loyalty Points</span>
-        <span class="badge rounded-pill text-bg-light text-dark" title="Points are earned from completed bookings and can roll over into free booking credits.">?</span>
-      </div>
-      <div class="h3 mb-1">{{ stats.points }}</div>
-      <div class="small text-muted">Every booking adds 5 points. 100 points convert into 1 free booking credit.</div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card p-3 h-100 loyalty-card">
-      <div class="small text-muted d-flex align-items-center gap-1">
-        <span>Free Booking Credits</span>
-        <span class="badge rounded-pill text-bg-light text-dark" title="Each credit is one fully paid-through online booking.">?</span>
-      </div>
-      <div class="h3 mb-1">{{ stats.free_booking_credits }}</div>
-      <div class="small text-muted">Each credit lets you book one slot without paying online.</div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card p-3 h-100 loyalty-card">
-      <div class="small text-muted">Your Booking Rank</div>
-      <div class="h3 mb-1">{{ stats.booking_count }}</div>
-      <div class="small text-muted">Every completed booking adds 5 loyalty points.</div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-3 mb-4">
-  <div class="col-lg-6">
-    <div class="card p-3 p-md-4 h-100">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="mb-0">Trending Grounds This Week</h5>
-        <span class="badge text-bg-light text-dark">Public leaderboard</span>
-      </div>
-      <div class="list-group list-group-flush">
-        {% for row in weekly_ground_leaderboard %}
-          <div class="list-group-item px-0 py-2 d-flex justify-content-between">
-            <span>{{ row.slot__ground__name }}</span>
-            <strong>{{ row.bookings_count }}</strong>
-          </div>
-        {% empty %}
-          <div class="text-muted">No ground trend data yet.</div>
-        {% endfor %}
-      </div>
-    </div>
-  </div>
-  <div class="col-lg-6">
-    <div class="card p-3 p-md-4 h-100">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="mb-0">Trending Tournaments This Week</h5>
-        <span class="badge text-bg-light text-dark">Registrations</span>
-      </div>
-      <div class="list-group list-group-flush">
-        {% for row in weekly_tournament_leaderboard %}
-          <div class="list-group-item px-0 py-2 d-flex justify-content-between">
-            <span>{{ row.tournament__title }}</span>
-            <strong>{{ row.registrations_count }}</strong>
-          </div>
-        {% empty %}
-          <div class="text-muted">No tournament trend data yet.</div>
-        {% endfor %}
-      </div>
     </div>
   </div>
 </div>
@@ -234,24 +156,6 @@
   </div>
 </div>
 
-<div class="card p-3 p-md-4 mt-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h5 class="mb-0">Top Players This Week</h5>
-    <span class="badge text-bg-light text-dark">5 points per booking</span>
-  </div>
-  <div class="row g-2">
-    {% for player in top_players %}
-      <div class="col-md-4 col-lg-2">
-        <div class="card p-3 text-center h-100">
-          <div class="fw-semibold">{{ player.name }}</div>
-          <div class="small text-muted">{{ player.total_bookings }} bookings</div>
-        </div>
-      </div>
-    {% empty %}
-      <div class="text-muted">No player rankings available yet.</div>
-    {% endfor %}
-  </div>
-</div>
 {% endblock %}
 
 {% block extra_scripts %}

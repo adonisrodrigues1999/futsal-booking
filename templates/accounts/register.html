@@ -61,6 +61,17 @@
           </div>
         </div>
 
+        <div class="card border-0 bg-light p-3 mb-3">
+          <h6 class="mb-3">Alert Preferences</h6>
+          <div class="row g-2 small">
+            <div class="col-md-6 form-check">{{ form.notify_price_drops }} <label class="form-check-label" for="{{ form.notify_price_drops.id_for_label }}">Price drop alerts</label></div>
+            <div class="col-md-6 form-check">{{ form.notify_last_minute }} <label class="form-check-label" for="{{ form.notify_last_minute.id_for_label }}">Last-minute opening alerts</label></div>
+            <div class="col-md-6 form-check">{{ form.notify_nearby_tournaments }} <label class="form-check-label" for="{{ form.notify_nearby_tournaments.id_for_label }}">Nearby tournament alerts</label></div>
+            <div class="col-md-6 form-check">{{ form.email_alerts }} <label class="form-check-label" for="{{ form.email_alerts.id_for_label }}">Email alerts</label></div>
+            <div class="col-md-6 form-check">{{ form.push_alerts }} <label class="form-check-label" for="{{ form.push_alerts.id_for_label }}">Push alerts</label></div>
+          </div>
+        </div>
+
         <div class="row">
           <div class="col-md-6 mb-3">
             <label for="id_password" class="form-label">Password</label>

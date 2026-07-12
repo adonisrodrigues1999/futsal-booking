@@ -539,7 +539,17 @@ def ground_slots(request, ground_id):
                 messages.error(request, 'Please fix the review form and try again.')
             return redirect(f'/grounds/{ground.id}/?date={(request.POST.get("date") or timezone.localdate().isoformat())}')
         if action == 'alert':
-            subscription, _ = AlertSubscription.objects.get_or_create(user=request.user, ground=ground)
+            subscription, _ = AlertSubscription.objects.get_or_create(
+                user=request.user,
+                ground=ground,
+                defaults={
+                    'notify_price_drops': request.user.notify_price_drops,
+                    'notify_last_minute': request.user.notify_last_minute,
+                    'notify_nearby_tournaments': request.user.notify_nearby_tournaments,
+                    'email_enabled': request.user.email_alerts,
+                    'push_enabled': request.user.push_alerts,
+                },
+            )
             subscription.notify_price_drops = request.POST.get('notify_price_drops') == 'on'
             subscription.notify_last_minute = request.POST.get('notify_last_minute') == 'on'
             subscription.notify_nearby_tournaments = request.POST.get('notify_nearby_tournaments') == 'on'

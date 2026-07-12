@@ -31,6 +31,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     booking_count = models.PositiveIntegerField(default=0)
     loyalty_points = models.PositiveIntegerField(default=0)
     free_booking_credits = models.PositiveIntegerField(default=0)
+    notify_price_drops = models.BooleanField(default=True)
+    notify_last_minute = models.BooleanField(default=True)
+    notify_nearby_tournaments = models.BooleanField(default=True)
+    email_alerts = models.BooleanField(default=True)
+    push_alerts = models.BooleanField(default=False)
 
     date_joined = models.DateTimeField(default=timezone.now)
 

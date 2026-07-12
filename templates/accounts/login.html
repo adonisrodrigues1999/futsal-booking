@@ -34,6 +34,13 @@
         {% endfor %}
       {% endif %}
 
+      {% if show_register_prompt %}
+        <div class="alert alert-warning">
+          No account exists for <strong>{{ missing_account_email }}</strong>.
+          <a href="{% url 'register' %}?email={{ missing_account_email|urlencode }}" class="alert-link">Register now</a>.
+        </div>
+      {% endif %}
+
       <form method="post">
         {% csrf_token %}
 
@@ -77,6 +84,7 @@
 
       <div class="text-center mt-3 small">
         <p class="mb-0">Do not have an account? <a href="{% url 'register' %}">Register here</a></p>
+        <p class="mb-0"><a href="{% url 'password_reset' %}">Forgot password?</a></p>
       </div>
     </div>
   </div>

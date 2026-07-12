@@ -11,7 +11,26 @@ class UserRegistrationForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ['email', 'phone_number', 'name']
+        fields = [
+            'email',
+            'phone_number',
+            'name',
+            'notify_price_drops',
+            'notify_last_minute',
+            'notify_nearby_tournaments',
+            'email_alerts',
+            'push_alerts',
+        ]
+        widgets = {
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'phone_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'notify_price_drops': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'notify_last_minute': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'notify_nearby_tournaments': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'email_alerts': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'push_alerts': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
 
     def clean(self):
         cleaned_data = super().clean()
@@ -121,14 +140,14 @@ class GroundCreationForm(forms.ModelForm):
 class UserLoginForm(forms.Form):
     email = forms.EmailField(
         required=False,
-        widget=forms.EmailInput(attrs={'placeholder': 'Enter your email'})
+        widget=forms.EmailInput(attrs={'placeholder': 'Enter your email', 'class': 'form-control'})
     )
     phone = forms.CharField(
         max_length=15,
         required=False,
-        widget=forms.TextInput(attrs={'placeholder': 'Enter your phone number'})
+        widget=forms.TextInput(attrs={'placeholder': 'Enter your phone number', 'class': 'form-control'})
     )
-    password = forms.CharField(widget=forms.PasswordInput)
+    password = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}))
 
     def clean(self):
         cleaned_data = super().clean()
@@ -142,3 +161,22 @@ class UserLoginForm(forms.Form):
             raise forms.ValidationError("Please enter either email or phone number, not both")
 
         return cleaned_data
+
+
+class CustomerProfileForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = [
+            'notify_price_drops',
+            'notify_last_minute',
+            'notify_nearby_tournaments',
+            'email_alerts',
+            'push_alerts',
+        ]
+        widgets = {
+            'notify_price_drops': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'notify_last_minute': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'notify_nearby_tournaments': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'email_alerts': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'push_alerts': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }

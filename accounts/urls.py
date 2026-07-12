@@ -15,5 +15,6 @@ urlpatterns = [
     path('create-ground-owner/', views.create_ground_owner, name='create_ground_owner'),
     path('create-ground/<int:owner_id>/', views.create_ground, name='create_ground'),
     path('customer-dashboard/', views.customer_dashboard, name='customer_dashboard'),
+    path('profile/', views.customer_profile, name='customer_profile'),
     path('owner-dashboard/', views.owner_dashboard, name='owner_dashboard'),
 ]

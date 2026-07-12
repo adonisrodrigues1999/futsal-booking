@@ -1,0 +1,77 @@
+{% extends 'base/base.html' %}
+{% block title %}Profile{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h2>My Profile</h2>
+      <p class="page-subtitle">Points, rank, credits, and notification preferences.</p>
+    </div>
+    <a href="{% url 'customer_dashboard' %}" class="btn btn-outline-secondary">Back to Dashboard</a>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+      <div class="card p-3 metric-card h-100">
+        <div class="small text-muted">Points</div>
+        <div class="h4 mb-0">{{ loyalty_points }}</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="card p-3 metric-card h-100">
+        <div class="small text-muted">Rank</div>
+        <div class="h4 mb-0">#{{ rank }}</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="card p-3 metric-card h-100">
+        <div class="small text-muted">Free Credits</div>
+        <div class="h4 mb-0">{{ free_booking_credits }}</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="card p-3 metric-card h-100">
+        <div class="small text-muted">Active Bookings</div>
+        <div class="h4 mb-0">{{ active_bookings }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h5 class="mb-3">Alert Preferences</h5>
+      <form method="post" class="row g-3">
+        {% csrf_token %}
+        <div class="col-md-6 form-check">
+          {{ form.notify_price_drops }} <label class="form-check-label" for="{{ form.notify_price_drops.id_for_label }}">Price drop alerts</label>
+        </div>
+        <div class="col-md-6 form-check">
+          {{ form.notify_last_minute }} <label class="form-check-label" for="{{ form.notify_last_minute.id_for_label }}">Last-minute opening alerts</label>
+        </div>
+        <div class="col-md-6 form-check">
+          {{ form.notify_nearby_tournaments }} <label class="form-check-label" for="{{ form.notify_nearby_tournaments.id_for_label }}">Nearby tournament alerts</label>
+        </div>
+        <div class="col-md-6 form-check">
+          {{ form.email_alerts }} <label class="form-check-label" for="{{ form.email_alerts.id_for_label }}">Email alerts</label>
+        </div>
+        <div class="col-md-6 form-check">
+          {{ form.push_alerts }} <label class="form-check-label" for="{{ form.push_alerts.id_for_label }}">Push alerts</label>
+        </div>
+        <div class="col-12 d-flex justify-content-end">
+          <button type="submit" class="btn btn-primary">Save Preferences</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

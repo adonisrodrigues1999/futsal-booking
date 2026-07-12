@@ -22,7 +22,7 @@ from bookings.models import EmailVerification
 from bookings.models import Booking
 from bookings.money import ground_collected_amount_expression, online_collected_amount_expression
 from bookings.slot_generation import create_initial_slots_for_ground
-from .forms import UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm, GroundCreationForm
+from .forms import UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm, GroundCreationForm, CustomerProfileForm
 from grounds.models import Ground, Tournament, TournamentRegistration
 
 
@@ -110,7 +110,9 @@ def register(request):
                 )
             })
     else:
-        form = UserRegistrationForm()
+        form = UserRegistrationForm(initial={
+            'email': request.GET.get('email', ''),
+        })
 
     return render(request, 'accounts/register.html', {'form': form})
 
@@ -159,7 +161,16 @@ def login_view(request):
                     user_obj = User.objects.get(phone_number=phone)
                     user = authenticate(request, username=user_obj.email, password=password)
             except User.DoesNotExist:
-                pass
+                identifier_value = email or phone or ''
+                messages.info(request, 'No account found with that login. You can register instead.')
+                return render(request, 'accounts/login.html', {
+                    'form': form,
+                    'public_top_grounds': public_top_grounds,
+                    'public_top_tournaments': public_top_tournaments,
+                    'public_top_players': public_top_players,
+                    'show_register_prompt': True,
+                    'missing_account_email': identifier_value,
+                })
 
             if user is not None:
                 if user.email_verified:
@@ -214,7 +225,7 @@ def verify_email(request, token):
 
 
 class PasswordResetRequestForm(forms.Form):
-    email = forms.EmailField()
+    email = forms.EmailField(widget=forms.EmailInput(attrs={'class': 'form-control'}))
 
 
 def password_reset_request(request):
@@ -277,6 +288,9 @@ def password_reset_confirm(request, uidb64, token):
             return redirect('password_reset_complete')
     else:
         form = SetPasswordForm(user=user)
+
+    form.fields['new_password1'].widget.attrs.update({'class': 'form-control'})
+    form.fields['new_password2'].widget.attrs.update({'class': 'form-control'})
 
     return render(request, 'accounts/password_reset_confirm.html', {'form': form})
 
@@ -459,8 +473,6 @@ def customer_dashboard(request):
     if request.user.role != 'customer':
         messages.error(request, 'Access denied.')
         return redirect('home')
-
-    # Redirect to the existing customer home view
     return redirect('customer_home')
 
 
@@ -472,3 +484,36 @@ def owner_dashboard(request):
 
     # Redirect to the existing owner dashboard view
     return redirect('owner_dashboard')
+
+
+@login_required
+def customer_profile(request):
+    if request.user.role != 'customer':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+
+    if request.method == 'POST':
+        form = CustomerProfileForm(request.POST, instance=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Profile preferences updated.')
+            return redirect('customer_profile')
+    else:
+        form = CustomerProfileForm(instance=request.user)
+
+    bookings = Booking.objects.filter(user=request.user, status='BOOKED')
+    points = request.user.loyalty_points
+    rank = (
+        User.objects.filter(role='customer')
+        .annotate(total_bookings=Count('booking', filter=Q(booking__status='BOOKED')))
+        .filter(total_bookings__gt=request.user.booking_count)
+        .count() + 1
+    )
+    return render(request, 'accounts/customer_profile.html', {
+        'form': form,
+        'active_bookings': bookings.count(),
+        'booking_count': request.user.booking_count,
+        'loyalty_points': points,
+        'free_booking_credits': request.user.free_booking_credits,
+        'rank': rank,
+    })

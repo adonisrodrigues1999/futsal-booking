@@ -53,6 +53,7 @@
             <li class="nav-item"><a class="nav-link" href="{% url 'owner_tournaments' %}"><i class="fas fa-trophy me-1"></i>Tournaments</a></li>
           {% else %}
             <li class="nav-item"><a class="nav-link" href="{% url 'customer_dashboard' %}"><i class="fas fa-user me-1"></i>Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link" href="{% url 'customer_profile' %}"><i class="fas fa-id-card me-1"></i>Profile</a></li>
             <li class="nav-item"><a class="nav-link" href="{% url 'tournament_list' %}"><i class="fas fa-trophy me-1"></i>Tournaments</a></li>
             <li class="nav-item"><a class="nav-link" href="/my-bookings/"><i class="fas fa-calendar-check me-1"></i>My Bookings</a></li>
           {% endif %}
