@@ -3,15 +3,19 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+**/__pycache__/
+**/*.pyc
 
 # Django
 db.sqlite3
 *.log
+staticfiles/
 
 # Virtual env
 venv/
 .env
 .azure-deploy.env
+.azure/
 
 #database
 
