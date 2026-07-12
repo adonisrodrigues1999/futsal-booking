@@ -75,7 +75,24 @@ jobs:
             --name "$AZURE_WEBAPP_NAME" \
             --startup-file "python -m config.startup"
 
+      - name: Build clean deployment package
+        run: |
+          rm -rf /tmp/futsal-booking-deploy
+          mkdir -p /tmp/futsal-booking-deploy
+          git archive --format=tar HEAD | tar -x -C /tmp/futsal-booking-deploy
+          find /tmp/futsal-booking-deploy -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find /tmp/futsal-booking-deploy -type f -name '*.pyc' -delete
+          rm -rf \
+            /tmp/futsal-booking-deploy/staticfiles \
+            /tmp/futsal-booking-deploy/db.sqlite3 \
+            /tmp/futsal-booking-deploy/.azure \
+            /tmp/futsal-booking-deploy/.env \
+            /tmp/futsal-booking-deploy/venv \
+            /tmp/futsal-booking-deploy/to\ implement
+          cd /tmp/futsal-booking-deploy
+          zip -qr "$GITHUB_WORKSPACE/app-deploy.zip" .
+
       - uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          package: .
+          package: app-deploy.zip

@@ -317,7 +317,7 @@ The project already includes several production-oriented pieces:
 - WhiteNoise static serving
 - secure cookie settings for HTTPS deployments
 - Azure-oriented trusted origin configuration in settings
-- `startup.sh`, which runs `migrate`, `collectstatic`, and then starts `gunicorn`
+- `config/startup.py`, which runs `migrate`, `collectstatic`, and then starts `gunicorn`
 
 Before production deployment, you should still address:
 
