@@ -243,6 +243,13 @@
               </td>
               <td>
                 <a href="{% url 'admin_invoices' %}?ground={{ ground.id }}" class="btn btn-sm btn-outline-secondary">Invoices</a>
+                <form method="post" action="{% url 'toggle_ground_availability' ground.id %}" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{% url 'admin_dashboard' %}">
+                  <button type="submit" class="btn btn-sm {% if ground.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                    {% if ground.is_active %}Disable{% else %}Enable{% endif %}
+                  </button>
+                </form>
               </td>
             </tr>
             {% empty %}

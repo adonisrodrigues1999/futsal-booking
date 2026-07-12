@@ -87,6 +87,28 @@
                   <label for="phone" class="form-label">Phone Number</label>
                   <input type="tel" name="phone" id="phone" class="form-control" placeholder="10-digit phone number" required>
                 </div>
+                <div class="border rounded p-3 mb-3">
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="repeat_enabled" name="repeat_enabled">
+                    <label class="form-check-label" for="repeat_enabled">Repeat booking</label>
+                  </div>
+                  <div class="row g-2 repeat-booking-fields d-none">
+                    <div class="col-6">
+                      <label class="form-label small" for="repeat_every_weeks">Repeat every</label>
+                      <select name="repeat_every_weeks" id="repeat_every_weeks" class="form-select form-select-sm">
+                        <option value="1">Every week</option>
+                        <option value="2" selected>Every 2 weeks</option>
+                      </select>
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label small" for="repeat_occurrences">Occurrences</label>
+                      <input type="number" min="1" max="52" value="1" name="repeat_occurrences" id="repeat_occurrences" class="form-control form-control-sm">
+                    </div>
+                  </div>
+                  <div class="small text-muted mt-2 repeat-booking-fields d-none">
+                    Use this for training sessions like alternate Sundays.
+                  </div>
+                </div>
                 <div class="p-3 bg-light rounded">
                   <div class="small text-muted">Selected slots</div>
                   <div class="fw-semibold" id="manual-slot-count">0 slots</div>
@@ -155,6 +177,8 @@
     const countEl = document.getElementById('manual-slot-count');
     const totalEl = document.getElementById('manual-total-amount');
     const submitBtn = document.getElementById('manual-book-btn');
+    const repeatToggle = document.getElementById('repeat_enabled');
+    const repeatFields = document.querySelectorAll('.repeat-booking-fields');
 
     function updateSummary() {
       let count = 0;
@@ -184,6 +208,18 @@
     checkboxes.forEach(function(cb) {
       cb.addEventListener('change', updateSummary);
     });
+
+    function updateRepeatFields() {
+      const show = repeatToggle && repeatToggle.checked;
+      repeatFields.forEach(function(el) {
+        el.classList.toggle('d-none', !show);
+      });
+    }
+
+    if (repeatToggle) {
+      repeatToggle.addEventListener('change', updateRepeatFields);
+      updateRepeatFields();
+    }
 
     updateSummary();
   })();

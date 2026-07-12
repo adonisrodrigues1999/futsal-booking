@@ -16,6 +16,7 @@ from django.conf import settings
 import csv
 import io
 import json
+import uuid
 from decimal import Decimal
 from decimal import InvalidOperation
 from calendar import month_name, month_abbr
@@ -122,13 +123,36 @@ def _is_restricted_manual_hour(slot_time):
     return 2 <= slot_time.hour < 6
 
 
+def _is_evening_alert_slot(slot):
+    return slot and 16 <= slot.start_time.hour < 23
+
+
+def _promo_email_allowed_now():
+    current_hour = timezone.localtime(timezone.now()).hour
+    return 10 <= current_hour < 24
+
+
 def _owner_booking_email(booking):
     owner = booking.slot.ground.owner if booking.slot and booking.slot.ground else None
     if not owner or not owner.email:
         return
 
     payment_time = timezone.localtime(booking.payment_paid_at).strftime('%Y-%m-%d %I:%M %p') if booking.payment_paid_at else '-'
-    subject = f"New booking payment: {booking.slot.ground.name} on {booking.slot.date} {booking.slot.start_time.strftime('%I:%M %p')}"
+    todays_bookings = (
+        Booking.objects
+        .filter(
+            slot__ground=booking.slot.ground,
+            slot__date=booking.slot.date,
+            status='BOOKED',
+        )
+        .select_related('slot')
+        .order_by('slot__start_time', 'created_at')
+    )
+    subject = f"New booking: {booking.slot.ground.name} on {booking.slot.date}"
+    today_lines = [
+        f"- {item.slot.start_time.strftime('%I:%M %p')} - {item.slot.end_time.strftime('%I:%M %p')} | {item.customer_name} | {item.customer_phone} | {item.get_status_display()}"
+        for item in todays_bookings
+    ]
     body = (
         f"Hello {owner.name},\n\n"
         f"A new booking was confirmed for your ground {booking.slot.ground.name}.\n"
@@ -142,6 +166,9 @@ def _owner_booking_email(booking):
         f"- Due: ₹{booking.due_amount}\n"
         f"- Payment Time: {payment_time}\n"
         f"- Booking Policy: Non-refundable\n\n"
+        f"Today's bookings:\n"
+        + ("\n".join(today_lines) if today_lines else "- No other bookings yet.\n")
+        + "\n\n"
         "Regards,\nFootBook"
     )
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
@@ -149,6 +176,104 @@ def _owner_booking_email(booking):
         send_mail(subject, body, from_email, [owner.email], fail_silently=False)
     except Exception:
         logger.exception("Failed to send owner booking email for booking %s", booking.id)
+
+
+def _booking_notification_recipients(booking):
+    recipients = []
+    owner = booking.slot.ground.owner if booking.slot and booking.slot.ground else None
+    if owner and owner.email:
+        recipients.append(owner.email)
+    if booking.user and booking.user.email:
+        recipients.append(booking.user.email)
+    return recipients
+
+
+def _send_booking_cancelled_email(booking, *, cancelled_count=1):
+    recipients = _booking_notification_recipients(booking)
+    if not recipients:
+        return
+
+    subject = f"Booking cancelled: {booking.slot.ground.name} on {booking.slot.date}"
+    if cancelled_count > 1:
+        subject = f"{cancelled_count} bookings cancelled: {booking.slot.ground.name}"
+
+    body_lines = [
+        f"Ground: {booking.slot.ground.name}",
+        f"Date: {booking.slot.date}",
+        f"Time: {booking.slot.start_time.strftime('%I:%M %p')} - {booking.slot.end_time.strftime('%I:%M %p')}",
+        f"Customer: {booking.customer_name} ({booking.customer_phone})",
+        f"Status: {booking.get_status_display()}",
+    ]
+    if cancelled_count > 1:
+        body_lines.append(f"Future bookings cancelled automatically: {cancelled_count - 1}")
+    body = "Hello,\n\n" + "\n".join(body_lines) + "\n\nRegards,\nFootBook"
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
+    try:
+        send_mail(subject, body, from_email, recipients, fail_silently=False)
+    except Exception:
+        logger.exception("Failed to send booking cancellation email for booking %s", booking.id)
+
+
+def _cancel_booking_series_from(booking):
+    if not booking.recurrence_group:
+        return [booking]
+
+    affected = list(
+        Booking.objects
+        .select_related('slot', 'slot__ground', 'slot__ground__owner', 'user')
+        .filter(
+            recurrence_group=booking.recurrence_group,
+            slot__ground=booking.slot.ground,
+            slot__date__gte=booking.slot.date,
+        )
+        .order_by('slot__date', 'slot__start_time', 'created_at')
+    )
+    if not affected:
+        return [booking]
+
+    with transaction.atomic():
+        locked_bookings = list(
+            Booking.objects.select_for_update().filter(id__in=[item.id for item in affected])
+        )
+        locked_slots = {
+            slot.id: slot
+            for slot in Slot.objects.select_for_update().filter(id__in=[item.slot_id for item in locked_bookings])
+        }
+        for item in locked_bookings:
+            if item.status != 'CANCELLED':
+                item.status = 'CANCELLED'
+                item.cancelled_at = timezone.now()
+                item.save(update_fields=['status', 'cancelled_at'])
+            slot = locked_slots.get(item.slot_id)
+            if slot and slot.is_booked:
+                slot.is_booked = False
+                slot.save(update_fields=['is_booked'])
+
+    return affected
+
+
+@login_required
+def toggle_ground_availability(request, ground_id):
+    if request.method != 'POST':
+        return redirect('home')
+
+    if request.user.role not in {'admin', 'owner'}:
+        return redirect('home')
+
+    ground = get_object_or_404(Ground, id=ground_id)
+    if request.user.role == 'owner' and ground.owner != request.user:
+        messages.error(request, 'Access denied.')
+        return redirect('/dashboard/owner/')
+
+    ground.is_active = not ground.is_active
+    ground.save(update_fields=['is_active'])
+
+    next_url = request.POST.get('next') or ('/dashboard/admin/' if request.user.role == 'admin' else '/dashboard/owner/')
+    messages.success(
+        request,
+        f'{ground.name} is now {"available" if ground.is_active else "temporarily unavailable"}.'
+    )
+    return redirect(next_url)
 
 
 def _razorpay_client():
@@ -184,8 +309,12 @@ def _send_email(subject, body, recipients):
 
 
 def _dispatch_ground_alerts(ground, slot=None, reason='PRICE_DROP'):
+    if not _promo_email_allowed_now():
+        return
     alert_date = slot.date if slot else timezone.localdate()
     if AlertDispatchLog.objects.filter(ground=ground, reason=reason, alert_date=alert_date).exists():
+        return
+    if slot and not _is_evening_alert_slot(slot):
         return
     subscribers = AlertSubscription.objects.filter(
         ground=ground,
@@ -215,6 +344,8 @@ def _dispatch_ground_alerts(ground, slot=None, reason='PRICE_DROP'):
 
 
 def _dispatch_tournament_alerts(tournament):
+    if not _promo_email_allowed_now():
+        return
     alert_date = tournament.start_date
     if AlertDispatchLog.objects.filter(tournament=tournament, reason='TOURNAMENT_PUBLISHED', alert_date=alert_date).exists():
         return
@@ -356,7 +487,7 @@ def home(request):
 
 @login_required
 def ground_list(request):
-    grounds = Ground.objects.select_related('owner').annotate(
+    grounds = Ground.objects.filter(is_active=True).select_related('owner').annotate(
         review_count=Count('reviews', distinct=True),
     )
     for ground in grounds:
@@ -393,7 +524,7 @@ def tournament_list(request):
 
 @login_required
 def ground_slots(request, ground_id):
-    ground = get_object_or_404(Ground, id=ground_id)
+    ground = get_object_or_404(Ground, id=ground_id, is_active=True)
     if request.method == 'POST' and request.user.is_authenticated:
         action = (request.POST.get('action') or '').strip()
         if action == 'review':
@@ -516,7 +647,7 @@ def ground_slots(request, ground_id):
 
 @login_required
 def ground_slots_status(request, ground_id):
-    ground = get_object_or_404(Ground, id=ground_id)
+    ground = get_object_or_404(Ground, id=ground_id, is_active=True)
     date_str = request.GET.get('date')
     try:
         selected_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else timezone.localdate()
@@ -558,7 +689,7 @@ def ground_slots_status(request, ground_id):
 
 @login_required
 def book_slot(request, slot_id):
-    slot = get_object_or_404(Slot, id=slot_id)
+    slot = get_object_or_404(Slot, id=slot_id, ground__is_active=True)
     messages.info(request, 'Online slot booking now requires payment checkout. Please book from the slot payment modal.')
     return redirect(f'/grounds/{slot.ground.id}/?date={slot.date}')
 
@@ -627,6 +758,7 @@ def create_razorpay_order(request):
             redeem_free_booking_credit(user, booking)
             award_booking_rewards(booking)
             ActivityLog.objects.create(user=user, action='BOOKED', booking=booking, slot=slot, meta={'reward': 'FREE_REWARD'})
+            transaction.on_commit(lambda booking=booking: _owner_booking_email(booking))
             return JsonResponse({
                 'success': True,
                 'free_booking': True,
@@ -725,7 +857,7 @@ def verify_razorpay_payment_and_book(request):
     for attempt in range(attempts):
         try:
             with transaction.atomic():
-                slot = Slot.objects.select_for_update().get(id=slot_id)
+                slot = Slot.objects.select_for_update().select_related('ground').get(id=slot_id, ground__is_active=True)
                 if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
                     return JsonResponse({'success': False, 'error': 'Slot was booked by someone else. Payment is non-refundable; contact support.'}, status=409)
 
@@ -778,11 +910,7 @@ def verify_razorpay_payment_and_book(request):
                 )
 
                 award_booking_rewards(booking)
-
-                try:
-                    _owner_booking_email(booking)
-                except Exception:
-                    pass
+                transaction.on_commit(lambda booking=booking: _owner_booking_email(booking))
 
                 return JsonResponse({
                     'success': True,
@@ -963,6 +1091,7 @@ def owner_dashboard(request):
     )
 
     selected_grounds = grounds.values('id', 'name').order_by('name')
+    owner_ground_objects = grounds.order_by('name')
     recent_expenses = OwnerExpense.objects.filter(owner=owner).select_related('ground').order_by('-spent_on', '-created_at')[:12]
     owner_tournaments = (
         Tournament.objects
@@ -1012,6 +1141,7 @@ def owner_dashboard(request):
         'selected_date': selected_date,
         'bookings_title': bookings_title,
         'owner_grounds': selected_grounds,
+        'owner_ground_objects': owner_ground_objects,
         'recent_expenses': recent_expenses,
         'expense_categories': OwnerExpense.CATEGORY_CHOICES,
         'expense_by_category': expense_category_summary,
@@ -1638,7 +1768,7 @@ def admin_invoices(request):
 @login_required
 def owner_manual_booking(request):
     owner = request.user
-    grounds = Ground.objects.filter(owner=owner)
+    grounds = Ground.objects.filter(owner=owner, is_active=True)
     grounds_count = grounds.count()
     # GET: optional filters 'ground' (id) and 'date' (YYYY-MM-DD)
     selected_ground = None
@@ -1656,6 +1786,17 @@ def owner_manual_booking(request):
             if single_slot:
                 slot_ids = [single_slot]
         slot_ids = [s for s in slot_ids if s]
+        repeat_enabled = request.POST.get('repeat_enabled') == 'on'
+        try:
+            repeat_every_weeks = int(request.POST.get('repeat_every_weeks') or 2)
+        except Exception:
+            repeat_every_weeks = 2
+        try:
+            repeat_occurrences = int(request.POST.get('repeat_occurrences') or 1)
+        except Exception:
+            repeat_occurrences = 1
+        repeat_every_weeks = max(1, min(repeat_every_weeks, 12))
+        repeat_occurrences = max(1, min(repeat_occurrences, 52))
 
         try:
             with transaction.atomic():
@@ -1664,56 +1805,84 @@ def owner_manual_booking(request):
                     return redirect('/owner/manual-booking/')
 
                 slots_qs = list(
-                    Slot.objects.select_for_update().filter(id__in=slot_ids, ground__owner=owner).select_related('ground')
+                    Slot.objects.select_for_update().filter(id__in=slot_ids, ground__owner=owner, ground__is_active=True).select_related('ground')
                 )
                 if len(slots_qs) != len(set(slot_ids)):
                     messages.error(request, 'One or more selected slots are invalid.')
                     return redirect('/owner/manual-booking/')
 
-                for slot in slots_qs:
-                    if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
-                        messages.error(request, 'One of the selected slots was booked just now. Please pick another slot.')
-                        return redirect('/owner/manual-booking/')
+                target_rows = []
+                for occurrence_index in range(repeat_occurrences if repeat_enabled else 1):
+                    target_date = None
+                    for slot in slots_qs:
+                        if _is_restricted_manual_hour(slot.start_time):
+                            messages.error(request, 'Manual booking is not allowed between 2:00 AM and 6:00 AM.')
+                            return redirect('/owner/manual-booking/')
+                        current_date = slot.date if occurrence_index == 0 else (slot.date + timedelta(weeks=repeat_every_weeks * occurrence_index))
+                        target_date = current_date
+                        ensure_slots_for_ground_date(ground=slot.ground, slot_date=current_date)
+                        target_slot = Slot.objects.select_for_update().select_related('ground').filter(
+                            ground=slot.ground,
+                            date=current_date,
+                            start_time=slot.start_time,
+                            end_time=slot.end_time,
+                        ).first()
+                        if not target_slot:
+                            messages.error(request, 'One of the target slots could not be found.')
+                            return redirect('/owner/manual-booking/')
+                        if _slot_start_datetime(target_slot) <= now_dt:
+                            messages.error(request, 'Past slots cannot be manually booked.')
+                            return redirect('/owner/manual-booking/')
+                        if target_slot.is_booked or Booking.objects.filter(slot=target_slot, status='BOOKED').exists():
+                            messages.error(request, 'One of the selected slots was booked just now. Please pick another slot.')
+                            return redirect('/owner/manual-booking/')
+                        target_rows.append((target_slot, occurrence_index))
 
-                    if _slot_start_datetime(slot) <= now_dt:
-                        messages.error(request, 'Past slots cannot be manually booked.')
-                        return redirect('/owner/manual-booking/')
-
-                    if _is_restricted_manual_hour(slot.start_time):
-                        messages.error(request, 'Manual booking is not allowed between 2:00 AM and 6:00 AM.')
-                        return redirect('/owner/manual-booking/')
-
-                for slot in slots_qs:
-                    total_amount = _slot_price_for_slot(slot)
-                    owner_payout = total_amount
-
+                series_group = uuid.uuid4() if repeat_enabled and repeat_occurrences > 1 else None
+                created_bookings = []
+                for target_slot, occurrence_index in target_rows:
+                    total_amount = _slot_price_for_slot(target_slot)
                     booking = Booking.objects.create(
-                        slot=slot,
+                        slot=target_slot,
                         customer_name=name,
                         customer_phone=phone,
                         total_amount=total_amount,
-                        owner_payout=owner_payout,
+                        owner_payout=total_amount,
                         booking_source='MANUAL',
                         payment_mode='FULL',
                         payment_status='PENDING',
                         paid_amount=0,
                         due_amount=total_amount,
+                        recurrence_group=series_group,
+                        recurrence_position=occurrence_index,
                     )
 
-                    slot.is_booked = True
-                    slot.save(update_fields=['is_booked'])
+                    target_slot.is_booked = True
+                    target_slot.save(update_fields=['is_booked'])
 
                     ActivityLog.objects.create(
                         user=request.user,
                         action='MANUAL_BOOKING',
                         booking=booking,
-                        slot=slot
+                        slot=target_slot,
+                        meta={
+                            'repeat_enabled': repeat_enabled,
+                            'repeat_every_weeks': repeat_every_weeks if repeat_enabled else 1,
+                            'repeat_occurrences': repeat_occurrences if repeat_enabled else 1,
+                        },
                     )
+                    created_bookings.append(booking)
+
+                for booking in created_bookings:
+                    transaction.on_commit(lambda booking=booking: _owner_booking_email(booking))
         except Slot.DoesNotExist:
             messages.error(request, 'Invalid slot selected.')
             return redirect('/owner/manual-booking/')
 
-        messages.success(request, 'Manual booking created')
+        if repeat_enabled and repeat_occurrences > 1:
+            messages.success(request, f'Recurring manual booking created for {repeat_occurrences} occurrences.')
+        else:
+            messages.success(request, 'Manual booking created')
         return redirect('/dashboard/owner/')
 
     # GET handling: filter slots if ground+date provided
@@ -1721,7 +1890,7 @@ def owner_manual_booking(request):
     date_str = request.GET.get('date')
     if ground_id:
         try:
-            selected_ground = Ground.objects.get(id=ground_id, owner=owner)
+            selected_ground = Ground.objects.get(id=ground_id, owner=owner, is_active=True)
         except Ground.DoesNotExist:
             selected_ground = None
     elif grounds_count == 1:
@@ -2059,20 +2228,20 @@ def cancel_booking(request, booking_id):
     slot_start = _slot_start_datetime(slot)
     no_refund = ((slot_start - now_dt).total_seconds() / 3600) < 4
 
-    booking.status = 'CANCELLED'
-    booking.cancelled_at = timezone.now()
-    booking.save()
+    with transaction.atomic():
+        cancelled_bookings = _cancel_booking_series_from(booking)
+        booking.status = 'CANCELLED'
+        booking.cancelled_at = timezone.now()
+        ActivityLog.objects.create(
+            user=request.user,
+            action='CUSTOMER_CANCELLED',
+            booking=booking,
+            slot=slot,
+            meta={'cancelled_count': len(cancelled_bookings)},
+        )
 
-    slot.is_booked = False
-    slot.save()
     _dispatch_ground_alerts(slot.ground, slot=slot, reason='LAST_MINUTE_OPENING')
-
-    ActivityLog.objects.create(
-        user=request.user,
-        action='CUSTOMER_CANCELLED',
-        booking=booking,
-        slot=slot
-    )
+    transaction.on_commit(lambda booking=booking, cancelled_count=len(cancelled_bookings): _send_booking_cancelled_email(booking, cancelled_count=cancelled_count))
 
     if no_refund:
         messages.warning(request, 'Booking cancelled.  the amount will not be refunded.')
@@ -2099,20 +2268,20 @@ def owner_cancel_booking(request, booking_id):
         )
         return redirect('/dashboard/owner/')
 
-    booking.status = 'CANCELLED'
-    booking.cancelled_at = timezone.now()
-    booking.save()
+    with transaction.atomic():
+        cancelled_bookings = _cancel_booking_series_from(booking)
+        booking.status = 'CANCELLED'
+        booking.cancelled_at = timezone.now()
+        ActivityLog.objects.create(
+            user=request.user,
+            action='OWNER_CANCELLED',
+            booking=booking,
+            slot=slot,
+            meta={'cancelled_count': len(cancelled_bookings)},
+        )
 
-    slot.is_booked = False
-    slot.save()
     _dispatch_ground_alerts(slot.ground, slot=slot, reason='LAST_MINUTE_OPENING')
-
-    ActivityLog.objects.create(
-        user=request.user,
-        action='OWNER_CANCELLED',
-        booking=booking,
-        slot=slot
-    )
+    transaction.on_commit(lambda booking=booking, cancelled_count=len(cancelled_bookings): _send_booking_cancelled_email(booking, cancelled_count=cancelled_count))
 
     messages.success(
         request,

@@ -2,6 +2,18 @@ from django.contrib import admin
 
 # Register your models here.
 from .models import Ground, Tournament, TournamentRegistration, GroundReview
+
+
+@admin.action(description='Mark selected grounds as available')
+def mark_ground_available(modeladmin, request, queryset):
+    queryset.update(is_active=True)
+
+
+@admin.action(description='Mark selected grounds as temporarily unavailable')
+def mark_ground_unavailable(modeladmin, request, queryset):
+    queryset.update(is_active=False)
+
+
 @admin.register(Ground)
 class GroundAdmin(admin.ModelAdmin):
     list_display = (
@@ -16,6 +28,7 @@ class GroundAdmin(admin.ModelAdmin):
     )
     search_fields = ('name', 'location')
     list_filter = ('is_active',)
+    actions = (mark_ground_available, mark_ground_unavailable)
     autocomplete_fields = ('owner',)
 
 

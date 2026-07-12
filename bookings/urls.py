@@ -24,6 +24,7 @@ urlpatterns = [
     path('dashboard/owner/', views.owner_dashboard, name='owner_dashboard'),
     path('dashboard/owner/expenses/add/', views.owner_add_expense, name='owner_add_expense'),
     path('dashboard/owner/expenses/<int:expense_id>/delete/', views.owner_delete_expense, name='owner_delete_expense'),
+    path('owner/grounds/<int:ground_id>/toggle/', views.toggle_ground_availability, name='toggle_ground_availability'),
     path('owner/cancel/<uuid:booking_id>/', views.owner_cancel_booking, name='owner_cancel_booking'),
     path('owner/reschedule/<uuid:booking_id>/', views.owner_reschedule_booking, name='owner_reschedule_booking'),
     path('owner/mark-paid/<uuid:booking_id>/', views.owner_mark_paid_at_ground, name='owner_mark_paid_at_ground'),

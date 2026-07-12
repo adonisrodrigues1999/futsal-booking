@@ -1,3 +1,5 @@
+import uuid
+
 from django.test import TestCase
 from datetime import datetime, time, date
 from datetime import timedelta
@@ -138,6 +140,31 @@ class BookingFlowTests(TestCase):
         booking = Booking.objects.get(slot=slot, status='BOOKED')
         self.assertEqual(booking.total_amount, booking.owner_payout)
 
+    def test_manual_booking_can_repeat_every_two_weeks(self):
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=2),
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            is_booked=False,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.post('/owner/manual-booking/', {
+            'slot': str(slot.id),
+            'name': 'Sunday Training',
+            'phone': '9999911111',
+            'repeat_enabled': 'on',
+            'repeat_every_weeks': '2',
+            'repeat_occurrences': '2',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        bookings = Booking.objects.filter(customer_name='Sunday Training', booking_source='MANUAL').order_by('slot__date')
+        self.assertEqual(bookings.count(), 2)
+        self.assertIsNotNone(bookings[0].recurrence_group)
+        self.assertEqual(bookings[0].recurrence_group, bookings[1].recurrence_group)
+        self.assertEqual(bookings[1].slot.date, slot.date + timedelta(days=14))
+
     def test_customer_reschedule_blocked_within_four_hours(self):
         near_start = timezone.localtime(timezone.now()) + timedelta(hours=2)
         slot = Slot.objects.create(
@@ -195,6 +222,64 @@ class BookingFlowTests(TestCase):
         self.assertEqual(booking.payment_status, 'PAID_AT_GROUND')
         self.assertEqual(booking.due_amount, 0)
         self.assertEqual(booking.paid_amount, booking.total_amount)
+
+    def test_owner_cancel_booking_cancels_future_recurring_bookings(self):
+        first_slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=7),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            is_booked=True,
+        )
+        second_slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=21),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            is_booked=True,
+        )
+        booking_one = Booking.objects.create(
+            slot=first_slot,
+            customer_name='Training Group',
+            customer_phone='6666611111',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='MANUAL',
+            payment_mode='FULL',
+            payment_status='PENDING',
+            paid_amount=0,
+            due_amount=500,
+            recurrence_group=uuid.uuid4(),
+            recurrence_position=0,
+        )
+        booking_two = Booking.objects.create(
+            slot=second_slot,
+            customer_name='Training Group',
+            customer_phone='6666611111',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='MANUAL',
+            payment_mode='FULL',
+            payment_status='PENDING',
+            paid_amount=0,
+            due_amount=500,
+            recurrence_group=booking_one.recurrence_group,
+            recurrence_position=1,
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get(f'/owner/cancel/{booking_one.id}/')
+        self.assertEqual(response.status_code, 302)
+
+        booking_one.refresh_from_db()
+        booking_two.refresh_from_db()
+        first_slot.refresh_from_db()
+        second_slot.refresh_from_db()
+
+        self.assertEqual(booking_one.status, 'CANCELLED')
+        self.assertEqual(booking_two.status, 'CANCELLED')
+        self.assertFalse(first_slot.is_booked)
+        self.assertFalse(second_slot.is_booked)
 
     def test_ground_slot_status_endpoint_reflects_active_booking(self):
         slot = Slot.objects.create(
