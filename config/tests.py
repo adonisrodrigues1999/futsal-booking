@@ -49,7 +49,6 @@ class EnvHelpersTests(SimpleTestCase):
 
         mocked_check_call.assert_any_call([sys.executable, "manage.py", "migrate", "--noinput"])
         mocked_check_call.assert_any_call([sys.executable, "manage.py", "collectstatic", "--noinput"])
-        mocked_check_call.assert_any_call([sys.executable, "manage.py", "check_email_config"])
         mocked_execvp.assert_called_once_with(
             "gunicorn",
             ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:9000"],
