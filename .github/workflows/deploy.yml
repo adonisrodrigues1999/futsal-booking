@@ -54,18 +54,29 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Configure app settings
+        env:
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
         run: |
+          settings=(
+            ALLOWED_HOSTS="$AZURE_WEBAPP_NAME.azurewebsites.net,.azurewebsites.net,footbook.online,www.footbook.online"
+            CSRF_TRUSTED_ORIGINS="https://$AZURE_WEBAPP_NAME.azurewebsites.net,https://*.azurewebsites.net,https://footbook.online,https://www.footbook.online"
+            EMAIL_HOST=smtp.gmail.com
+            EMAIL_PORT=587
+            EMAIL_USE_TLS=True
+            EMAIL_HOST_USER=foo.book.online.india@gmail.com
+            DEFAULT_FROM_EMAIL=foo.book.online.india@gmail.com
+          )
+
+          if [ -n "${RAZORPAY_KEY_ID:-}" ]; then settings+=("RAZORPAY_KEY_ID=$RAZORPAY_KEY_ID"); fi
+          if [ -n "${RAZORPAY_KEY_SECRET:-}" ]; then settings+=("RAZORPAY_KEY_SECRET=$RAZORPAY_KEY_SECRET"); fi
+          if [ -n "${RAZORPAY_WEBHOOK_SECRET:-}" ]; then settings+=("RAZORPAY_WEBHOOK_SECRET=$RAZORPAY_WEBHOOK_SECRET"); fi
+
           az webapp config appsettings set \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --name "$AZURE_WEBAPP_NAME" \
-            --settings \
-              ALLOWED_HOSTS="$AZURE_WEBAPP_NAME.azurewebsites.net,.azurewebsites.net,footbook.online,www.footbook.online" \
-              CSRF_TRUSTED_ORIGINS="https://$AZURE_WEBAPP_NAME.azurewebsites.net,https://*.azurewebsites.net,https://footbook.online,https://www.footbook.online" \
-              EMAIL_HOST=smtp.gmail.com \
-              EMAIL_PORT=587 \
-              EMAIL_USE_TLS=True \
-              EMAIL_HOST_USER=foo.book.online.india@gmail.com \
-              DEFAULT_FROM_EMAIL=foo.book.online.india@gmail.com
+            --settings "${settings[@]}"
 
       - name: Configure startup command
         run: |

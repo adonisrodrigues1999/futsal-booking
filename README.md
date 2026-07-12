@@ -179,6 +179,22 @@ For Gmail SMTP, create an app password and set `EMAIL_HOST_PASSWORD`. For Razorp
 Outbound mail now uses a consistent sender identity: `FootBook <foo.book.online.india@gmail.com>`, with a short `[FootBook]` subject prefix to improve recognition in inboxes.
 For production, keep `PREGENERATE_FUTURE_SLOTS=False` unless you run a background job that prebuilds slots off the request path.
 
+### Razorpay setup
+
+Add these environment variables in Azure App Service or GitHub Actions secrets:
+
+- `RAZORPAY_KEY_ID`
+- `RAZORPAY_KEY_SECRET`
+- `RAZORPAY_WEBHOOK_SECRET`
+
+Then create a Razorpay webhook pointing to:
+
+```bash
+/payments/razorpay/webhook/
+```
+
+Enable payment events such as `payment.captured` and `order.paid`. The app uses the key pair for checkout order creation and the webhook secret for server-side payment confirmation.
+
 ### 5. Apply migrations
 
 ```bash
