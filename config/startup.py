@@ -1,13 +1,12 @@
 import os
-
-from django.core.management import call_command
-from django.core.management.base import CommandError
+import subprocess
+import sys
 
 
 def main():
-    call_command("migrate", "--noinput")
-    call_command("collectstatic", "--noinput")
-    call_command("check_email_config")
+    subprocess.check_call([sys.executable, "manage.py", "migrate", "--noinput"])
+    subprocess.check_call([sys.executable, "manage.py", "collectstatic", "--noinput"])
+    subprocess.check_call([sys.executable, "manage.py", "check_email_config"])
 
     port = os.getenv("PORT", "8000")
     os.execvp(
@@ -22,7 +21,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except CommandError:
-        raise
+    main()

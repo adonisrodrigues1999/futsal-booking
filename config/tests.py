@@ -1,4 +1,5 @@
 from io import StringIO
+import sys
 
 from django.test import SimpleTestCase
 from django.test import override_settings
@@ -7,6 +8,7 @@ from django.core.management.base import CommandError
 from unittest.mock import patch
 
 from config.settings import env_secret, env_text
+from config import startup
 
 
 class EnvHelpersTests(SimpleTestCase):
@@ -38,3 +40,17 @@ class EnvHelpersTests(SimpleTestCase):
     def test_check_email_config_fails_in_production(self):
         with self.assertRaises(CommandError):
             call_command("check_email_config", stdout=StringIO())
+
+    @patch("config.startup.subprocess.check_call")
+    @patch("config.startup.os.execvp")
+    @patch("config.startup.os.getenv", return_value="9000")
+    def test_startup_invokes_manage_commands_and_gunicorn(self, mocked_getenv, mocked_execvp, mocked_check_call):
+        startup.main()
+
+        mocked_check_call.assert_any_call([sys.executable, "manage.py", "migrate", "--noinput"])
+        mocked_check_call.assert_any_call([sys.executable, "manage.py", "collectstatic", "--noinput"])
+        mocked_check_call.assert_any_call([sys.executable, "manage.py", "check_email_config"])
+        mocked_execvp.assert_called_once_with(
+            "gunicorn",
+            ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:9000"],
+        )
