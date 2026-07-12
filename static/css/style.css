@@ -202,7 +202,7 @@ h6,
   border-radius: 1.2rem;
   border: 1px solid rgba(25, 195, 125, 0.2);
   box-shadow: var(--shadow);
-  padding: 1.3rem;
+  padding: 1rem;
   animation: fade-rise 0.45s ease both;
 }
 
@@ -229,7 +229,7 @@ h6,
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1.2rem;
+  margin-bottom: 0.9rem;
 }
 
 .page-header h2,
@@ -252,6 +252,13 @@ h6,
   color: #fff;
   border: 1px solid rgba(25, 195, 125, 0.2);
   box-shadow: 0 24px 48px rgba(8, 20, 12, 0.35);
+}
+
+.hero-card,
+.tournament-strip,
+.ad-cta-banner,
+.ad-spot {
+  overflow: hidden;
 }
 
 .hero-card .text-muted {
@@ -467,6 +474,10 @@ h6,
   border: 1px solid rgba(25, 195, 125, 0.18);
 }
 
+.metric-card .card-body {
+  padding: 0.85rem;
+}
+
 .metric-icon {
   width: 44px;
   height: 44px;
@@ -489,6 +500,20 @@ h6,
 
 .list-group-item:last-child {
   border-bottom: none;
+}
+
+.card .card-body,
+.card.p-3,
+.card.p-3.p-md-4 {
+  padding: 0.9rem;
+}
+
+.card.p-3.p-md-4 {
+  padding: 0.95rem;
+}
+
+.hero-card {
+  padding: 1rem;
 }
 
 .btn {
@@ -1118,17 +1143,58 @@ h6,
 }
 
 @media (max-width: 768px) {
+  .container,
+  .container-fluid {
+    max-width: 100%;
+  }
+
+  .app-main {
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+  }
+
   .page-shell {
     padding: 1rem;
+  }
+
+  .page-shell,
+  .card,
+  .modal-content {
+    border-radius: 0.9rem;
   }
 
   .page-header {
     flex-direction: column;
     align-items: flex-start;
+    gap: 0.55rem;
   }
 
   .hero-inline-stats {
     grid-template-columns: 1fr;
+  }
+
+  .hero-card {
+    padding: 0.9rem;
+  }
+
+  .hero-card .btn-lg {
+    width: 100%;
+  }
+
+  .hero-card .col-lg-7,
+  .hero-card .col-lg-5 {
+    text-align: left;
+  }
+
+  .tournament-image,
+  .ground-media img {
+    height: 150px;
+  }
+
+  .ad-cta-banner,
+  .ad-spot {
+    padding: 0.8rem;
   }
 
   .slots-grid {
