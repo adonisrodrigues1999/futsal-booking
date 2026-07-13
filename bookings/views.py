@@ -1849,6 +1849,14 @@ def owner_manual_booking(request):
     selected_date = None
     slots = []
     manual_booking_preview = None
+    manual_name = ''
+    manual_phone = ''
+    manual_selected_slot_ids = []
+    manual_repeat_enabled = False
+    manual_repeat_every_weeks = 2
+    manual_repeat_occurrences = 1
+    manual_repeat_weekdays = []
+    weekday_options = [(0, 'Mon'), (1, 'Tue'), (2, 'Wed'), (3, 'Thu'), (4, 'Fri'), (5, 'Sat'), (6, 'Sun')]
 
     if request.method == 'POST':
         # creating a manual booking
@@ -1882,6 +1890,15 @@ def owner_manual_booking(request):
             repeat_occurrences = int(request.POST.get('repeat_occurrences') or 1)
         except Exception:
             repeat_occurrences = 1
+        repeat_weekdays = []
+        for weekday_value in request.POST.getlist('repeat_weekdays'):
+            try:
+                weekday = int(weekday_value)
+            except Exception:
+                continue
+            if 0 <= weekday <= 6 and weekday not in repeat_weekdays:
+                repeat_weekdays.append(weekday)
+        repeat_weekdays = sorted(repeat_weekdays)
         confirm_conflicts = request.POST.get('confirm_conflicts') == '1'
         repeat_every_weeks = max(1, min(repeat_every_weeks, 12))
         repeat_occurrences = max(1, min(repeat_occurrences, 52))
@@ -1902,36 +1919,43 @@ def owner_manual_booking(request):
 
                 target_rows = []
                 conflict_rows = []
+                use_weekday_pattern = repeat_enabled and len(repeat_weekdays) > 0
                 for occurrence_index in range(repeat_occurrences if repeat_enabled else 1):
-                    target_date = None
                     for slot in slots_qs:
                         if _is_restricted_manual_hour(slot.start_time):
                             messages.error(request, 'Manual booking is not allowed between 2:00 AM and 6:00 AM.')
                             return redirect('/owner/manual-booking/')
-                        current_date = slot.date if occurrence_index == 0 else (slot.date + timedelta(weeks=repeat_every_weeks * occurrence_index))
-                        target_date = current_date
-                        ensure_slots_for_ground_date(ground=slot.ground, slot_date=current_date)
-                        target_slot = Slot.objects.select_for_update().select_related('ground').filter(
-                            ground=slot.ground,
-                            date=current_date,
-                            start_time=slot.start_time,
-                            end_time=slot.end_time,
-                        ).first()
-                        if not target_slot:
-                            messages.error(request, 'One of the target slots could not be found.')
-                            return redirect('/owner/manual-booking/')
-                        if _slot_start_datetime(target_slot) <= now_dt:
-                            messages.error(request, 'Past slots cannot be manually booked.')
-                            return redirect('/owner/manual-booking/')
-                        if target_slot.is_booked or Booking.objects.filter(slot=target_slot, status='BOOKED').exists():
-                            conflict_rows.append({
-                                'date': target_slot.date,
-                                'start_time': target_slot.start_time,
-                                'end_time': target_slot.end_time,
-                                'label': f"{target_slot.date} · {target_slot.start_time.strftime('%I:%M %p')} - {target_slot.end_time.strftime('%I:%M %p')}",
-                            })
-                            continue
-                        target_rows.append((target_slot, occurrence_index))
+                        if use_weekday_pattern:
+                            cycle_start = slot.date + timedelta(weeks=repeat_every_weeks * occurrence_index)
+                            slot_weekdays = repeat_weekdays
+                        else:
+                            cycle_start = slot.date if occurrence_index == 0 else (slot.date + timedelta(weeks=repeat_every_weeks * occurrence_index))
+                            slot_weekdays = [cycle_start.weekday()]
+
+                        for weekday_index, weekday in enumerate(slot_weekdays):
+                            current_date = cycle_start + timedelta(days=(weekday - cycle_start.weekday()) % 7)
+                            ensure_slots_for_ground_date(ground=slot.ground, slot_date=current_date)
+                            target_slot = Slot.objects.select_for_update().select_related('ground').filter(
+                                ground=slot.ground,
+                                date=current_date,
+                                start_time=slot.start_time,
+                                end_time=slot.end_time,
+                            ).first()
+                            if not target_slot:
+                                messages.error(request, 'One of the target slots could not be found.')
+                                return redirect('/owner/manual-booking/')
+                            if _slot_start_datetime(target_slot) <= now_dt:
+                                messages.error(request, 'Past slots cannot be manually booked.')
+                                return redirect('/owner/manual-booking/')
+                            if target_slot.is_booked or Booking.objects.filter(slot=target_slot, status='BOOKED').exists():
+                                conflict_rows.append({
+                                    'date': target_slot.date,
+                                    'start_time': target_slot.start_time,
+                                    'end_time': target_slot.end_time,
+                                    'label': f"{target_slot.date} · {target_slot.start_time.strftime('%I:%M %p')} - {target_slot.end_time.strftime('%I:%M %p')}",
+                                })
+                                continue
+                            target_rows.append((target_slot, occurrence_index * max(len(slot_weekdays), 1) + weekday_index))
 
                 if conflict_rows and not confirm_conflicts:
                     manual_booking_preview = {
@@ -1941,6 +1965,7 @@ def owner_manual_booking(request):
                         'repeat_enabled': repeat_enabled,
                         'repeat_every_weeks': repeat_every_weeks,
                         'repeat_occurrences': repeat_occurrences,
+                        'repeat_weekdays': repeat_weekdays,
                         'conflicts': conflict_rows,
                     }
                     messages.warning(
@@ -1959,6 +1984,7 @@ def owner_manual_booking(request):
                             'repeat_enabled': repeat_enabled,
                             'repeat_every_weeks': repeat_every_weeks,
                             'repeat_occurrences': repeat_occurrences,
+                            'repeat_weekdays': repeat_weekdays,
                             'conflicts': conflict_rows,
                         }
                         skip_creation = True
@@ -1997,6 +2023,7 @@ def owner_manual_booking(request):
                                 'repeat_enabled': repeat_enabled,
                                 'repeat_every_weeks': repeat_every_weeks if repeat_enabled else 1,
                                 'repeat_occurrences': repeat_occurrences if repeat_enabled else 1,
+                                'repeat_weekdays': repeat_weekdays if repeat_enabled else [],
                             },
                         )
                         created_bookings.append(booking)
@@ -2017,6 +2044,14 @@ def owner_manual_booking(request):
             messages.warning(request, f'Skipped {len(conflict_rows)} already-booked recurring slot(s).')
         if not manual_booking_preview or confirm_conflicts:
             return redirect('/dashboard/owner/')
+
+        manual_name = name
+        manual_phone = phone
+        manual_selected_slot_ids = [int(value) for value in slot_ids]
+        manual_repeat_enabled = repeat_enabled
+        manual_repeat_every_weeks = repeat_every_weeks
+        manual_repeat_occurrences = repeat_occurrences
+        manual_repeat_weekdays = repeat_weekdays
 
     # GET handling: filter slots if ground+date provided
     ground_id = request.GET.get('ground')
@@ -2069,12 +2104,14 @@ def owner_manual_booking(request):
         'selected_date': selected_date,
         'grounds_count': grounds_count,
         'manual_booking_preview': manual_booking_preview,
-        'manual_name': name if request.method == 'POST' else '',
-        'manual_phone': phone if request.method == 'POST' else '',
-        'manual_selected_slot_ids': [int(value) for value in slot_ids] if request.method == 'POST' and 'slot_ids' in locals() else [],
-        'manual_repeat_enabled': repeat_enabled if request.method == 'POST' else False,
-        'manual_repeat_every_weeks': repeat_every_weeks if request.method == 'POST' else 2,
-        'manual_repeat_occurrences': repeat_occurrences if request.method == 'POST' else 1,
+        'manual_name': manual_name,
+        'manual_phone': manual_phone,
+        'manual_selected_slot_ids': manual_selected_slot_ids,
+        'manual_repeat_enabled': manual_repeat_enabled,
+        'manual_repeat_every_weeks': manual_repeat_every_weeks,
+        'manual_repeat_occurrences': manual_repeat_occurrences,
+        'manual_repeat_weekdays': manual_repeat_weekdays,
+        'weekday_options': weekday_options,
     })
 
 

@@ -105,6 +105,18 @@
                     <input class="form-check-input" type="checkbox" id="repeat_enabled" name="repeat_enabled" {% if manual_repeat_enabled %}checked{% endif %}>
                     <label class="form-check-label" for="repeat_enabled">Repeat booking</label>
                   </div>
+                  <div class="mb-3 repeat-booking-fields d-none">
+                    <label class="form-label small mb-2">Repeat on weekdays</label>
+                    <div class="d-flex flex-wrap gap-2">
+                      {% for weekday_value, weekday_label in weekday_options %}
+                        <label class="btn btn-outline-secondary btn-sm">
+                          <input type="checkbox" class="btn-check" name="repeat_weekdays" value="{{ weekday_value }}" {% if manual_repeat_weekdays and weekday_value in manual_repeat_weekdays %}checked{% endif %}>
+                          {{ weekday_label }}
+                        </label>
+                      {% endfor %}
+                    </div>
+                    <div class="small text-muted mt-2">Example: choose Tue, Wed, and Sat for the same time slot each week.</div>
+                  </div>
                   <div class="row g-2 repeat-booking-fields d-none">
                     <div class="col-6">
                       <label class="form-label small" for="repeat_every_weeks">Repeat every</label>
@@ -119,7 +131,7 @@
                     </div>
                   </div>
                   <div class="small text-muted mt-2 repeat-booking-fields d-none">
-                    Use this for training sessions like alternate Sundays.
+                    Use this for training sessions like alternate Sundays, or for a fixed weekly schedule.
                   </div>
                 </div>
                 {% if manual_booking_preview and manual_booking_preview.conflicts %}

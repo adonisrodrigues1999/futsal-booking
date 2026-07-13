@@ -165,6 +165,37 @@ class BookingFlowTests(TestCase):
         self.assertEqual(bookings[0].recurrence_group, bookings[1].recurrence_group)
         self.assertEqual(bookings[1].slot.date, slot.date + timedelta(days=14))
 
+    def test_manual_booking_can_repeat_on_selected_weekdays(self):
+        today = timezone.localdate()
+        days_until_tuesday = (1 - today.weekday()) % 7 or 7
+        base_date = today + timedelta(days=days_until_tuesday)
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=base_date,
+            start_time=time(17, 0),
+            end_time=time(18, 0),
+            is_booked=False,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.post('/owner/manual-booking/', {
+            'slot': str(slot.id),
+            'name': 'Weekly Training',
+            'phone': '9999911111',
+            'repeat_enabled': 'on',
+            'repeat_every_weeks': '1',
+            'repeat_occurrences': '2',
+            'repeat_weekdays': ['1', '2', '5'],
+        })
+        self.assertEqual(response.status_code, 302)
+
+        bookings = Booking.objects.filter(customer_name='Weekly Training', booking_source='MANUAL').order_by('slot__date', 'slot__start_time')
+        self.assertEqual(bookings.count(), 6)
+        self.assertIsNotNone(bookings[0].recurrence_group)
+        self.assertEqual({b.recurrence_group for b in bookings}, {bookings[0].recurrence_group})
+        self.assertEqual(bookings[0].slot.date, base_date)
+        self.assertEqual(bookings[1].slot.date, base_date + timedelta(days=1))
+        self.assertEqual(bookings[2].slot.date, base_date + timedelta(days=4))
+
     def test_customer_reschedule_blocked_within_four_hours(self):
         near_start = timezone.localtime(timezone.now()) + timedelta(hours=2)
         slot = Slot.objects.create(
