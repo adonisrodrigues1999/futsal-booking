@@ -795,7 +795,12 @@ def create_razorpay_order(request):
                 'payment_mode': resolved_mode,
             }
         })
-    except Exception:
+    except Exception as exc:
+        logger.exception(
+            'Failed to create Razorpay order for slot=%s user=%s',
+            slot.id,
+            request.user.id,
+        )
         return JsonResponse({'success': False, 'error': 'Unable to initialize payment right now'}, status=500)
 
     return JsonResponse({
