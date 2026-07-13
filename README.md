@@ -186,14 +186,17 @@ Add these environment variables in Azure App Service or GitHub Actions secrets:
 - `RAZORPAY_KEY_ID`
 - `RAZORPAY_KEY_SECRET`
 - `RAZORPAY_WEBHOOK_SECRET`
+- `SESSION_COOKIE_DOMAIN=.footbook.online`
+- `CSRF_COOKIE_DOMAIN=.footbook.online`
 
 Then create a Razorpay webhook pointing to:
 
 ```bash
-/payments/razorpay/webhook/
+https://www.footbook.online/payments/razorpay/webhook/
 ```
 
 Enable payment events such as `payment.captured` and `order.paid`. The app uses the key pair for checkout order creation and the webhook secret for server-side payment confirmation.
+Set the cookie domain to `.footbook.online` so login sessions work across both `footbook.online` and `www.footbook.online`.
 
 ### 5. Apply migrations
 
