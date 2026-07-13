@@ -528,7 +528,7 @@ class BookingFlowTests(TestCase):
             is_booked=False,
         )
 
-        self.ground.day_price = 101
+        self.ground.day_price = 50
         self.ground.save(update_fields=['day_price'])
 
         self.client.force_login(self.customer)
