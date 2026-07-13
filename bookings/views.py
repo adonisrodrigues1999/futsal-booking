@@ -220,19 +220,20 @@ def _send_booking_cancelled_email(booking, *, cancelled_count=1):
 
 
 def _cancel_booking_series_from(booking):
-    if not booking.recurrence_group:
-        return [booking]
-
-    affected = list(
-        Booking.objects
-        .select_related('slot', 'slot__ground', 'slot__ground__owner', 'user')
-        .filter(
-            recurrence_group=booking.recurrence_group,
-            slot__ground=booking.slot.ground,
-            slot__date__gte=booking.slot.date,
+    if booking.recurrence_group:
+        affected = list(
+            Booking.objects
+            .select_related('slot', 'slot__ground', 'slot__ground__owner', 'user')
+            .filter(
+                recurrence_group=booking.recurrence_group,
+                slot__ground=booking.slot.ground,
+                slot__date__gte=booking.slot.date,
+            )
+            .order_by('slot__date', 'slot__start_time', 'created_at')
         )
-        .order_by('slot__date', 'slot__start_time', 'created_at')
-    )
+    else:
+        affected = [booking]
+
     if not affected:
         return [booking]
 
