@@ -2013,6 +2013,8 @@ def owner_manual_booking(request):
             messages.success(request, f'Recurring manual booking created for {repeat_occurrences} occurrences.')
         else:
             messages.success(request, 'Manual booking created')
+        if confirm_conflicts and conflict_rows:
+            messages.warning(request, f'Skipped {len(conflict_rows)} already-booked recurring slot(s).')
         if not manual_booking_preview or confirm_conflicts:
             return redirect('/dashboard/owner/')
 
