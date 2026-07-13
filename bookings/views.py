@@ -67,7 +67,8 @@ def _slot_discount(slot):
         return 0
     minutes_to_start = (_slot_start_datetime(slot) - timezone.localtime(timezone.now())).total_seconds() / 60
     if 0 < minutes_to_start <= 30:
-        return 101
+        base_price = _slot_price(slot.ground, slot.start_time)
+        return 51 if base_price < 700 else 101
     return 0
 
 
