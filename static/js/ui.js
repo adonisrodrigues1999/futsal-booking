@@ -543,7 +543,11 @@ document.addEventListener('DOMContentLoaded', function() {
             showAppToast('Payment was cancelled.', 'warning', 2200);
           }
         },
-        prefill: orderData.prefill || {}
+        prefill: {
+          name: (orderData.prefill && orderData.prefill.name) || '',
+          email: (orderData.prefill && orderData.prefill.email) || window.currentUserEmail || '',
+          contact: (orderData.prefill && orderData.prefill.contact) || ''
+        }
       };
 
       var checkout = new Razorpay(options);
