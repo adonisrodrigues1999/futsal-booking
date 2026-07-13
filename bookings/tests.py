@@ -503,6 +503,36 @@ class BookingFlowTests(TestCase):
         self.assertTrue(booking.loyalty_reward_redeemed)
         self.assertEqual(booking.reward_discount_amount, booking.total_amount)
 
+    def test_discounted_free_slot_bypasses_razorpay(self):
+        fixed_now = timezone.make_aware(datetime(2026, 6, 25, 16, 30), timezone.get_current_timezone())
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=fixed_now.date(),
+            start_time=time(17, 0),
+            end_time=time(18, 0),
+            is_booked=False,
+        )
+
+        self.ground.day_price = 101
+        self.ground.save(update_fields=['day_price'])
+
+        self.client.force_login(self.customer)
+        with patch('bookings.views.timezone.now', return_value=fixed_now):
+            response = self.client.post(
+                '/payments/razorpay/create-order/',
+                data='{"slot_id": %s, "payment_mode": "FULL"}' % slot.id,
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['success'])
+        self.assertTrue(payload['free_booking'])
+
+        booking = Booking.objects.get(slot=slot, status='BOOKED')
+        self.assertEqual(booking.total_amount, 0)
+        self.assertEqual(booking.payment_status, 'PAID')
+
     def test_tournament_registration_awards_points(self):
         referrer = User.objects.create_user(
             email='referrer@example.com',

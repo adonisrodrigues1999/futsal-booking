@@ -780,6 +780,50 @@ def create_razorpay_order(request):
     total_amount = _slot_price_for_slot(slot)
     pay_now_amount, due_amount, resolved_mode = _payment_amounts(total_amount, payment_mode)
 
+    if pay_now_amount <= 0:
+        with transaction.atomic():
+            slot = Slot.objects.select_for_update().select_related('ground').get(id=slot_id, ground__is_active=True)
+            if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
+                return JsonResponse({'success': False, 'error': 'Slot is already booked'}, status=409)
+
+            total_amount = _slot_price_for_slot(slot)
+            booking = Booking.objects.create(
+                user=request.user,
+                slot=slot,
+                customer_name=request.user.name,
+                customer_phone=request.user.phone_number,
+                total_amount=total_amount,
+                owner_payout=total_amount,
+                booking_source='ONLINE',
+                payment_mode='FULL',
+                payment_status='PAID',
+                paid_amount=0,
+                due_amount=0,
+                payment_paid_at=timezone.now(),
+                reward_discount_amount=total_amount,
+            )
+
+            slot.is_booked = True
+            slot.save(update_fields=['is_booked'])
+
+            ActivityLog.objects.create(
+                user=request.user,
+                action='BOOKED',
+                booking=booking,
+                slot=slot
+            )
+
+            award_booking_rewards(booking)
+            transaction.on_commit(lambda booking=booking: _owner_booking_email(booking))
+
+            return JsonResponse({
+                'success': True,
+                'free_booking': True,
+                'booking_id': str(booking.id),
+                'redirect_url': '/my-bookings/',
+                'message': 'This slot is free after discount, so it was booked without payment.',
+            })
+
     client, key_id = _razorpay_client()
     if not client or not key_id:
         return JsonResponse({'success': False, 'error': 'Razorpay is not configured on server'}, status=500)
@@ -801,6 +845,12 @@ def create_razorpay_order(request):
             slot.id,
             request.user.id,
         )
+        if settings.DEBUG:
+            return JsonResponse({
+                'success': False,
+                'error': f'Unable to initialize payment right now: {exc.__class__.__name__}',
+                'details': str(exc),
+            }, status=500)
         return JsonResponse({'success': False, 'error': 'Unable to initialize payment right now'}, status=500)
 
     return JsonResponse({
