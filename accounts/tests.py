@@ -2,7 +2,7 @@ from datetime import time, timedelta
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, Client
 from django.utils import timezone
 
 from accounts.models import User
@@ -213,3 +213,39 @@ class RegistrationResilienceTests(TestCase):
         self.assertTrue(EmailVerification.objects.filter(user__email='newuser@example.com').exists())
         self.assertContains(response, 'wa.me/918625877270')
         self.assertContains(response, 'newuser%40example.com')
+
+
+class CsrfFailurePageTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            email='owner@example.com',
+            phone_number='8888880000',
+            name='Owner',
+            password='password123',
+            role='owner',
+            email_verified=True,
+        )
+        self.ground = Ground.objects.create(
+            name='CSRF Ground',
+            location='City',
+            owner=self.owner,
+            day_price=500,
+            night_price=700,
+            opening_time=time(6, 0),
+            closing_time=time(23, 0),
+        )
+
+    def test_custom_csrf_failure_page_shows_support_link(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.owner)
+        response = client.post('/owner/manual-booking/', {
+            'ground': str(self.ground.id),
+            'date': timezone.localdate().strftime('%Y-%m-%d'),
+            'slot': '1',
+            'name': 'Test',
+            'phone': '9999911111',
+        })
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, 'Report via WhatsApp', status_code=403)
+        self.assertContains(response, 'Request blocked', status_code=403)

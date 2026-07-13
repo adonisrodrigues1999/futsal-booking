@@ -40,6 +40,36 @@ def _whatsapp_support_link(*, email, verification_url):
     return f"https://wa.me/{WHATSAPP_SUPPORT_NUMBER}?text={quote(message)}"
 
 
+def _build_support_issue_link(*, request, reason):
+    user = getattr(request, 'user', None)
+    user_name = getattr(user, 'name', '') if user and getattr(user, 'is_authenticated', False) else ''
+    user_email = getattr(user, 'email', '') if user and getattr(user, 'is_authenticated', False) else ''
+    message = (
+        "Hi FootBook, I hit a production error.\n\n"
+        f"Reason: {reason}\n"
+        f"User: {user_name or '-'}\n"
+        f"Email: {user_email or '-'}\n"
+        f"Path: {request.path}\n"
+        f"Method: {request.method}\n"
+        f"Referer: {request.META.get('HTTP_REFERER', '-')}\n"
+        f"User-Agent: {request.META.get('HTTP_USER_AGENT', '-')}\n"
+        f"IP: {request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '-'))}\n"
+        "\nPlease check the platform logs and recent booking activity."
+    )
+    return f"https://wa.me/{WHATSAPP_SUPPORT_NUMBER}?text={quote(message)}"
+
+
+def csrf_failure(request, reason=""):
+    support_link = _build_support_issue_link(
+        request=request,
+        reason=reason or "CSRF verification failed",
+    )
+    return render(request, 'errors/csrf_failure.html', {
+        'reason': reason or 'CSRF verification failed',
+        'support_link': support_link,
+    }, status=403)
+
+
 def register(request):
     if request.user.is_authenticated:
         return redirect('home')

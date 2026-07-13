@@ -251,6 +251,7 @@ CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax")
 # If behind a proxy/load balancer that sets X-Forwarded-Proto, enable this so Django knows requests are secure
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 PREGENERATE_FUTURE_SLOTS = env_bool("PREGENERATE_FUTURE_SLOTS", default=False)
+CSRF_FAILURE_VIEW = "accounts.views.csrf_failure"
 
 
 RAZORPAY_KEY_ID = env_secret("RAZORPAY_KEY_ID", "")
