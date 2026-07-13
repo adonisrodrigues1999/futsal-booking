@@ -478,12 +478,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function startSlotCheckout(slotId, confirmBtn) {
-    var ack = document.getElementById('cm-non-refundable-ack');
-    if (!ack || !ack.checked) {
-      showAppToast('Please accept the non-refundable policy before payment.', 'warning', 3000);
-      return;
-    }
-
     var paymentMode = getSelectedPaymentMode();
     var isFreeReward = paymentMode === 'FREE_REWARD';
     if (!isFreeReward && typeof Razorpay === 'undefined') {
@@ -576,13 +570,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('cm-ground').innerHTML = 'Ground: <strong>' + (window.currentGroundName || document.title) + '</strong>';
     document.getElementById('cm-price').innerHTML = 'Price: <strong>₹' + price + '</strong>';
     var fullRadio = document.getElementById('cm-payment-full');
-    var ack = document.getElementById('cm-non-refundable-ack');
     if (fullRadio) fullRadio.checked = true;
-    if (ack) ack.checked = false;
 
     var confirmBtn = document.getElementById('cm-confirm-btn');
     confirmBtn.disabled = false;
-    confirmBtn.textContent = 'Proceed to Pay';
+    confirmBtn.textContent = 'Pay Now';
     // replace click handler
     confirmBtn.onclick = function() { startSlotCheckout(slotId, confirmBtn); };
 
