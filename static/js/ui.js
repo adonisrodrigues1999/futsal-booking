@@ -443,6 +443,43 @@ document.addEventListener('DOMContentLoaded', function() {
     return checked ? checked.value : 'FULL';
   }
 
+  var redirectModalEl = document.getElementById('redirectModalGlobal');
+  var redirectModal = redirectModalEl ? new bootstrap.Modal(redirectModalEl, {backdrop: 'static', keyboard: false}) : null;
+  var redirectTimer = null;
+
+  function showRedirectCountdown(url) {
+    if (!redirectModalEl || !redirectModal) {
+      window.location = url;
+      return;
+    }
+
+    var messageEl = document.getElementById('redirect-modal-message');
+    var secondsLeft = 5;
+    if (redirectTimer) {
+      clearInterval(redirectTimer);
+      redirectTimer = null;
+    }
+
+    function renderMessage() {
+      if (messageEl) {
+        messageEl.textContent = 'Redirecting in ' + secondsLeft + ' seconds. Do not go back or close the browser.';
+      }
+    }
+
+    renderMessage();
+    redirectModal.show();
+    redirectTimer = setInterval(function() {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        clearInterval(redirectTimer);
+        redirectTimer = null;
+        window.location = url;
+        return;
+      }
+      renderMessage();
+    }, 1000);
+  }
+
   function verifyAndFinalizeBooking(slotId, paymentMode, rpResponse, confirmBtn) {
     var csrftoken = getCookie('csrftoken');
     fetch('/payments/razorpay/verify-and-book/', {
@@ -467,9 +504,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }).then(function(data) {
       showAppToast(data.message || 'Booking confirmed. Non-refundable payment.', 'success', 2600);
-      setTimeout(function() {
-        window.location = data.redirect_url || '/my-bookings/';
-      }, 400);
+      showRedirectCountdown(data.redirect_url || '/my-bookings/');
     }).catch(function(err) {
       showAppToast(err.message || 'Payment verified but booking failed. Contact support.', 'danger', 4200);
       confirmBtn.disabled = false;
