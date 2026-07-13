@@ -493,8 +493,8 @@ class BookingFlowTests(TestCase):
         slot = Slot.objects.create(
             ground=self.ground,
             date=timezone.localdate() + timedelta(days=1),
-            start_time=time(18, 0),
-            end_time=time(19, 0),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
             is_booked=False,
         )
 
@@ -517,6 +517,81 @@ class BookingFlowTests(TestCase):
         self.assertEqual(self.customer.loyalty_points, 5)
         self.assertTrue(booking.loyalty_reward_redeemed)
         self.assertEqual(booking.reward_discount_amount, booking.total_amount)
+
+    def test_free_booking_credit_blocked_for_evening_slot(self):
+        self.customer.free_booking_credits = 1
+        self.customer.save(update_fields=['free_booking_credits'])
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=1),
+            start_time=time(18, 0),
+            end_time=time(19, 0),
+            is_booked=False,
+        )
+
+        self.client.force_login(self.customer)
+        response = self.client.post(
+            '/payments/razorpay/create-order/',
+            data='{"slot_id": %s, "payment_mode": "FREE_REWARD"}' % slot.id,
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('morning slots', response.json().get('error', '').lower())
+
+    def test_manual_recurring_booking_conflict_requires_confirmation(self):
+        first_slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=7),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            is_booked=False,
+        )
+        second_slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=21),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=second_slot,
+            customer_name='Existing Group',
+            customer_phone='8888800000',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='MANUAL',
+            payment_mode='FULL',
+            payment_status='PENDING',
+            paid_amount=0,
+            due_amount=500,
+        )
+
+        self.client.force_login(self.owner)
+        payload = {
+            'ground': str(self.ground.id),
+            'date': first_slot.date.strftime('%Y-%m-%d'),
+            'slot': str(first_slot.id),
+            'name': 'Training Group',
+            'phone': '9999911111',
+            'repeat_enabled': 'on',
+            'repeat_every_weeks': '2',
+            'repeat_occurrences': '2',
+        }
+
+        preview_response = self.client.post('/owner/manual-booking/', payload)
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertContains(preview_response, 'Some recurring slots are already booked', html=False)
+        self.assertFalse(Booking.objects.filter(customer_name='Training Group', booking_source='MANUAL').exists())
+
+        confirm_payload = dict(payload)
+        confirm_payload['confirm_conflicts'] = '1'
+        confirm_response = self.client.post('/owner/manual-booking/', confirm_payload)
+        self.assertEqual(confirm_response.status_code, 302)
+
+        bookings = Booking.objects.filter(customer_name='Training Group', booking_source='MANUAL').order_by('slot__date')
+        self.assertEqual(bookings.count(), 1)
+        self.assertEqual(bookings.first().slot, first_slot)
 
     def test_discounted_free_slot_bypasses_razorpay(self):
         fixed_now = timezone.make_aware(datetime(2026, 6, 25, 16, 30), timezone.get_current_timezone())

@@ -3,6 +3,16 @@
 
 {% block content %}
 <div class="page-shell">
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
   <div class="page-header">
     <div>
       <h2>Manual Booking</h2>
@@ -48,6 +58,9 @@
       {% csrf_token %}
       <input type="hidden" name="ground" value="{{ selected_ground.id }}">
       <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+      {% if manual_booking_preview %}
+        <input type="hidden" name="confirm_conflicts" value="1">
+      {% endif %}
       <div class="card-body">
         <div class="row g-4">
           <div class="col-lg-7">
@@ -60,7 +73,7 @@
                 {% with slot=obj.slot %}
                   <label class="list-group-item d-flex justify-content-between align-items-center gap-2">
                     <span class="d-flex align-items-center gap-2">
-                      <input class="form-check-input manual-slot-checkbox" type="checkbox" name="slots" value="{{ slot.id }}" data-price="{{ obj.price }}" data-label="{{ slot.start_time|time:'g:i A' }} - {{ slot.end_time|time:'g:i A' }}">
+                      <input class="form-check-input manual-slot-checkbox" type="checkbox" name="slots" value="{{ slot.id }}" data-price="{{ obj.price }}" data-label="{{ slot.start_time|time:'g:i A' }} - {{ slot.end_time|time:'g:i A' }}" {% if manual_selected_slot_ids and slot.id in manual_selected_slot_ids %}checked{% endif %}>
                       <span>
                         <strong>{{ slot.start_time|time:"g:i A" }}</strong> - {{ slot.end_time|time:"g:i A" }}
                       </span>
@@ -81,34 +94,45 @@
                 <h6 class="mb-3">Customer Details</h6>
                 <div class="mb-2">
                   <label for="name" class="form-label">Customer Name</label>
-                  <input type="text" name="name" id="name" class="form-control" placeholder="Enter customer name" required>
+                  <input type="text" name="name" id="name" class="form-control" placeholder="Enter customer name" value="{{ manual_name|default:'' }}" required>
                 </div>
                 <div class="mb-3">
                   <label for="phone" class="form-label">Phone Number</label>
-                  <input type="tel" name="phone" id="phone" class="form-control" placeholder="10-digit phone number" required>
+                  <input type="tel" name="phone" id="phone" class="form-control" placeholder="10-digit phone number" value="{{ manual_phone|default:'' }}" required>
                 </div>
                 <div class="border rounded p-3 mb-3">
                   <div class="form-check mb-2">
-                    <input class="form-check-input" type="checkbox" id="repeat_enabled" name="repeat_enabled">
+                    <input class="form-check-input" type="checkbox" id="repeat_enabled" name="repeat_enabled" {% if manual_repeat_enabled %}checked{% endif %}>
                     <label class="form-check-label" for="repeat_enabled">Repeat booking</label>
                   </div>
                   <div class="row g-2 repeat-booking-fields d-none">
                     <div class="col-6">
                       <label class="form-label small" for="repeat_every_weeks">Repeat every</label>
-                      <select name="repeat_every_weeks" id="repeat_every_weeks" class="form-select form-select-sm">
-                        <option value="1">Every week</option>
-                        <option value="2" selected>Every 2 weeks</option>
+                        <select name="repeat_every_weeks" id="repeat_every_weeks" class="form-select form-select-sm">
+                        <option value="1" {% if manual_repeat_every_weeks == 1 %}selected{% endif %}>Every week</option>
+                        <option value="2" {% if manual_repeat_every_weeks == 2 %}selected{% endif %}>Every 2 weeks</option>
                       </select>
                     </div>
                     <div class="col-6">
                       <label class="form-label small" for="repeat_occurrences">Occurrences</label>
-                      <input type="number" min="1" max="52" value="1" name="repeat_occurrences" id="repeat_occurrences" class="form-control form-control-sm">
+                      <input type="number" min="1" max="52" value="{{ manual_repeat_occurrences|default:1 }}" name="repeat_occurrences" id="repeat_occurrences" class="form-control form-control-sm">
                     </div>
                   </div>
                   <div class="small text-muted mt-2 repeat-booking-fields d-none">
                     Use this for training sessions like alternate Sundays.
                   </div>
                 </div>
+                {% if manual_booking_preview and manual_booking_preview.conflicts %}
+                  <div class="alert alert-warning">
+                    <div class="fw-semibold mb-1">Some recurring slots are already booked</div>
+                    <ul class="mb-0">
+                      {% for conflict in manual_booking_preview.conflicts %}
+                        <li>{{ conflict.label }}</li>
+                      {% endfor %}
+                    </ul>
+                    <div class="mt-2">If you continue, FootBook will create only the available slots and skip the booked ones.</div>
+                  </div>
+                {% endif %}
                 <div class="p-3 bg-light rounded">
                   <div class="small text-muted">Selected slots</div>
                   <div class="fw-semibold" id="manual-slot-count">0 slots</div>
@@ -124,7 +148,9 @@
         </div>
       </div>
       <div class="card-footer d-flex justify-content-end">
-        <button type="submit" class="btn btn-primary" id="manual-book-btn" disabled>Create Manual Booking</button>
+        <button type="submit" class="btn btn-primary" id="manual-book-btn" disabled>
+          {% if manual_booking_preview %}Confirm and Create Available Bookings{% else %}Create Manual Booking{% endif %}
+        </button>
       </div>
     </form>
   {% else %}

@@ -532,6 +532,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
+  function isMorningTimeLabel(timeLabel) {
+    if (!timeLabel) return false;
+    var match = String(timeLabel).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) return false;
+    var hour = parseInt(match[1], 10);
+    var period = match[3].toUpperCase();
+    if (period === 'AM') {
+      if (hour === 12) hour = 0;
+    } else if (period === 'PM' && hour !== 12) {
+      hour += 12;
+    }
+    return hour >= 6 && hour < 12;
+  }
+
   var redirectModalEl = document.getElementById('redirectModalGlobal');
   var redirectModal = redirectModalEl ? new bootstrap.Modal(redirectModalEl, {backdrop: 'static', keyboard: false}) : null;
   var redirectTimer = null;
@@ -704,9 +718,24 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('cm-price').innerHTML = 'Price: <strong>₹' + price + '</strong>';
     var fullRadio = document.getElementById('cm-payment-full');
     var savedMode = loadCheckoutMode();
+    var freeWrap = document.getElementById('cm-payment-free-wrap');
+    var freeRadio = document.getElementById('cm-payment-free');
+    var allowFree = isMorningTimeLabel(startTime);
+    if (freeWrap) {
+      freeWrap.classList.toggle('d-none', !allowFree);
+    }
+    if (freeRadio && !allowFree && freeRadio.checked) {
+      freeRadio.checked = false;
+    }
     if (fullRadio) fullRadio.checked = true;
     var savedRadio = document.querySelector('input[name="cm-payment-mode"][value="' + savedMode + '"]');
-    if (savedRadio) savedRadio.checked = true;
+    if (savedRadio && (!savedRadio.value || savedRadio.value !== 'FREE_REWARD' || allowFree)) {
+      savedRadio.checked = true;
+    }
+    if (!allowFree && freeRadio && freeRadio.checked) {
+      freeRadio.checked = false;
+      if (fullRadio) fullRadio.checked = true;
+    }
 
     var confirmBtn = document.getElementById('cm-confirm-btn');
     confirmBtn.disabled = false;

@@ -58,6 +58,10 @@ def _is_day_slot(slot_time):
     return 6 <= slot_time.hour < 18
 
 
+def _is_morning_slot(slot_time):
+    return 6 <= slot_time.hour < 12
+
+
 def _slot_price(ground, slot_time):
     return ground.day_price if _is_day_slot(slot_time) else ground.night_price
 
@@ -740,11 +744,15 @@ def create_razorpay_order(request):
     if payment_mode == 'FREE_REWARD':
         if getattr(request.user, 'free_booking_credits', 0) <= 0:
             return JsonResponse({'success': False, 'error': 'No free booking credits available'}, status=400)
+        if not _is_morning_slot(slot.start_time):
+            return JsonResponse({'success': False, 'error': 'Free booking credits can only be redeemed for morning slots.'}, status=400)
         with transaction.atomic():
             slot = Slot.objects.select_for_update().get(id=slot_id)
             user = User.objects.select_for_update().get(id=request.user.id)
             if user.free_booking_credits <= 0:
                 return JsonResponse({'success': False, 'error': 'No free booking credits available'}, status=400)
+            if not _is_morning_slot(slot.start_time):
+                return JsonResponse({'success': False, 'error': 'Free booking credits can only be redeemed for morning slots.'}, status=400)
             if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
                 return JsonResponse({'success': False, 'error': 'Slot is already booked'}, status=409)
             total_amount = _slot_price_for_slot(slot)
@@ -1840,12 +1848,25 @@ def owner_manual_booking(request):
     selected_ground = None
     selected_date = None
     slots = []
+    manual_booking_preview = None
 
     if request.method == 'POST':
         # creating a manual booking
-        name = request.POST['name']
-        phone = request.POST['phone']
+        name = request.POST.get('name', '').strip()
+        phone = request.POST.get('phone', '').strip()
+        ground_id = request.POST.get('ground')
+        date_str = request.POST.get('date')
         now_dt = timezone.localtime(timezone.now())
+        if ground_id:
+            try:
+                selected_ground = Ground.objects.get(id=ground_id, owner=owner, is_active=True)
+            except Ground.DoesNotExist:
+                selected_ground = None
+        if date_str:
+            try:
+                selected_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
+            except Exception:
+                selected_date = None
         slot_ids = request.POST.getlist('slots')
         if not slot_ids:
             single_slot = request.POST.get('slot')
@@ -1861,8 +1882,10 @@ def owner_manual_booking(request):
             repeat_occurrences = int(request.POST.get('repeat_occurrences') or 1)
         except Exception:
             repeat_occurrences = 1
+        confirm_conflicts = request.POST.get('confirm_conflicts') == '1'
         repeat_every_weeks = max(1, min(repeat_every_weeks, 12))
         repeat_occurrences = max(1, min(repeat_occurrences, 52))
+        skip_creation = False
 
         try:
             with transaction.atomic():
@@ -1878,6 +1901,7 @@ def owner_manual_booking(request):
                     return redirect('/owner/manual-booking/')
 
                 target_rows = []
+                conflict_rows = []
                 for occurrence_index in range(repeat_occurrences if repeat_enabled else 1):
                     target_date = None
                     for slot in slots_qs:
@@ -1900,56 +1924,97 @@ def owner_manual_booking(request):
                             messages.error(request, 'Past slots cannot be manually booked.')
                             return redirect('/owner/manual-booking/')
                         if target_slot.is_booked or Booking.objects.filter(slot=target_slot, status='BOOKED').exists():
-                            messages.error(request, 'One of the selected slots was booked just now. Please pick another slot.')
-                            return redirect('/owner/manual-booking/')
+                            conflict_rows.append({
+                                'date': target_slot.date,
+                                'start_time': target_slot.start_time,
+                                'end_time': target_slot.end_time,
+                                'label': f"{target_slot.date} · {target_slot.start_time.strftime('%I:%M %p')} - {target_slot.end_time.strftime('%I:%M %p')}",
+                            })
+                            continue
                         target_rows.append((target_slot, occurrence_index))
 
-                series_group = uuid.uuid4() if repeat_enabled and repeat_occurrences > 1 else None
-                created_bookings = []
-                for target_slot, occurrence_index in target_rows:
-                    total_amount = _slot_price_for_slot(target_slot)
-                    booking = Booking.objects.create(
-                        slot=target_slot,
-                        customer_name=name,
-                        customer_phone=phone,
-                        total_amount=total_amount,
-                        owner_payout=total_amount,
-                        booking_source='MANUAL',
-                        payment_mode='FULL',
-                        payment_status='PENDING',
-                        paid_amount=0,
-                        due_amount=total_amount,
-                        recurrence_group=series_group,
-                        recurrence_position=occurrence_index,
+                if conflict_rows and not confirm_conflicts:
+                    manual_booking_preview = {
+                        'name': name,
+                        'phone': phone,
+                        'slot_ids': [str(value) for value in slot_ids],
+                        'repeat_enabled': repeat_enabled,
+                        'repeat_every_weeks': repeat_every_weeks,
+                        'repeat_occurrences': repeat_occurrences,
+                        'conflicts': conflict_rows,
+                    }
+                    messages.warning(
+                        request,
+                        'Some recurring slots are already booked. Review the conflicts below, then confirm if you still want to create the remaining bookings.'
                     )
+                    target_rows = []
+                    skip_creation = True
 
-                    target_slot.is_booked = True
-                    target_slot.save(update_fields=['is_booked'])
-
-                    ActivityLog.objects.create(
-                        user=request.user,
-                        action='MANUAL_BOOKING',
-                        booking=booking,
-                        slot=target_slot,
-                        meta={
+                if not target_rows and not skip_creation:
+                    if conflict_rows:
+                        manual_booking_preview = {
+                            'name': name,
+                            'phone': phone,
+                            'slot_ids': [str(value) for value in slot_ids],
                             'repeat_enabled': repeat_enabled,
-                            'repeat_every_weeks': repeat_every_weeks if repeat_enabled else 1,
-                            'repeat_occurrences': repeat_occurrences if repeat_enabled else 1,
-                        },
-                    )
-                    created_bookings.append(booking)
+                            'repeat_every_weeks': repeat_every_weeks,
+                            'repeat_occurrences': repeat_occurrences,
+                            'conflicts': conflict_rows,
+                        }
+                        skip_creation = True
+                    messages.error(request, 'No available slots found for booking.')
+                    return redirect('/owner/manual-booking/')
 
-                for booking in created_bookings:
-                    transaction.on_commit(lambda booking=booking: _owner_booking_email(booking))
+                if not skip_creation:
+                    series_group = uuid.uuid4() if repeat_enabled and repeat_occurrences > 1 else None
+                    created_bookings = []
+                    for target_slot, occurrence_index in target_rows:
+                        total_amount = _slot_price_for_slot(target_slot)
+                        booking = Booking.objects.create(
+                            slot=target_slot,
+                            customer_name=name,
+                            customer_phone=phone,
+                            total_amount=total_amount,
+                            owner_payout=total_amount,
+                            booking_source='MANUAL',
+                            payment_mode='FULL',
+                            payment_status='PENDING',
+                            paid_amount=0,
+                            due_amount=total_amount,
+                            recurrence_group=series_group,
+                            recurrence_position=occurrence_index,
+                        )
+
+                        target_slot.is_booked = True
+                        target_slot.save(update_fields=['is_booked'])
+
+                        ActivityLog.objects.create(
+                            user=request.user,
+                            action='MANUAL_BOOKING',
+                            booking=booking,
+                            slot=target_slot,
+                            meta={
+                                'repeat_enabled': repeat_enabled,
+                                'repeat_every_weeks': repeat_every_weeks if repeat_enabled else 1,
+                                'repeat_occurrences': repeat_occurrences if repeat_enabled else 1,
+                            },
+                        )
+                        created_bookings.append(booking)
+
+                    for booking in created_bookings:
+                        transaction.on_commit(lambda booking=booking: _owner_booking_email(booking))
         except Slot.DoesNotExist:
             messages.error(request, 'Invalid slot selected.')
             return redirect('/owner/manual-booking/')
 
-        if repeat_enabled and repeat_occurrences > 1:
+        if manual_booking_preview and not confirm_conflicts:
+            pass
+        elif repeat_enabled and repeat_occurrences > 1:
             messages.success(request, f'Recurring manual booking created for {repeat_occurrences} occurrences.')
         else:
             messages.success(request, 'Manual booking created')
-        return redirect('/dashboard/owner/')
+        if not manual_booking_preview or confirm_conflicts:
+            return redirect('/dashboard/owner/')
 
     # GET handling: filter slots if ground+date provided
     ground_id = request.GET.get('ground')
@@ -2001,6 +2066,13 @@ def owner_manual_booking(request):
         'selected_ground': selected_ground,
         'selected_date': selected_date,
         'grounds_count': grounds_count,
+        'manual_booking_preview': manual_booking_preview,
+        'manual_name': name if request.method == 'POST' else '',
+        'manual_phone': phone if request.method == 'POST' else '',
+        'manual_selected_slot_ids': [int(value) for value in slot_ids] if request.method == 'POST' and 'slot_ids' in locals() else [],
+        'manual_repeat_enabled': repeat_enabled if request.method == 'POST' else False,
+        'manual_repeat_every_weeks': repeat_every_weeks if request.method == 'POST' else 2,
+        'manual_repeat_occurrences': repeat_occurrences if request.method == 'POST' else 1,
     })
 
 
