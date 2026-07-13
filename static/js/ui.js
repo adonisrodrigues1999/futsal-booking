@@ -443,6 +443,22 @@ document.addEventListener('DOMContentLoaded', function() {
     return checked ? checked.value : 'FULL';
   }
 
+  var checkoutModeKey = 'footbook_checkout_payment_mode';
+
+  function saveCheckoutMode(mode) {
+    try {
+      localStorage.setItem(checkoutModeKey, mode || 'FULL');
+    } catch (e) {}
+  }
+
+  function loadCheckoutMode() {
+    try {
+      return localStorage.getItem(checkoutModeKey) || 'FULL';
+    } catch (e) {
+      return 'FULL';
+    }
+  }
+
   var redirectModalEl = document.getElementById('redirectModalGlobal');
   var redirectModal = redirectModalEl ? new bootstrap.Modal(redirectModalEl, {backdrop: 'static', keyboard: false}) : null;
   var redirectTimer = null;
@@ -575,7 +591,7 @@ document.addEventListener('DOMContentLoaded', function() {
         prefill: {
           name: (orderData.prefill && orderData.prefill.name) || '',
           email: (orderData.prefill && orderData.prefill.email) || window.currentUserEmail || '',
-          contact: (orderData.prefill && orderData.prefill.contact) || ''
+          contact: (orderData.prefill && orderData.prefill.contact) || window.currentUserPhone || ''
         }
       };
 
@@ -605,13 +621,22 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('cm-ground').innerHTML = 'Ground: <strong>' + (window.currentGroundName || document.title) + '</strong>';
     document.getElementById('cm-price').innerHTML = 'Price: <strong>₹' + price + '</strong>';
     var fullRadio = document.getElementById('cm-payment-full');
+    var savedMode = loadCheckoutMode();
     if (fullRadio) fullRadio.checked = true;
+    var savedRadio = document.querySelector('input[name="cm-payment-mode"][value="' + savedMode + '"]');
+    if (savedRadio) savedRadio.checked = true;
 
     var confirmBtn = document.getElementById('cm-confirm-btn');
     confirmBtn.disabled = false;
     confirmBtn.textContent = 'Pay Now';
     // replace click handler
     confirmBtn.onclick = function() { startSlotCheckout(slotId, confirmBtn); };
+
+    document.querySelectorAll('input[name="cm-payment-mode"]').forEach(function(input) {
+      input.onchange = function() {
+        saveCheckoutMode(this.value);
+      };
+    });
 
     confirmModal.show();
   };
