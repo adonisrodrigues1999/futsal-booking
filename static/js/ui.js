@@ -52,21 +52,94 @@ document.addEventListener('DOMContentLoaded', function() {
   function showAppToast(message, type, delay) {
     var toastEl = document.getElementById('app-toast');
     if (!toastEl) return;
-    var toastBody = toastEl.querySelector('.toast-body');
-    if (!toastBody) return;
+    var toastMessage = document.getElementById('app-toast-message');
+    var toastSupport = document.getElementById('app-toast-support');
+    if (!toastMessage) return;
 
-    toastBody.textContent = message;
+    toastMessage.textContent = message;
     toastEl.classList.remove('text-bg-dark', 'text-bg-success', 'text-bg-danger', 'text-bg-warning');
     if (type === 'success') toastEl.classList.add('text-bg-success');
     else if (type === 'danger') toastEl.classList.add('text-bg-danger');
     else if (type === 'warning') toastEl.classList.add('text-bg-warning');
     else toastEl.classList.add('text-bg-dark');
 
+    if (toastSupport) {
+      if (type === 'danger' && window.footbookBuildIssueLink) {
+        toastSupport.href = window.footbookBuildIssueLink(message);
+        toastSupport.classList.remove('d-none');
+      } else {
+        toastSupport.removeAttribute('href');
+        toastSupport.classList.add('d-none');
+      }
+    }
+
     var toast = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: delay || 2600 });
     toast.show();
   }
 
   window.showAppToast = showAppToast;
+
+  var supportActivity = [];
+  var SUPPORT_ACTIVITY_LIMIT = 12;
+
+  function recordSupportActivity(eventName, details) {
+    supportActivity.push({
+      time: new Date().toISOString(),
+      event: eventName,
+      details: details || ''
+    });
+    if (supportActivity.length > SUPPORT_ACTIVITY_LIMIT) {
+      supportActivity.shift();
+    }
+  }
+
+  function buildSupportMessage(errorMessage, details) {
+    var parts = [
+      'Hi FootBook, I need help with an error.',
+      '',
+      'User: ' + (window.currentUserName || '-'),
+      'Email: ' + (window.currentUserEmail || '-'),
+      'Phone: ' + (window.currentUserPhone || '-'),
+      'Page: ' + window.location.href,
+      'Time: ' + new Date().toString(),
+      'Error: ' + (errorMessage || '-')
+    ];
+
+    if (details) {
+      parts.push('Details: ' + details);
+    }
+
+    if (supportActivity.length) {
+      parts.push('');
+      parts.push('Recent activity:');
+      supportActivity.slice(-8).forEach(function(item) {
+        parts.push('- ' + item.time + ' | ' + item.event + (item.details ? ' | ' + item.details : ''));
+      });
+    }
+
+    return parts.join('\n');
+  }
+
+  function buildSupportLink(errorMessage, details) {
+    var number = window.footbookSupportNumber || '918625877270';
+    return 'https://wa.me/' + number + '?text=' + encodeURIComponent(buildSupportMessage(errorMessage, details));
+  }
+
+  window.footbookBuildIssueLink = buildSupportLink;
+  window.footbookRecordActivity = recordSupportActivity;
+
+  recordSupportActivity('page_load', window.location.pathname || '/');
+
+  window.addEventListener('error', function(event) {
+    recordSupportActivity('js_error', event && event.message ? event.message : 'Unknown JS error');
+    showAppToast(event && event.message ? event.message : 'Unexpected error occurred.', 'danger', 5000);
+  });
+
+  window.addEventListener('unhandledrejection', function(event) {
+    var reason = event && event.reason ? (event.reason.message || String(event.reason)) : 'Unhandled promise rejection';
+    recordSupportActivity('promise_rejection', reason);
+    showAppToast(reason, 'danger', 5000);
+  });
 
   // Loader policy: show only for background API calls.
   var BG_API_LOADER_DELAY_MS = 1200;
@@ -497,6 +570,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function verifyAndFinalizeBooking(slotId, paymentMode, rpResponse, confirmBtn) {
+    recordSupportActivity('payment_verify_start', 'slot_id=' + slotId + ' mode=' + paymentMode);
     var csrftoken = getCookie('csrftoken');
     fetch('/payments/razorpay/verify-and-book/', {
       method: 'POST',
@@ -519,9 +593,11 @@ document.addEventListener('DOMContentLoaded', function() {
         return data;
       });
     }).then(function(data) {
+      recordSupportActivity('payment_verify_success', 'booking_id=' + (data.booking_id || '-'));
       showAppToast(data.message || 'Booking confirmed. Non-refundable payment.', 'success', 2600);
       showRedirectCountdown(data.redirect_url || '/my-bookings/');
     }).catch(function(err) {
+      recordSupportActivity('payment_verify_failed', err.message || 'Booking verification failed');
       showAppToast(err.message || 'Payment verified but booking failed. Contact support.', 'danger', 4200);
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Proceed to Pay';
@@ -529,9 +605,12 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function startSlotCheckout(slotId, confirmBtn) {
+    recordSupportActivity('checkout_start', 'slot_id=' + slotId);
     var paymentMode = getSelectedPaymentMode();
+    recordSupportActivity('checkout_mode', paymentMode);
     var isFreeReward = paymentMode === 'FREE_REWARD';
     if (!isFreeReward && typeof Razorpay === 'undefined') {
+      recordSupportActivity('checkout_error', 'Razorpay script missing');
       showAppToast('Payment gateway not loaded. Refresh and try again.', 'danger', 3200);
       return;
     }
@@ -559,6 +638,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return data;
       });
     }).then(function(orderData) {
+      recordSupportActivity('checkout_order_ready', 'order_id=' + (orderData.order_id || '-') + ' amount=' + (orderData.pay_now_amount || '-'));
       if (orderData.free_booking) {
         showAppToast(orderData.message || 'Free booking redeemed successfully.', 'success', 2800);
         setTimeout(function() {
@@ -597,6 +677,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       var checkout = new Razorpay(options);
       checkout.on('payment.failed', function() {
+        recordSupportActivity('razorpay_payment_failed', 'slot_id=' + slotId);
         confirmBtn.disabled = false;
         confirmBtn.textContent = 'Proceed to Pay';
         showAppToast('Payment failed. Please try again.', 'danger', 3200);
@@ -604,6 +685,7 @@ document.addEventListener('DOMContentLoaded', function() {
       confirmModal.hide();
       checkout.open();
     }).catch(function(err) {
+      recordSupportActivity('checkout_error', err.message || 'Unable to start payment');
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Proceed to Pay';
       showAppToast(err.message || 'Unable to start payment.', 'danger', 3200);
