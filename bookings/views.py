@@ -816,6 +816,7 @@ def search_public_slots(request):
                 'date': slot.date.isoformat(),
                 'start_time': slot_start_dt.isoformat(),
                 'end_time': slot_end_dt.isoformat(),
+                'time': slot.start_time.strftime('%I:%M %p'),
                 'price': price,
                 'discount': discount,
                 'day_of_week': slot.date.strftime('%a'),
