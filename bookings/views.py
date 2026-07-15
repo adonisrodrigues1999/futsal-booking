@@ -54,6 +54,14 @@ def _slot_start_datetime(slot):
     )
 
 
+def _slot_end_datetime(slot):
+    tz = timezone.get_current_timezone()
+    return timezone.make_aware(
+        datetime.combine(slot.date, slot.end_time),
+        tz
+    )
+
+
 def _is_day_slot(slot_time):
     return 6 <= slot_time.hour < 18
 
@@ -796,14 +804,18 @@ def search_public_slots(request):
             price = _slot_price_for_slot(slot)
             discount = _slot_discount(slot)
             
+            # Create full datetime objects for frontend parsing
+            slot_start_dt = _slot_start_datetime(slot)
+            slot_end_dt = _slot_end_datetime(slot)
+            
             results.append({
                 'slot_id': slot.id,
                 'ground_id': ground.id,
                 'ground_name': ground.name,
                 'ground_location': ground.location,
                 'date': slot.date.isoformat(),
-                'start_time': slot.start_time.isoformat(),
-                'end_time': slot.end_time.isoformat(),
+                'start_time': slot_start_dt.isoformat(),
+                'end_time': slot_end_dt.isoformat(),
                 'price': price,
                 'discount': discount,
                 'day_of_week': slot.date.strftime('%a'),
