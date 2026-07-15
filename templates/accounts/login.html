@@ -34,6 +34,32 @@
         {% endfor %}
       {% endif %}
 
+      <!-- Slot Search Section -->
+      <div class="card border-0 bg-light mb-4 p-3">
+        <h6 class="mb-3">Check Slot Availability</h6>
+        <div class="row g-2">
+          <div class="col-8">
+            <input type="date" id="search-date" class="form-control form-control-sm" min="{% now 'Y-m-d' %}">
+          </div>
+          <div class="col-4">
+            <button type="button" class="btn btn-sm btn-outline-primary w-100" id="search-btn">Search</button>
+          </div>
+        </div>
+        <div id="search-results" class="mt-3" style="display:none;">
+          <div id="results-list" class="small" style="max-height: 250px; overflow-y: auto;"></div>
+          <div class="mt-2 text-center">
+            <a href="#login-section" class="btn btn-sm btn-success">Login to Book</a>
+          </div>
+        </div>
+        <div id="search-loading" class="text-center text-muted small mt-2" style="display:none;">
+          Searching...
+        </div>
+        <div id="search-error" class="alert alert-sm alert-danger mt-2 mb-0" style="display:none; font-size:0.85rem;"></div>
+      </div>
+
+      <!-- Login Form Section -->
+      <div id="login-section">
+
       {% if show_register_prompt %}
         <div class="alert alert-warning">
           No account exists for <strong>{{ missing_account_email }}</strong>.
@@ -174,6 +200,120 @@
       syncLoginIdentifierFields(phoneInput);
     });
     syncLoginIdentifierFields();
+  })();
+
+  // Slot Search functionality
+  (function() {
+    const searchDateInput = document.getElementById('search-date');
+    const searchBtn = document.getElementById('search-btn');
+    const resultsList = document.getElementById('results-list');
+    const searchResults = document.getElementById('search-results');
+    const searchLoading = document.getElementById('search-loading');
+    const searchError = document.getElementById('search-error');
+
+    if (!searchBtn) return;
+
+    // Set default date to today
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    searchDateInput.value = `${yyyy}-${mm}-${dd}`;
+
+    searchBtn.addEventListener('click', function() {
+      const selectedDate = searchDateInput.value;
+      if (!selectedDate) {
+        showError('Please select a date');
+        return;
+      }
+
+      searchLoading.style.display = 'block';
+      searchResults.style.display = 'none';
+      searchError.style.display = 'none';
+
+      fetch(`/slots/search/?date=${selectedDate}`)
+        .then(response => response.json())
+        .then(data => {
+          searchLoading.style.display = 'none';
+          
+          if (!data.success) {
+            showError(data.error || 'Search failed');
+            return;
+          }
+
+          if (data.slots.length === 0) {
+            showError('No slots available on this date');
+            return;
+          }
+
+          renderResults(data.slots, selectedDate);
+          searchResults.style.display = 'block';
+        })
+        .catch(error => {
+          searchLoading.style.display = 'none';
+          showError('Connection error. Please try again.');
+          console.error('Search error:', error);
+        });
+    });
+
+    function renderResults(slots, date) {
+      resultsList.innerHTML = '';
+      const groundsMap = {};
+
+      // Group slots by ground
+      slots.forEach(slot => {
+        if (!groundsMap[slot.ground_id]) {
+          groundsMap[slot.ground_id] = [];
+        }
+        groundsMap[slot.ground_id].push(slot);
+      });
+
+      // Render grouped results
+      Object.keys(groundsMap).forEach(groundId => {
+        const groundSlots = groundsMap[groundId];
+        const ground = groundSlots[0];
+
+        const groundDiv = document.createElement('div');
+        groundDiv.className = 'mb-3 pb-2 border-bottom';
+        groundDiv.innerHTML = `
+          <div class="fw-semibold small mb-1">${ground.ground_name}</div>
+          <div class="text-muted small mb-2">${ground.ground_location}</div>
+        `;
+
+        const slotsContainer = document.createElement('div');
+        slotsContainer.className = 'row g-1';
+
+        groundSlots.slice(0, 5).forEach(slot => {
+          const slotTime = new Date(slot.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const slotDiv = document.createElement('div');
+          slotDiv.className = 'col-6 col-sm-4';
+          slotDiv.innerHTML = `
+            <div class="badge bg-success p-2 d-block text-center">
+              <div class="small">${slotTime}</div>
+              <div class="small fw-semibold">₹${slot.price}</div>
+            </div>
+          `;
+          slotsContainer.appendChild(slotDiv);
+        });
+
+        if (groundSlots.length > 5) {
+          const moreDiv = document.createElement('div');
+          moreDiv.className = 'col-6 col-sm-4';
+          moreDiv.innerHTML = `<div class="badge bg-light text-dark p-2 d-block text-center small">+${groundSlots.length - 5} more</div>`;
+          slotsContainer.appendChild(moreDiv);
+        }
+
+        groundDiv.appendChild(slotsContainer);
+        resultsList.appendChild(groundDiv);
+      });
+    }
+
+    function showError(message) {
+      searchError.textContent = message;
+      searchError.style.display = 'block';
+      searchResults.style.display = 'none';
+      searchLoading.style.display = 'none';
+    }
   })();
 </script>
 {% endblock %}

@@ -710,6 +710,94 @@ def book_slot(request, slot_id):
     return redirect(f'/grounds/{slot.ground.id}/?date={slot.date}')
 
 
+def search_public_slots(request):
+    """
+    Public API endpoint to search for available slots without authentication.
+    Used on login page to show users available slots before they login.
+    
+    Query params:
+    - date: YYYY-MM-DD format
+    - location: location string (optional, for filtering)
+    
+    Returns JSON with available slots across active grounds.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    date_str = request.GET.get('date', '')
+    try:
+        search_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return JsonResponse({'success': False, 'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+    
+    # Only allow searching for today or future dates
+    today = timezone.localdate()
+    if search_date < today:
+        return JsonResponse({'success': False, 'error': 'Cannot search for past dates'}, status=400)
+    
+    # Limit search to next 60 days
+    if (search_date - today).days > 60:
+        return JsonResponse({'success': False, 'error': 'Search limited to next 60 days'}, status=400)
+    
+    # Get all active grounds
+    grounds = Ground.objects.filter(is_active=True).order_by('name')
+    
+    now_dt = timezone.localtime(timezone.now())
+    results = []
+    
+    for ground in grounds:
+        # Ensure slots exist for the date
+        ensure_slots_for_ground_date(ground=ground, slot_date=search_date)
+        
+        # Get available slots for this ground and date
+        slots_qs = Slot.objects.filter(
+            ground=ground,
+            date=search_date,
+            is_booked=False
+        ).select_related('ground').order_by('start_time')
+        
+        # Filter out booked slots
+        booked_slot_ids = set(
+            Booking.objects.filter(
+                slot__ground=ground,
+                slot__date=search_date,
+                status='BOOKED'
+            ).values_list('slot_id', flat=True)
+        )
+        
+        for slot in slots_qs:
+            if slot.id in booked_slot_ids:
+                continue
+            
+            # Skip past slots
+            slot_dt = _slot_start_datetime(slot)
+            if slot_dt <= now_dt:
+                continue
+            
+            price = _slot_price_for_slot(slot)
+            discount = _slot_discount(slot)
+            
+            results.append({
+                'slot_id': slot.id,
+                'ground_id': ground.id,
+                'ground_name': ground.name,
+                'ground_location': ground.location,
+                'date': slot.date.isoformat(),
+                'start_time': slot.start_time.isoformat(),
+                'end_time': slot.end_time.isoformat(),
+                'price': price,
+                'discount': discount,
+                'day_of_week': slot.date.strftime('%a'),
+            })
+    
+    return JsonResponse({
+        'success': True,
+        'date': search_date.isoformat(),
+        'total_results': len(results),
+        'slots': results
+    })
+
+
 @login_required
 def create_razorpay_order(request):
     if request.method != 'POST':
