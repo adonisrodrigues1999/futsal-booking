@@ -1,4 +1,5 @@
 {% extends 'base/base.html' %}
+{% load custom_filters %}
 {% block title %}Manual Booking{% endblock %}
 
 {% block content %}
@@ -26,7 +27,7 @@
       <div class="d-flex align-items-center justify-content-between mb-2">
         <h6 class="mb-0">Ground and Date</h6>
         {% if selected_ground and selected_date %}
-          <span class="badge text-bg-light border">{{ selected_ground.name }} · {{ selected_date|date:"M j, Y" }}</span>
+          <span class="badge text-bg-light border">{{ selected_ground.name }} · {{ selected_date|format_date_with_day }}</span>
         {% endif %}
       </div>
       <form method="get" id="manual-filter-form" class="row g-2 align-items-end">

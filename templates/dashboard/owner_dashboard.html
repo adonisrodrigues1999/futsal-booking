@@ -1,4 +1,5 @@
 {% extends 'base/base.html' %}
+{% load custom_filters %}
 {% block content %}
 
 <div class="page-shell">
@@ -215,7 +216,7 @@
             <div class="list-group-item d-flex justify-content-between align-items-start gap-3">
               <div>
                 <div class="fw-semibold">{{ booking.slot.ground.name }}</div>
-                <div class="small text-muted">{{ booking.slot.date }} • {{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</div>
+                <div class="small text-muted">{{ booking.slot.date|format_date_with_day }} • {{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</div>
                 <div class="small mt-1">Customer: <strong>{{ booking.customer_name }}</strong> • {{ booking.customer_phone }}</div>
                 <div class="small mt-1">
                   Payment Status:
@@ -241,7 +242,7 @@
                   {% endif %}
                 </div>
                 <div class="small text-muted">Paid: ₹{{ booking.paid_amount }} • Due: ₹{{ booking.due_amount }}</div>
-                <div class="small text-muted">Payment Time: {% if booking.payment_paid_at %}{{ booking.payment_paid_at|date:"Y-m-d g:i A" }}{% else %}-{% endif %}</div>
+                <div class="small text-muted">Payment Time: {% if booking.payment_paid_at %}{{ booking.payment_paid_at|date:"M j, Y g:i A" }}{% else %}-{% endif %}</div>
                 <div class="small mt-1">
                   Attendance:
                   {% if booking.attendance_status == 'SHOWED_UP' %}
