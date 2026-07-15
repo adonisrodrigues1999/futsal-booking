@@ -10,6 +10,7 @@ urlpatterns = [
     path('grounds/<int:ground_id>/', views.ground_slots),
     path('grounds/<int:ground_id>/slot-status/', views.ground_slots_status, name='ground_slots_status'),
     path('grounds/<int:ground_id>/image/', views.ground_image, name='ground_image'),
+    path('api/grounds/', views.get_active_grounds, name='get_active_grounds'),
     path('slots/search/', views.search_public_slots, name='search_public_slots'),
     path('tournaments/', views.tournament_list, name='tournament_list'),
     path('tournaments/<int:tournament_id>/register/', views.register_tournament, name='register_tournament'),

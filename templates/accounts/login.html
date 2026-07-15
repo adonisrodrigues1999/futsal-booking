@@ -23,7 +23,7 @@
 
   <div class="col-md-7 col-lg-5 order-1 order-lg-2">
     <div class="page-shell">
-      <h4 class="text-center mb-4">Login to FootBook</h4>
+      <h4 class="text-center mb-4">Check Availability</h4>
 
       {% if messages %}
         {% for message in messages %}
@@ -37,6 +37,11 @@
       <!-- Slot Search Section -->
       <div class="card border-0 bg-light mb-4 p-3">
         <h6 class="mb-3">Check Slot Availability</h6>
+        <div class="mb-2">
+          <select id="search-ground" class="form-select form-select-sm">
+            <option value="">All Grounds</option>
+          </select>
+        </div>
         <div class="row g-2">
           <div class="col-8">
             <input type="date" id="search-date" class="form-control form-control-sm" min="{% now 'Y-m-d' %}">
@@ -48,7 +53,7 @@
         <div id="search-results" class="mt-3" style="display:none;">
           <div id="results-list" class="small" style="max-height: 250px; overflow-y: auto;"></div>
           <div class="mt-2 text-center">
-            <a href="#login-section" class="btn btn-sm btn-success">Login to Book</a>
+            <a href="#login-section" class="btn btn-sm btn-success">View All Available</a>
           </div>
         </div>
         <div id="search-loading" class="text-center text-muted small mt-2" style="display:none;">
@@ -58,6 +63,7 @@
       </div>
 
       <!-- Login Form Section -->
+      <h5 class="text-center mb-3 mt-4">Login to FootBook</h5>
       <div id="login-section">
 
       {% if show_register_prompt %}
@@ -112,15 +118,15 @@
         <p class="mb-0">Do not have an account? <a href="{% url 'register' %}">Register here</a></p>
         <p class="mb-0"><a href="{% url 'password_reset' %}">Forgot password?</a></p>
       </div>
-    </div>
   </div>
 </div>
 
+<!-- Trending Data Section -->
 <div class="row g-3 mt-4">
   <div class="col-md-4">
     <div class="card p-3 h-100">
       <h6 class="mb-3">Trending Grounds</h6>
-      {% for row in public_top_grounds %}
+      {% for row in public_top_grounds|slice:":3" %}
         <div class="d-flex justify-content-between border-bottom py-2">
           <span>{{ row.slot__ground__name }}</span><strong>{{ row.bookings_count }}</strong>
         </div>
@@ -132,7 +138,7 @@
   <div class="col-md-4">
     <div class="card p-3 h-100">
       <h6 class="mb-3">Trending Tournaments</h6>
-      {% for row in public_top_tournaments %}
+      {% for row in public_top_tournaments|slice:":3" %}
         <div class="d-flex justify-content-between border-bottom py-2">
           <span>{{ row.tournament__title }}</span><strong>{{ row.registrations_count }}</strong>
         </div>
@@ -144,7 +150,7 @@
   <div class="col-md-4">
     <div class="card p-3 h-100">
       <h6 class="mb-3">Top Players</h6>
-      {% for player in public_top_players %}
+      {% for player in public_top_players|slice:":3" %}
         <div class="d-flex justify-content-between border-bottom py-2">
           <span>{{ player.name }}</span><strong>{{ player.total_bookings }}</strong>
         </div>
@@ -205,6 +211,7 @@
   // Slot Search functionality
   (function() {
     const searchDateInput = document.getElementById('search-date');
+    const searchGroundSelect = document.getElementById('search-ground');
     const searchBtn = document.getElementById('search-btn');
     const resultsList = document.getElementById('results-list');
     const searchResults = document.getElementById('search-results');
@@ -212,6 +219,21 @@
     const searchError = document.getElementById('search-error');
 
     if (!searchBtn) return;
+
+    // Fetch and populate ground options
+    fetch('/api/grounds/')
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.grounds && Array.isArray(data.grounds)) {
+          data.grounds.forEach(ground => {
+            const option = document.createElement('option');
+            option.value = ground.id;
+            option.textContent = ground.name;
+            searchGroundSelect.appendChild(option);
+          });
+        }
+      })
+      .catch(error => console.error('Error loading grounds:', error));
 
     // Set default date to today
     const today = new Date();
@@ -222,6 +244,7 @@
 
     searchBtn.addEventListener('click', function() {
       const selectedDate = searchDateInput.value;
+      const selectedGround = searchGroundSelect.value;
       if (!selectedDate) {
         showError('Please select a date');
         return;
@@ -231,7 +254,11 @@
       searchResults.style.display = 'none';
       searchError.style.display = 'none';
 
-      fetch(`/slots/search/?date=${selectedDate}`)
+      let searchUrl = `/slots/search/?date=${selectedDate}`;
+      if (selectedGround) {
+        searchUrl += `&ground_id=${selectedGround}`;
+      }
+      fetch(searchUrl)
         .then(response => response.json())
         .then(data => {
           searchLoading.style.display = 'none';

@@ -710,6 +710,21 @@ def book_slot(request, slot_id):
     return redirect(f'/grounds/{slot.ground.id}/?date={slot.date}')
 
 
+def get_active_grounds(request):
+    """
+    Public API endpoint to get list of all active grounds.
+    Used to populate ground selection dropdown on login page.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    grounds = Ground.objects.filter(is_active=True).order_by('name').values('id', 'name', 'location')
+    return JsonResponse({
+        'success': True,
+        'grounds': list(grounds)
+    })
+
+
 def search_public_slots(request):
     """
     Public API endpoint to search for available slots without authentication.
@@ -717,14 +732,15 @@ def search_public_slots(request):
     
     Query params:
     - date: YYYY-MM-DD format
-    - location: location string (optional, for filtering)
+    - ground_id: optional ground UUID to filter results to single ground
     
-    Returns JSON with available slots across active grounds.
+    Returns JSON with available slots across active grounds (or single ground if specified).
     """
     if request.method != 'GET':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
     
     date_str = request.GET.get('date', '')
+    ground_id = request.GET.get('ground_id', '')
     try:
         search_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
     except (ValueError, TypeError):
@@ -739,8 +755,11 @@ def search_public_slots(request):
     if (search_date - today).days > 60:
         return JsonResponse({'success': False, 'error': 'Search limited to next 60 days'}, status=400)
     
-    # Get all active grounds
-    grounds = Ground.objects.filter(is_active=True).order_by('name')
+    # Get active grounds (filtered by ground_id if provided)
+    grounds_qs = Ground.objects.filter(is_active=True).order_by('name')
+    if ground_id:
+        grounds_qs = grounds_qs.filter(id=ground_id)
+    grounds = list(grounds_qs)
     
     now_dt = timezone.localtime(timezone.now())
     results = []
