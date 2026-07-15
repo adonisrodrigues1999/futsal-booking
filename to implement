@@ -1,0 +1,7 @@
+test cases
+fix bug while creating new registration of user
+auto disable either one filed when emai id or phone number is entered when loging in on main login page
+
+dry runs to pass test cases
+
+let each page have max of only 2 advertisements

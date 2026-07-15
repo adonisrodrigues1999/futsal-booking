@@ -1,4 +1,5 @@
 {% extends 'base/base.html' %}
+{% load custom_filters %}
 {% block title %}Reschedule Booking{% endblock %}
 
 {% block content %}
@@ -6,7 +7,7 @@
   <div class="page-header">
     <div>
       <h2>Reschedule Booking</h2>
-      <p class="page-subtitle">{{ booking.slot.ground.name }} • Current: {{ booking.slot.date }} {{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</p>
+      <p class="page-subtitle">{{ booking.slot.ground.name }} • Current: {{ booking.slot.date|format_date_with_day }} {{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</p>
     </div>
     {% if rescheduler_role == 'owner' %}
       <a href="/dashboard/owner/" class="btn btn-outline-secondary">Back</a>
@@ -41,7 +42,7 @@
             <option value="">Choose a slot...</option>
             {% for obj in available_slots %}
               {% with slot=obj.slot %}
-                <option value="{{ slot.id }}">{{ slot.date }} • {{ slot.start_time|time:"g:i A" }} - {{ slot.end_time|time:"g:i A" }} (₹{{ obj.price }})</option>
+                <option value="{{ slot.id }}">{{ slot.date|format_date_with_day }} • {{ slot.start_time|time:"g:i A" }} - {{ slot.end_time|time:"g:i A" }} (₹{{ obj.price }})</option>
               {% endwith %}
             {% endfor %}
           </select>

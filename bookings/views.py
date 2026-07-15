@@ -2079,6 +2079,8 @@ def owner_manual_booking(request):
         ensure_next_month_slots_for_ground(ground=selected_ground)
 
     if selected_ground and selected_date:
+        # Ensure slots exist for the selected date
+        ensure_slots_for_ground_date(ground=selected_ground, slot_date=selected_date)
         slots_qs = Slot.objects.filter(ground=selected_ground, date=selected_date, is_booked=False).order_by('start_time')
         for s in slots_qs:
             if _slot_start_datetime(s) <= now_dt:

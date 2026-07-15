@@ -1,4 +1,5 @@
 {% extends 'base/base.html' %}
+{% load custom_filters %}
 {% block title %}Home{% endblock %}
 
 {% block content %}
@@ -53,7 +54,7 @@
             </div>
             <h6 class="mb-1">{{ tournament.title }}</h6>
             <div class="small text-muted mb-2">{{ tournament.ground.name }}</div>
-            <div class="small mb-2"><strong>Date:</strong> {{ tournament.start_date }}</div>
+            <div class="small mb-2"><strong>Date:</strong> {{ tournament.start_date|format_date_with_day }}</div>
             <div class="small mb-2"><strong>Entry:</strong> {% if tournament.entry_fee %}₹{{ tournament.entry_fee }}{% else %}Free{% endif %}</div>
             {% if tournament.category_fees %}
               <div class="small text-muted mb-2">

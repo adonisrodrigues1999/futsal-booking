@@ -1,7 +1,10 @@
 from django.contrib import admin
+from django.utils import timezone
+from datetime import timedelta
 
 # Register your models here.
 from .models import Ground, Tournament, TournamentRegistration, GroundReview
+from bookings.slot_generation import ensure_slots_for_ground_date
 
 
 @admin.action(description='Mark selected grounds as available')
@@ -12,6 +15,22 @@ def mark_ground_available(modeladmin, request, queryset):
 @admin.action(description='Mark selected grounds as temporarily unavailable')
 def mark_ground_unavailable(modeladmin, request, queryset):
     queryset.update(is_active=False)
+
+
+@admin.action(description='Generate slots for next 3 months')
+def generate_slots_for_3_months(modeladmin, request, queryset):
+    """Generate slots for the next 3 months for selected grounds."""
+    start_date = timezone.localdate()
+    end_date = start_date + timedelta(days=90)  # 3 months approximately
+    
+    total_slots_created = 0
+    for ground in queryset:
+        current_date = start_date
+        while current_date <= end_date:
+            ensure_slots_for_ground_date(ground=ground, slot_date=current_date)
+            current_date += timedelta(days=1)
+    
+    modeladmin.message_user(request, f"Slots generated for {queryset.count()} ground(s) for the next 3 months.")
 
 
 @admin.register(Ground)
@@ -28,7 +47,7 @@ class GroundAdmin(admin.ModelAdmin):
     )
     search_fields = ('name', 'location')
     list_filter = ('is_active',)
-    actions = (mark_ground_available, mark_ground_unavailable)
+    actions = (mark_ground_available, mark_ground_unavailable, generate_slots_for_3_months)
     autocomplete_fields = ('owner',)
 
 

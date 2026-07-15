@@ -1,4 +1,5 @@
 {% extends 'base/base.html' %}
+{% load custom_filters %}
 {% block title %}Manage Tournaments{% endblock %}
 {% block content %}
 
@@ -35,7 +36,7 @@
                 <div class="small text-muted">{{ tournament.description|truncatechars:80 }}</div>
               </td>
               <td>{{ tournament.ground.name }}</td>
-              <td>{{ tournament.start_date }}{% if tournament.start_time %}<br><span class="small text-muted">{{ tournament.start_time|time:"g:i A" }}</span>{% endif %}</td>
+              <td>{{ tournament.start_date|format_date_with_day }}{% if tournament.start_time %}<br><span class="small text-muted">{{ tournament.start_time|time:"g:i A" }}</span>{% endif %}</td>
               <td>
                 {% if tournament.image %}
                   <img src="{{ tournament.image.url }}" alt="{{ tournament.title }}" class="tournament-thumb">

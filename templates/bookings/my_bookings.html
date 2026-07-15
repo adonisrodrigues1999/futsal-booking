@@ -1,4 +1,5 @@
 {% extends 'base/base.html' %}
+{% load custom_filters %}
 {% block title %}My Bookings{% endblock %}
 
 {% block content %}
@@ -21,7 +22,7 @@
 
   {% if bookings_by_date %}
     {% for date, bookings in bookings_by_date.items %}
-      <h5 class="mt-4 mb-3">{{ date }}</h5>
+      <h5 class="mt-4 mb-3">{{ date|format_date_with_day }}</h5>
       <div class="row g-3">
         {% for booking in bookings %}
           <div class="col-md-6 col-lg-4">

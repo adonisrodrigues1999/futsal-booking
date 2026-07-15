@@ -1,4 +1,5 @@
 {% extends 'base/base.html' %}
+{% load custom_filters %}
 {% block title %}Upcoming Tournaments{% endblock %}
 {% block content %}
 
@@ -32,11 +33,11 @@
             <h5 class="mb-1">{{ tournament.title }}</h5>
             <div class="text-muted small mb-2">{{ tournament.ground.name }} • {{ tournament.ground.location }}</div>
             <div class="small mb-2">
-              <strong>Date:</strong> {{ tournament.start_date }}{% if tournament.end_date != tournament.start_date %} - {{ tournament.end_date }}{% endif %}
+              <strong>Date:</strong> {{ tournament.start_date|format_date_with_day }}{% if tournament.end_date != tournament.start_date %} - {{ tournament.end_date|format_date_with_day }}{% endif %}
               {% if tournament.start_time %} • {{ tournament.start_time|time:"g:i A" }}{% endif %}
             </div>
             {% if tournament.registration_deadline %}
-              <div class="small mb-2"><strong>Register by:</strong> {{ tournament.registration_deadline }}</div>
+              <div class="small mb-2"><strong>Register by:</strong> {{ tournament.registration_deadline|format_date_with_day }}</div>
             {% endif %}
             {% if tournament.prize_details %}
               <div class="small mb-2"><strong>Prize:</strong> {{ tournament.prize_details }}</div>
