@@ -1,0 +1,101 @@
+{% extends 'base/base.html' %}
+{% block title %}Owner - Online Settlements{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+      <h3 class="mb-1">Online Settlement Verification</h3>
+      <div class="text-muted">Confirm when an online settlement amount has reached you.</div>
+    </div>
+    <a href="{% url 'owner_dashboard' %}" class="btn btn-outline-secondary">Back to Dashboard</a>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card p-3">
+        <div class="small text-muted">Awaiting Confirmation</div>
+        <div class="h3 mb-0">{{ pending_settlements|length }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-3 mb-4">
+    <h5 class="mb-3">Pending Settlements</h5>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>Reference</th>
+            <th>Ground</th>
+            <th>Period</th>
+            <th>Bookings</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for settlement in pending_settlements %}
+          <tr>
+            <td class="fw-semibold">{{ settlement.reference }}</td>
+            <td>{{ settlement.ground.name }}</td>
+            <td>{{ settlement.period_start }} to {{ settlement.period_end }}</td>
+            <td>{{ settlement.booking_count }}</td>
+            <td>₹{{ settlement.collected_amount }}</td>
+            <td><span class="badge text-bg-info">{{ settlement.get_status_display }}</span></td>
+            <td>
+              <form method="post" class="d-flex flex-wrap gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="settlement_id" value="{{ settlement.id }}">
+                <input type="text" name="note" class="form-control form-control-sm" style="min-width: 220px;" placeholder="Optional note">
+                <button type="submit" name="action" value="ACKNOWLEDGE" class="btn btn-sm btn-success">I Received It</button>
+                <button type="submit" name="action" value="DISPUTE" class="btn btn-sm btn-outline-danger">Dispute</button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="text-center text-muted">No settlements waiting for your approval.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card p-3">
+    <h5 class="mb-3">Settlement History</h5>
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead>
+          <tr>
+            <th>Reference</th>
+            <th>Ground</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Transferred</th>
+            <th>Confirmed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for settlement in settlements %}
+          <tr>
+            <td>{{ settlement.reference }}</td>
+            <td>{{ settlement.ground.name }}</td>
+            <td>₹{{ settlement.collected_amount }}</td>
+            <td>
+              <span class="badge {% if settlement.status == 'ACKNOWLEDGED' %}text-bg-success{% elif settlement.status == 'DISPUTED' %}text-bg-danger{% elif settlement.status == 'TRANSFERRED' %}text-bg-info{% else %}text-bg-secondary{% endif %}">
+                {{ settlement.get_status_display }}
+              </span>
+            </td>
+            <td>{% if settlement.transferred_at %}{{ settlement.transferred_at|date:"M j, Y g:i A" }}{% else %}-{% endif %}</td>
+            <td>{% if settlement.owner_confirmed_at %}{{ settlement.owner_confirmed_at|date:"M j, Y g:i A" }}{% else %}-{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-muted">No settlement history yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

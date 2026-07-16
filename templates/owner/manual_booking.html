@@ -75,8 +75,12 @@
                   <label class="list-group-item d-flex justify-content-between align-items-center gap-2">
                     <span class="d-flex align-items-center gap-2">
                       <input class="form-check-input manual-slot-checkbox" type="checkbox" name="slots" value="{{ slot.id }}" data-price="{{ obj.price }}" data-label="{{ slot.start_time|time:'g:i A' }} - {{ slot.end_time|time:'g:i A' }}" {% if manual_selected_slot_ids and slot.id in manual_selected_slot_ids %}checked{% endif %}>
-                      <span>
+                      <span class="d-flex flex-column">
                         <strong>{{ slot.start_time|time:"g:i A" }}</strong> - {{ slot.end_time|time:"g:i A" }}
+                        <span class="text-muted small d-flex align-items-center gap-1">
+                          <span aria-hidden="true">{{ obj.time_icon }}</span>
+                          <span>{{ obj.period_label }}</span>
+                        </span>
                       </span>
                     </span>
                     <span class="badge text-bg-success">₹{{ obj.price }}</span>

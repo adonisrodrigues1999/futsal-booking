@@ -1,0 +1,115 @@
+{% extends 'base/base.html' %}
+{% block title %}Invoice {{ invoice.reference }}{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+      <div class="text-uppercase text-muted small fw-semibold">Ground Invoice</div>
+      <h3 class="mb-1">{{ invoice.ground.name }}</h3>
+      <div class="text-muted">Invoice {{ invoice.reference }}</div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{% url 'admin_invoices' %}" class="btn btn-outline-secondary">Back</a>
+      <button class="btn btn-primary" type="button" onclick="window.print()">Print / Save PDF</button>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card p-3 h-100">
+        <div class="small text-muted">Billed To</div>
+        <div class="fw-semibold">{{ invoice.ground.owner.name }}</div>
+        <div class="small text-muted">{{ invoice.ground.owner.email }}</div>
+        <div class="small text-muted">{{ invoice.ground.location }}</div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card p-3 h-100">
+        <div class="small text-muted">Invoice Period</div>
+        <div class="fw-semibold">{{ invoice.period_start }} to {{ invoice.period_end }}</div>
+        <div class="small text-muted">Created {{ invoice.created_at|date:"M j, Y g:i A" }}</div>
+        <div class="small text-muted">
+          Settle
+          {% if invoice.settled_at %}
+            {{ invoice.settled_at|date:"M j, Y g:i A" }}
+          {% else %}
+            Pending
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card p-3 h-100">
+        <div class="small text-muted">Status</div>
+        <div class="h5 mb-1">
+          {% if invoice.is_paid %}
+            <span class="badge text-bg-success">Paid</span>
+          {% else %}
+            <span class="badge text-bg-warning">Unpaid</span>
+          {% endif %}
+        </div>
+        <div class="small text-muted">Bookings billed: {{ invoice.bookings_count }}</div>
+        <div class="small text-muted">Settled by: {% if invoice.settled_by %}{{ invoice.settled_by.name }}{% else %}-{% endif %}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-3 mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <h5 class="mb-0">Line Items</h5>
+      <div class="text-muted small">Each line represents a booking already billed in this invoice.</div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Customer</th>
+            <th>Source</th>
+            <th class="text-end">Charge</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in invoice.line_items.all %}
+          <tr>
+            <td>{{ line.booking.slot.date }}</td>
+            <td>{{ line.booking.slot.start_time|time:"g:i A" }} - {{ line.booking.slot.end_time|time:"g:i A" }}</td>
+            <td>
+              <div class="fw-semibold">{{ line.booking.customer_name }}</div>
+              <div class="small text-muted">{{ line.booking.customer_phone }}</div>
+            </td>
+            <td>{{ line.booking.get_booking_source_display }}</td>
+            <td class="text-end">₹{{ line.charge_amount }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5" class="text-center text-muted py-4">No line items found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="row justify-content-end">
+    <div class="col-md-4">
+      <div class="card p-3">
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted">Bookings</span>
+          <strong>{{ invoice.bookings_count }}</strong>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted">Charge / booking</span>
+          <strong>₹{{ invoice.charge_per_booking }}</strong>
+        </div>
+        <div class="d-flex justify-content-between pt-2 border-top">
+          <span class="fw-semibold">Total</span>
+          <span class="fw-semibold">₹{{ invoice.total_amount }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

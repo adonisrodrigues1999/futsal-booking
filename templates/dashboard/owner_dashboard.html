@@ -209,6 +209,7 @@
         <div class="d-flex flex-wrap gap-2">
           <a href="/owner/manual-booking/" class="btn btn-outline-primary">Create manual booking</a>
           <a href="{% url 'owner_tournaments' %}" class="btn btn-outline-primary">Manage tournaments</a>
+          <a href="{% url 'owner_online_settlements' %}" class="btn btn-outline-primary">Verify online settlements</a>
           <a href="/grounds/" class="btn btn-outline-secondary">Manage Grounds</a>
         </div>
       </div>
@@ -217,10 +218,10 @@
 
   <!-- ===== COLLAPSIBLE: Extended Metrics & Finance ===== -->
   <div class="mb-3" data-owner-accordion-section>
-    <div class="owner-section-toggle collapsed" role="button" data-toggle-section="owner-extended-metrics" aria-expanded="false">
+    <button type="button" class="owner-section-toggle collapsed w-100" data-toggle-section="owner-extended-metrics" aria-expanded="false" aria-controls="owner-extended-metrics">
       <span class="fw-semibold small">Financial Details & Extra Metrics</span>
       <span class="toggle-arrow"><i class="fas fa-chevron-down"></i></span>
-    </div>
+    </button>
     <div class="owner-section-body" id="owner-extended-metrics">
       <div class="row g-3 mb-4">
         <div class="col-sm-6 col-md-3">
@@ -307,10 +308,10 @@
 
   <!-- ===== COLLAPSIBLE: Top Grounds & Performance ===== -->
   <div class="mb-3" data-owner-accordion-section>
-    <div class="owner-section-toggle collapsed" role="button" data-toggle-section="owner-grounds-performance" aria-expanded="false">
+    <button type="button" class="owner-section-toggle collapsed w-100" data-toggle-section="owner-grounds-performance" aria-expanded="false" aria-controls="owner-grounds-performance">
       <span class="fw-semibold small">Top Grounds & Expenses</span>
       <span class="toggle-arrow"><i class="fas fa-chevron-down"></i></span>
-    </div>
+    </button>
     <div class="owner-section-body" id="owner-grounds-performance">
       <div class="row g-4">
         <div class="col-lg-7">
@@ -447,10 +448,10 @@
 
   <!-- ===== COLLAPSIBLE: Tournaments ===== -->
   <div class="mb-3" data-owner-accordion-section>
-    <div class="owner-section-toggle collapsed" role="button" data-toggle-section="owner-tournaments-section" aria-expanded="false">
+    <button type="button" class="owner-section-toggle collapsed w-100" data-toggle-section="owner-tournaments-section" aria-expanded="false" aria-controls="owner-tournaments-section">
       <span class="fw-semibold small">Tournaments</span>
       <span class="toggle-arrow"><i class="fas fa-chevron-down"></i></span>
-    </div>
+    </button>
     <div class="owner-section-body" id="owner-tournaments-section">
       <div class="card p-3 shadow-sm">
         <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
@@ -590,16 +591,27 @@
       var targetId = toggle.getAttribute('data-toggle-section');
       var target = document.getElementById(targetId);
 
+      function setSectionOpenState(isOpen) {
+        if (!target) return;
+        if (isOpen) {
+          target.classList.add('open');
+          target.style.maxHeight = target.scrollHeight + 'px';
+        } else {
+          target.classList.remove('open');
+          target.style.maxHeight = '0px';
+        }
+      }
+
       // Restore saved state
       var savedCollapsed = sectionState[targetId];
       if (savedCollapsed === true) {
         toggle.classList.add('collapsed');
         toggle.setAttribute('aria-expanded', 'false');
-        if (target) target.classList.remove('open');
+        setSectionOpenState(false);
       } else if (savedCollapsed === false) {
         toggle.classList.remove('collapsed');
         toggle.setAttribute('aria-expanded', 'true');
-        if (target) target.classList.add('open');
+        setSectionOpenState(true);
       }
 
       toggle.addEventListener('click', function() {
@@ -607,17 +619,28 @@
         if (isCollapsed) {
           toggle.classList.remove('collapsed');
           toggle.setAttribute('aria-expanded', 'true');
-          if (target) target.classList.add('open');
+          setSectionOpenState(true);
           sectionState[targetId] = false;
         } else {
           toggle.classList.add('collapsed');
           toggle.setAttribute('aria-expanded', 'false');
-          if (target) target.classList.remove('open');
+          setSectionOpenState(false);
           sectionState[targetId] = true;
         }
         try {
           localStorage.setItem(sectionStateKey, JSON.stringify(sectionState));
         } catch (e) {}
+      });
+    });
+
+    window.addEventListener('resize', function() {
+      toggles.forEach(function(toggle) {
+        if (toggle.classList.contains('collapsed')) return;
+        var targetId = toggle.getAttribute('data-toggle-section');
+        var target = document.getElementById(targetId);
+        if (target && target.classList.contains('open')) {
+          target.style.maxHeight = target.scrollHeight + 'px';
+        }
       });
     });
   })();

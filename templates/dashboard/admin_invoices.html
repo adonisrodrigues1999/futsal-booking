@@ -23,7 +23,7 @@
     <thead>
       <tr>
         <th>Ground</th>
-        <th>Bookings</th>
+        <th>Pending Bookings</th>
         <th>Create Invoice</th>
       </tr>
     </thead>
@@ -79,6 +79,7 @@
         <td id="paid-{{ inv.id }}">{% if inv.is_paid %}Yes{% else %}No{% endif %}</td>
         <td id="settled-{{ inv.id }}">{% if inv.settled_at %}{{ inv.settled_at|date:"M j, Y g:i A" }}{% else %}-{% endif %}</td>
         <td>
+          <a href="{% url 'admin_invoice_detail' inv.id %}" class="btn btn-sm btn-outline-primary">View</a>
           {% if not inv.is_paid %}
             <button class="btn btn-sm btn-primary js-mark-paid" data-id="{{ inv.id }}">Mark Paid</button>
             <a href="{% url 'pay_invoice' inv.id %}" class="btn btn-sm btn-warning">Pay</a>
@@ -88,7 +89,7 @@
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="7">No invoices yet.</td></tr>
+      <tr><td colspan="8">No invoices yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -8,7 +8,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction, OperationalError, IntegrityError
-from django.db.models import Count, Sum, Q
+from django.db.models import Count, Sum, Q, Prefetch
 from django.db.models.functions import Coalesce
 import time
 from django.core.mail import send_mail
@@ -33,7 +33,7 @@ try:
 except Exception:
     razorpay = None
 
-from .models import Ground, Slot, Booking, ActivityLog, OwnerExpense, BookingAttendance, AlertSubscription, RewardTransaction, AlertDispatchLog, SettlementRefund, InvoiceLineItem, GroundInvoice
+from .models import Ground, Slot, Booking, ActivityLog, OwnerExpense, BookingAttendance, AlertSubscription, RewardTransaction, AlertDispatchLog, SettlementRefund, InvoiceLineItem, GroundInvoice, OnlineSettlement, OnlineSettlementLineItem
 from .money import ground_collected_amount_expression, online_collected_amount_expression
 from grounds.forms import TournamentForm, TournamentRegistrationForm, GroundReviewForm
 from grounds.models import Tournament, TournamentRegistration, GroundReview
@@ -64,6 +64,12 @@ def _slot_end_datetime(slot):
 
 def _is_day_slot(slot_time):
     return 6 <= slot_time.hour < 18
+
+
+def _slot_period_meta(slot_time):
+    if _is_day_slot(slot_time):
+        return '☀️', 'Day'
+    return '🌙', 'Night'
 
 
 def _is_morning_slot(slot_time):
@@ -97,6 +103,14 @@ def _payment_amounts(total_amount, payment_mode):
             return total_amount, 0, 'FULL'
         return paid, due, 'PARTIAL_99'
     return total_amount, 0, 'FULL'
+
+
+def _online_collected_amount_for_booking(booking):
+    if booking.booking_source != 'ONLINE':
+        return Decimal('0.00')
+    if booking.payment_mode == 'PARTIAL_99' and booking.paid_amount > 0:
+        return Decimal('99.00')
+    return Decimal(str(booking.paid_amount or 0)).quantize(Decimal('0.01'))
 
 
 def _hours_to_slot_start(slot):
@@ -1883,9 +1897,14 @@ def admin_invoices(request):
     except Exception:
         end_date = timezone.localdate()
 
-    # Aggregate bookings per ground where slot.date between start and end
-    qs = Booking.objects.filter(status='BOOKED', slot__date__gte=start_date, slot__date__lte=end_date)
-    counts = qs.values('slot__ground').annotate(count=Count('id')).order_by('-count')
+    # Aggregate only bookings that have not yet been billed.
+    pending_qs = Booking.objects.filter(
+        status='BOOKED',
+        invoiced_at__isnull=True,
+        slot__date__gte=start_date,
+        slot__date__lte=end_date,
+    )
+    counts = pending_qs.values('slot__ground').annotate(count=Count('id')).order_by('-count')
 
     # Map ground id -> count
     ground_counts = {}
@@ -1944,6 +1963,7 @@ def admin_invoices(request):
                     Booking.objects.select_for_update()
                     .filter(
                         status='BOOKED',
+                        invoiced_at__isnull=True,
                         slot__ground=ground,
                         slot__date__gte=gstart_date,
                         slot__date__lte=gend_date,
@@ -1953,7 +1973,7 @@ def admin_invoices(request):
                 )
                 bookings_count = len(period_bookings)
                 if bookings_count == 0:
-                    messages.warning(request, f'No bookings found for {ground.name} in the selected period.')
+                    messages.warning(request, f'No uninvoiced bookings found for {ground.name} in the selected period.')
                     return redirect('admin_invoices')
 
                 total = (Decimal(bookings_count) * charge_val).quantize(Decimal('0.01'))
@@ -2004,7 +2024,7 @@ def admin_invoices(request):
                 ])
                 Booking.objects.filter(id__in=[booking.id for booking in period_bookings]).update(invoiced_at=timezone.now())
 
-            messages.success(request, f'Settlement saved for {ground.name}: {bookings_count} bookings, total {total}.')
+            messages.success(request, f'Invoice created for {ground.name}: {bookings_count} bookings billed, total {total}.')
             return redirect('admin_invoices')
         except Ground.DoesNotExist:
             messages.error(request, 'Invalid ground selected.')
@@ -2012,13 +2032,23 @@ def admin_invoices(request):
             messages.error(request, 'Enter a valid positive charge per booking.')
 
     # Fetch existing invoices for display (last 50)
-    existing_invoices = GroundInvoice.objects.select_related('ground', 'settled_by').all()[:50]
+    existing_invoices = (
+        GroundInvoice.objects
+        .select_related('ground', 'settled_by')
+        .prefetch_related(
+            Prefetch(
+                'line_items',
+                queryset=InvoiceLineItem.objects.select_related('booking', 'booking__slot').order_by('booking__slot__date', 'booking__slot__start_time'),
+            )
+        )
+        .order_by('-created_at')[:50]
+    )
 
     rows = []
     for g in grounds:
         rows.append({
             'ground': g,
-            'bookings_count': ground_counts.get(g.id, 0)
+            'bookings_count': ground_counts.get(g.id, 0),
         })
 
     return render(request, 'dashboard/admin_invoices.html', {
@@ -2027,6 +2057,265 @@ def admin_invoices(request):
         'end_date': end_date,
         'existing_invoices': existing_invoices,
         'selected_ground': selected_ground,
+    })
+
+
+@login_required
+def admin_invoice_detail(request, invoice_id):
+    if request.user.role != 'admin':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+
+    invoice = get_object_or_404(
+        GroundInvoice.objects.select_related('ground', 'ground__owner', 'settled_by').prefetch_related(
+            Prefetch(
+                'line_items',
+                queryset=InvoiceLineItem.objects.select_related('booking', 'booking__slot').order_by('booking__slot__date', 'booking__slot__start_time'),
+            )
+        ),
+        id=invoice_id,
+    )
+    invoice.reference = f"FB-INV-{invoice.created_at:%Y%m}-{str(invoice.id)[:8].upper()}"
+    return render(request, 'dashboard/invoice_detail.html', {
+        'invoice': invoice,
+    })
+
+
+@login_required
+def admin_online_settlements(request):
+    if request.user.role != 'admin':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+
+    start_str = request.GET.get('start')
+    end_str = request.GET.get('end')
+    try:
+        if start_str:
+            start_date = timezone.datetime.strptime(start_str, '%Y-%m-%d').date()
+        else:
+            today = timezone.localdate()
+            start_date = today.replace(day=1)
+    except Exception:
+        start_date = timezone.localdate().replace(day=1)
+    try:
+        if end_str:
+            end_date = timezone.datetime.strptime(end_str, '%Y-%m-%d').date()
+        else:
+            end_date = timezone.localdate()
+    except Exception:
+        end_date = timezone.localdate()
+
+    pending_bookings = Booking.objects.filter(
+        status='BOOKED',
+        booking_source='ONLINE',
+        online_settlement__isnull=True,
+        slot__date__gte=start_date,
+        slot__date__lte=end_date,
+    )
+    pending_rows = (
+        pending_bookings
+        .values('slot__ground_id', 'slot__ground__name', 'slot__ground__owner__name')
+        .annotate(
+            bookings_count=Count('id'),
+            collected_amount=Coalesce(Sum(online_collected_amount_expression()), 0),
+        )
+        .order_by('-collected_amount', 'slot__ground__name')
+    )
+
+    settlements = (
+        OnlineSettlement.objects
+        .select_related('ground', 'owner', 'created_by', 'transferred_by', 'owner_confirmed_by')
+        .prefetch_related(
+            Prefetch(
+                'line_items',
+                queryset=OnlineSettlementLineItem.objects.select_related('booking', 'booking__slot').order_by('booking__slot__date', 'booking__slot__start_time'),
+            )
+        )
+        .order_by('-created_at')[:50]
+    )
+
+    if request.method == 'POST':
+        ground_id = request.POST.get('ground_id')
+        period_start_raw = request.POST.get('period_start')
+        period_end_raw = request.POST.get('period_end')
+        admin_note = (request.POST.get('admin_note') or '').strip()
+        try:
+            if not ground_id:
+                messages.error(request, 'Please select a ground.')
+                return redirect('admin_online_settlements')
+
+            with transaction.atomic():
+                ground = Ground.objects.select_for_update().get(id=ground_id)
+                period_start = timezone.datetime.strptime(period_start_raw, '%Y-%m-%d').date() if period_start_raw else start_date
+                period_end = timezone.datetime.strptime(period_end_raw, '%Y-%m-%d').date() if period_end_raw else end_date
+                existing = OnlineSettlement.objects.select_for_update().filter(
+                    ground=ground,
+                    period_start=period_start,
+                    period_end=period_end,
+                ).first()
+                if existing and existing.status == 'ACKNOWLEDGED':
+                    messages.error(request, 'This settlement is already acknowledged by the owner.')
+                    return redirect('admin_online_settlements')
+
+                bookings_qs = (
+                    Booking.objects.select_for_update()
+                    .filter(
+                        status='BOOKED',
+                        booking_source='ONLINE',
+                        online_settlement__isnull=True,
+                        slot__ground=ground,
+                        slot__date__gte=period_start,
+                        slot__date__lte=period_end,
+                    )
+                    .select_related('slot', 'slot__ground')
+                    .order_by('slot__date', 'slot__start_time', 'id')
+                )
+                bookings_list = list(bookings_qs)
+                if not bookings_list:
+                    messages.warning(request, f'No unsettled online bookings found for {ground.name}.')
+                    return redirect('admin_online_settlements')
+
+                collected_amount = sum((_online_collected_amount_for_booking(booking) for booking in bookings_list), Decimal('0.00'))
+                booking_count = len(bookings_list)
+
+                if existing is None:
+                    reference = f"FB-OS-{timezone.now():%Y%m%d}-{str(uuid.uuid4())[:8].upper()}"
+                    settlement = OnlineSettlement.objects.create(
+                        ground=ground,
+                        owner=ground.owner,
+                        period_start=period_start,
+                        period_end=period_end,
+                        booking_count=booking_count,
+                        collected_amount=collected_amount,
+                        status='CREATED',
+                        reference=reference,
+                        admin_note=admin_note,
+                        created_by=request.user,
+                    )
+                else:
+                    settlement = existing
+                    settlement.booking_count = booking_count
+                    settlement.collected_amount = collected_amount
+                    settlement.admin_note = admin_note
+                    settlement.status = 'CREATED'
+                    settlement.transferred_at = None
+                    settlement.transferred_by = None
+                    settlement.owner_confirmed_at = None
+                    settlement.owner_confirmed_by = None
+                    settlement.save(update_fields=[
+                        'booking_count',
+                        'collected_amount',
+                        'admin_note',
+                        'status',
+                        'transferred_at',
+                        'transferred_by',
+                        'owner_confirmed_at',
+                        'owner_confirmed_by',
+                    ])
+                    settlement.line_items.all().delete()
+
+                OnlineSettlementLineItem.objects.bulk_create([
+                    OnlineSettlementLineItem(
+                        settlement=settlement,
+                        booking=booking,
+                        collected_amount=_online_collected_amount_for_booking(booking),
+                    )
+                    for booking in bookings_list
+                ])
+                Booking.objects.filter(id__in=[booking.id for booking in bookings_list]).update(online_settlement=settlement)
+
+            messages.success(request, f'Online settlement created for {ground.name}: ₹{collected_amount} across {booking_count} bookings.')
+            return redirect('admin_online_settlements')
+        except Ground.DoesNotExist:
+            messages.error(request, 'Invalid ground selected.')
+        except ValueError:
+            messages.error(request, 'Invalid date format.')
+
+    return render(request, 'dashboard/admin_online_settlements.html', {
+        'start_date': start_date,
+        'end_date': end_date,
+        'pending_rows': pending_rows,
+        'settlements': settlements,
+    })
+
+
+@login_required
+def admin_mark_online_settlement_transferred(request, settlement_id):
+    if request.method != 'POST' or request.user.role != 'admin':
+        return redirect('home')
+
+    settlement = get_object_or_404(OnlineSettlement, id=settlement_id)
+    if settlement.status == 'ACKNOWLEDGED':
+        messages.info(request, 'This settlement has already been acknowledged by the owner.')
+        return redirect('admin_online_settlements')
+
+    with transaction.atomic():
+        locked = OnlineSettlement.objects.select_for_update().get(id=settlement_id)
+        locked.status = 'TRANSFERRED'
+        locked.transferred_at = timezone.now()
+        locked.transferred_by = request.user
+        locked.save(update_fields=['status', 'transferred_at', 'transferred_by'])
+
+    messages.success(request, f'Online settlement marked transferred for {settlement.ground.name}.')
+    return redirect('admin_online_settlements')
+
+
+@login_required
+def owner_online_settlements(request):
+    if request.user.role not in {'owner', 'admin'}:
+        return redirect('/')
+
+    settlements_qs = OnlineSettlement.objects.select_related(
+        'ground', 'owner', 'created_by', 'transferred_by', 'owner_confirmed_by'
+    ).prefetch_related(
+        Prefetch(
+            'line_items',
+            queryset=OnlineSettlementLineItem.objects.select_related('booking', 'booking__slot').order_by('booking__slot__date', 'booking__slot__start_time'),
+        )
+    )
+    if request.user.role == 'owner':
+        settlements_qs = settlements_qs.filter(owner=request.user)
+
+    settlements = settlements_qs.order_by('-created_at')
+    pending = settlements.filter(status='TRANSFERRED')
+
+    if request.method == 'POST':
+        settlement_id = request.POST.get('settlement_id')
+        action = request.POST.get('action')
+        note = (request.POST.get('note') or '').strip()
+        if action not in {'ACKNOWLEDGE', 'DISPUTE'}:
+            messages.error(request, 'Invalid settlement action.')
+            return redirect('owner_online_settlements')
+
+        with transaction.atomic():
+            settlement_qs = OnlineSettlement.objects.select_for_update()
+            if request.user.role == 'owner':
+                settlement_qs = settlement_qs.filter(owner=request.user)
+            settlement = get_object_or_404(settlement_qs, id=settlement_id)
+            if settlement.status != 'TRANSFERRED':
+                messages.error(request, 'Only transferred settlements can be reviewed.')
+                return redirect('owner_online_settlements')
+
+            if action == 'ACKNOWLEDGE':
+                settlement.status = 'ACKNOWLEDGED'
+                settlement.owner_confirmed_at = timezone.now()
+                settlement.owner_confirmed_by = request.user
+                if note:
+                    settlement.owner_note = note
+                settlement.save(update_fields=['status', 'owner_confirmed_at', 'owner_confirmed_by', 'owner_note'])
+                messages.success(request, f'Settlement acknowledged for {settlement.ground.name}.')
+            else:
+                settlement.status = 'DISPUTED'
+                settlement.owner_confirmed_at = timezone.now()
+                settlement.owner_confirmed_by = request.user
+                settlement.owner_note = note or 'Owner disputed the settlement amount.'
+                settlement.save(update_fields=['status', 'owner_confirmed_at', 'owner_confirmed_by', 'owner_note'])
+                messages.warning(request, f'Settlement marked disputed for {settlement.ground.name}.')
+        return redirect('owner_online_settlements')
+
+    return render(request, 'dashboard/owner_online_settlements.html', {
+        'settlements': settlements,
+        'pending_settlements': pending,
     })
 
 
@@ -2279,7 +2568,8 @@ def owner_manual_booking(request):
             if _is_restricted_manual_hour(s.start_time):
                 continue
             price = _slot_price_for_slot(s)
-            slots.append({'slot': s, 'price': price})
+            time_icon, period_label = _slot_period_meta(s.start_time)
+            slots.append({'slot': s, 'price': price, 'time_icon': time_icon, 'period_label': period_label})
     else:
         # default: show all available upcoming slots across grounds owned by this owner
         slots_qs = Slot.objects.filter(ground__in=grounds, is_booked=False, date__gte=timezone.localdate()).order_by('date', 'start_time')
@@ -2289,7 +2579,8 @@ def owner_manual_booking(request):
             if _is_restricted_manual_hour(s.start_time):
                 continue
             price = _slot_price_for_slot(s)
-            slots.append({'slot': s, 'price': price})
+            time_icon, period_label = _slot_period_meta(s.start_time)
+            slots.append({'slot': s, 'price': price, 'time_icon': time_icon, 'period_label': period_label})
 
     return render(request, 'owner/manual_booking.html', {
         'grounds': grounds,

@@ -131,7 +131,10 @@
       </form>
 
       <div class="text-center mt-3 small">
-        <p class="mb-0">Do not have an account? <a href="{% url 'register' %}">Register here</a></p>
+        <p class="mb-0">
+          Do not have an account?
+          <a href="{% url 'register' %}" class="btn btn-sm btn-primary ms-1 register-cta-link">Register here</a>
+        </p>
         <p class="mb-0"><a href="{% url 'password_reset' %}">Forgot password?</a></p>
       </div>
   </div>

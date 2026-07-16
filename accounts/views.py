@@ -384,9 +384,12 @@ def verify_email(request, token):
             verification.save()
             verification.user.email_verified = True
             verification.user.save()
-            messages.success(request, 'Email verified successfully! You can now log in.')
+            messages.success(request, 'Email verified successfully! You are now logged in.')
         else:
-            messages.info(request, 'Email already verified.')
+            messages.info(request, 'Email already verified. You are now logged in.')
+
+        login(request, verification.user, backend='django.contrib.auth.backends.ModelBackend')
+        return redirect('home')
     except EmailVerification.DoesNotExist:
         messages.error(request, 'Invalid verification link.')
 

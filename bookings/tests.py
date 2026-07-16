@@ -1,7 +1,7 @@
 import uuid
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from datetime import datetime, time, date
 from datetime import timedelta
 from unittest.mock import patch
@@ -10,7 +10,7 @@ from accounts.models import User
 from grounds.models import Ground, Tournament, TournamentRegistration
 from django.utils import timezone
 
-from .models import Slot, Booking, OwnerExpense, BookingAttendance, GroundInvoice, InvoiceLineItem
+from .models import Slot, Booking, OwnerExpense, BookingAttendance, GroundInvoice, InvoiceLineItem, OnlineSettlement, OnlineSettlementLineItem
 from .slot_generation import create_initial_slots_for_ground, ensure_slots_for_ground_date
 from .views import _slot_price_for_slot
 
@@ -94,6 +94,7 @@ class SlotGenerationTests(TestCase):
         self.assertEqual(Slot.objects.filter(ground=ground).count(), 2)
 
 
+@override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
 class BookingFlowTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(
@@ -196,6 +197,34 @@ class BookingFlowTests(TestCase):
         self.assertEqual(bookings[0].slot.date, base_date)
         self.assertEqual(bookings[1].slot.date, base_date + timedelta(days=1))
         self.assertEqual(bookings[2].slot.date, base_date + timedelta(days=4))
+
+    def test_owner_manual_booking_shows_day_and_night_badges(self):
+        target_date = timezone.localdate() + timedelta(days=1)
+        Slot.objects.create(
+            ground=self.ground,
+            date=target_date,
+            start_time=time(8, 0),
+            end_time=time(9, 0),
+            is_booked=False,
+        )
+        Slot.objects.create(
+            ground=self.ground,
+            date=target_date,
+            start_time=time(20, 0),
+            end_time=time(21, 0),
+            is_booked=False,
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            f'/owner/manual-booking/?ground={self.ground.id}&date={target_date.isoformat()}'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '☀️')
+        self.assertContains(response, 'Day')
+        self.assertContains(response, '🌙')
+        self.assertContains(response, 'Night')
 
     def test_customer_reschedule_blocked_within_four_hours(self):
         near_start = timezone.localtime(timezone.now()) + timedelta(hours=2)
@@ -397,6 +426,16 @@ class BookingFlowTests(TestCase):
         self.assertEqual(stats['manual_paid_amount'], 200)
         self.assertEqual(stats['online_due_amount'], 0)
         self.assertEqual(stats['manual_due_amount'], 500)
+
+    def test_owner_dashboard_section_toggles_are_button_controls(self):
+        self.client.force_login(self.owner)
+        response = self.client.get('/dashboard/owner/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-toggle-section="owner-extended-metrics"')
+        self.assertContains(response, 'aria-controls="owner-extended-metrics"')
+        self.assertContains(response, 'aria-controls="owner-grounds-performance"')
+        self.assertContains(response, 'aria-controls="owner-tournaments-section"')
 
     def test_partial_online_payment_monthly_split_and_ground_tally(self):
         today = timezone.localdate()
@@ -754,6 +793,7 @@ class OwnerExpenseTests(TestCase):
         self.assertTrue(OwnerExpense.objects.filter(id=expense.id).exists())
 
 
+@override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
 class AdminInvoiceTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(
@@ -850,6 +890,19 @@ class AdminInvoiceTests(TestCase):
         self.assertIsNotNone(Booking.objects.get(slot=self.slot_one).invoiced_at)
         self.assertFalse(GroundInvoice.objects.filter(ground=self.ground_two).exists())
 
+        summary_response = self.client.get(
+            f'/dashboard/admin/invoices/?start={self.settlement_date.strftime("%Y-%m-%d")}&end={self.settlement_date.strftime("%Y-%m-%d")}'
+        )
+        self.assertEqual(summary_response.status_code, 200)
+        rows = {row['ground'].id: row['bookings_count'] for row in summary_response.context['rows']}
+        self.assertEqual(rows[self.ground_one.id], 0)
+        self.assertEqual(rows[self.ground_two.id], 1)
+
+        detail_response = self.client.get(f'/dashboard/admin/invoices/{invoice.id}/')
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, 'FB-INV-')
+        self.assertContains(detail_response, 'Line Items')
+
     def test_admin_mark_paid_and_unpaid_updates_settlement_metadata(self):
         invoice = GroundInvoice.objects.create(
             ground=self.ground_one,
@@ -877,6 +930,89 @@ class AdminInvoiceTests(TestCase):
         self.assertFalse(invoice.is_paid)
         self.assertIsNone(invoice.settled_at)
         self.assertIsNone(invoice.settled_by)
+
+    def test_admin_creates_online_settlement_and_owner_acknowledges_receipt(self):
+        online_slot_one = Slot.objects.create(
+            ground=self.ground_one,
+            date=self.settlement_date,
+            start_time=time(13, 0),
+            end_time=time(14, 0),
+            is_booked=True,
+        )
+        online_slot_two = Slot.objects.create(
+            ground=self.ground_one,
+            date=self.settlement_date,
+            start_time=time(14, 0),
+            end_time=time(15, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=online_slot_one,
+            customer_name='Online User 1',
+            customer_phone='9000000003',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='FULL',
+            payment_status='PAID',
+            paid_amount=500,
+            due_amount=0,
+        )
+        Booking.objects.create(
+            slot=online_slot_two,
+            customer_name='Online User 2',
+            customer_phone='9000000004',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='PARTIAL_99',
+            payment_status='PARTIALLY_PAID',
+            paid_amount=99,
+            due_amount=401,
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.post('/dashboard/admin/online-settlements/', {
+            'ground_id': str(self.ground_one.id),
+            'period_start': self.settlement_date.strftime('%Y-%m-%d'),
+            'period_end': self.settlement_date.strftime('%Y-%m-%d'),
+            'admin_note': 'July online transfer',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        settlement = OnlineSettlement.objects.get(ground=self.ground_one)
+        self.assertEqual(settlement.booking_count, 2)
+        self.assertEqual(settlement.collected_amount, Decimal('599.00'))
+        self.assertEqual(settlement.status, 'CREATED')
+        self.assertEqual(OnlineSettlementLineItem.objects.filter(settlement=settlement).count(), 2)
+        self.assertEqual(Booking.objects.get(slot=online_slot_one).online_settlement, settlement)
+        self.assertEqual(Booking.objects.get(slot=online_slot_two).online_settlement, settlement)
+
+        self.client.force_login(self.admin)
+        transfer_response = self.client.post(f'/dashboard/admin/online-settlements/{settlement.id}/transferred/')
+        self.assertEqual(transfer_response.status_code, 302)
+
+        settlement.refresh_from_db()
+        self.assertEqual(settlement.status, 'TRANSFERRED')
+        self.assertIsNotNone(settlement.transferred_at)
+        self.assertEqual(settlement.transferred_by, self.admin)
+
+        self.client.force_login(self.owner)
+        owner_response = self.client.get('/dashboard/owner/online-settlements/')
+        self.assertEqual(owner_response.status_code, 200)
+        self.assertContains(owner_response, settlement.reference)
+
+        ack_response = self.client.post('/dashboard/owner/online-settlements/', {
+            'settlement_id': str(settlement.id),
+            'action': 'ACKNOWLEDGE',
+            'note': 'Received in account',
+        })
+        self.assertEqual(ack_response.status_code, 302)
+
+        settlement.refresh_from_db()
+        self.assertEqual(settlement.status, 'ACKNOWLEDGED')
+        self.assertEqual(settlement.owner_confirmed_by, self.owner)
+        self.assertIsNotNone(settlement.owner_confirmed_at)
 
 
 class BookingFraudDetectionTests(TestCase):

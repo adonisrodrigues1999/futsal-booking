@@ -10,6 +10,8 @@ from .models import (
     RewardTransaction,
     AlertSubscription,
     AlertDispatchLog,
+    OnlineSettlement,
+    OnlineSettlementLineItem,
 )
 from .models import GroundInvoice
 from grounds.models import Ground
@@ -145,6 +147,29 @@ class GroundInvoiceAdmin(admin.ModelAdmin):
     )
     list_filter = ('is_paid', 'ground')
     search_fields = ('ground__name',)
+
+
+@admin.register(OnlineSettlement)
+class OnlineSettlementAdmin(admin.ModelAdmin):
+    list_display = (
+        'reference',
+        'ground',
+        'owner',
+        'period_start',
+        'period_end',
+        'booking_count',
+        'collected_amount',
+        'status',
+        'created_at',
+    )
+    list_filter = ('status', 'ground')
+    search_fields = ('reference', 'ground__name', 'owner__name', 'owner__email')
+
+
+@admin.register(OnlineSettlementLineItem)
+class OnlineSettlementLineItemAdmin(admin.ModelAdmin):
+    list_display = ('settlement', 'booking', 'collected_amount', 'created_at')
+    search_fields = ('settlement__reference', 'booking__id', 'booking__customer_name')
 
 
 @admin.register(OwnerExpense)

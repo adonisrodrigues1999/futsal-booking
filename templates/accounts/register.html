@@ -50,14 +50,6 @@
           </div>
         </div>
 
-        <div class="row">
-          <div class="col-md-6 mb-3">
-            <label for="{{ form.referral_code.id_for_label }}" class="form-label">Referral Code</label>
-            {{ form.referral_code }}
-            <div class="form-text">Optional. Earn rewards when your referred user books or registers.</div>
-          </div>
-        </div>
-
         <div class="card border-0 bg-light p-3 mb-3">
           <h6 class="mb-3">Alert Preferences</h6>
           <div class="row g-2 small">
@@ -113,40 +105,42 @@
     </div>
   </div>
 </div>
-    {% if show_verification_popup %}
-      <div id="verificationModal" class="modal-overlay" role="dialog" aria-modal="true" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:1050;">
-        <div class="modal-card" style="background:#fff;border-radius:.5rem;max-width:520px;width:90%;box-shadow:0 10px 30px rgba(0,0,0,.3);">
-          <div class="modal-body p-4 text-center">
-            <h4 class="mb-3">Registration Successful</h4>
-            <p class="mb-3">{{ verification_message }}</p>
-            {% if show_whatsapp_fallback %}
-              <p class="mb-3">
-                If the email still does not arrive, send the same details on WhatsApp for manual help.
-              </p>
-              <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center mb-3">
-                <a href="{{ whatsapp_support_link }}" target="_blank" rel="noopener" class="btn btn-success">
-                  Send WhatsApp Message
-                </a>
-              </div>
-            {% endif %}
-            <div class="d-flex justify-content-center">
-              <button id="verify-ok" class="btn btn-primary">Go to Login</button>
-            </div>
+{% if show_verification_popup %}
+  <div id="verificationModal" class="verification-popup-shell" role="dialog" aria-modal="true">
+    <div class="verification-popup-card">
+      <div class="modal-body p-4 text-center">
+        <div class="verification-popup-badge mb-2">Almost there</div>
+        <h4 class="mb-3">Registration Successful</h4>
+        <p class="mb-3 verification-popup-copy">
+          <span class="verification-highlight">Check your mail for verification</span>
+          <span class="d-block mt-2">{{ verification_message }}</span>
+        </p>
+        {% if show_whatsapp_fallback %}
+          <p class="mb-3">
+            If the email still does not arrive, send the same details on WhatsApp for manual help.
+          </p>
+          <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center mb-3">
+            <a href="{{ whatsapp_support_link }}" target="_blank" rel="noopener" class="btn btn-success">
+              Send WhatsApp Message
+            </a>
           </div>
+        {% endif %}
+        <div class="d-flex justify-content-center">
+          <button id="verify-ok" class="btn btn-primary">Go to Login</button>
         </div>
       </div>
-      <script>
-        (function(){
-          var btn = document.getElementById('verify-ok');
-          if(btn){
-            btn.addEventListener('click', function(){
-              window.location.href = "{% url 'login' %}";
-            });
-          }
-          // Auto-redirect after a short delay (6s)
-          setTimeout(function(){ window.location.href = "{% url 'login' %}"; }, 6000);
-        })();
-      </script>
-    {% endif %}
+    </div>
+  </div>
+  <script>
+    (function(){
+      var btn = document.getElementById('verify-ok');
+      if(btn){
+        btn.addEventListener('click', function(){
+          window.location.href = "{% url 'login' %}";
+        });
+      }
+    })();
+  </script>
+{% endif %}
 
-    {% endblock %}
+{% endblock %}

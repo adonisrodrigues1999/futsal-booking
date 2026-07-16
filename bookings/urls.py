@@ -40,10 +40,14 @@ urlpatterns = [
 
     path('notifications/latest/', views.latest_notification),
     path('dashboard/admin/invoices/', views.admin_invoices, name='admin_invoices'),
+    path('dashboard/admin/invoices/<int:invoice_id>/', views.admin_invoice_detail, name='admin_invoice_detail'),
     path('dashboard/admin/invoices/mark-paid/', views.mark_invoice_paid, name='mark_invoice_paid'),
     path('dashboard/admin/invoices/mark-unpaid/', views.mark_invoice_unpaid, name='mark_invoice_unpaid'),
     path('dashboard/admin/invoices/export/', views.export_invoices_csv, name='export_invoices_csv'),
     path('dashboard/admin/invoices/export-bookings/', views.export_bookings_csv, name='export_bookings_csv'),
     path('dashboard/admin/invoices/pay/<int:invoice_id>/', views.pay_invoice, name='pay_invoice'),
     path('dashboard/admin/invoices/webhook/', views.stripe_webhook, name='stripe_webhook'),
+    path('dashboard/admin/online-settlements/', views.admin_online_settlements, name='admin_online_settlements'),
+    path('dashboard/admin/online-settlements/<int:settlement_id>/transferred/', views.admin_mark_online_settlement_transferred, name='admin_mark_online_settlement_transferred'),
+    path('dashboard/owner/online-settlements/', views.owner_online_settlements, name='owner_online_settlements'),
 ]

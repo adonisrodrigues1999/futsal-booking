@@ -55,6 +55,13 @@ class Booking(models.Model):
     reward_points_earned = models.PositiveIntegerField(default=0)
     loyalty_reward_redeemed = models.BooleanField(default=False)
     payment_paid_at = models.DateTimeField(null=True, blank=True)
+    online_settlement = models.ForeignKey(
+        'OnlineSettlement',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='bookings',
+    )
     razorpay_order_id = models.CharField(max_length=100, blank=True, null=True)
     razorpay_payment_id = models.CharField(max_length=100, blank=True, null=True)
     razorpay_signature = models.CharField(max_length=200, blank=True, null=True)
@@ -151,6 +158,78 @@ class GroundInvoice(models.Model):
 
     def __str__(self):
         return f"Invoice {self.ground.name} {self.period_start} - {self.period_end}"
+
+
+class OnlineSettlement(models.Model):
+    STATUS_CHOICES = (
+        ('CREATED', 'Created'),
+        ('TRANSFERRED', 'Transferred'),
+        ('ACKNOWLEDGED', 'Acknowledged'),
+        ('DISPUTED', 'Disputed'),
+    )
+
+    ground = models.ForeignKey(Ground, on_delete=models.CASCADE)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='online_settlements',
+        limit_choices_to={'role': 'owner'},
+    )
+    period_start = models.DateField()
+    period_end = models.DateField()
+    booking_count = models.PositiveIntegerField()
+    collected_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='CREATED')
+    reference = models.CharField(max_length=40, unique=True)
+    admin_note = models.TextField(blank=True)
+    owner_note = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='created_online_settlements',
+    )
+    transferred_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='transferred_online_settlements',
+    )
+    transferred_at = models.DateTimeField(null=True, blank=True)
+    owner_confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='confirmed_online_settlements',
+    )
+    owner_confirmed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-period_start', '-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ground', 'period_start', 'period_end'],
+                name='unique_online_settlement_period',
+            ),
+        ]
+
+    def __str__(self):
+        return f"Online settlement {self.reference} - {self.ground.name}"
+
+
+class OnlineSettlementLineItem(models.Model):
+    settlement = models.ForeignKey(OnlineSettlement, on_delete=models.CASCADE, related_name='line_items')
+    booking = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name='online_settlement_line_item')
+    collected_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['booking__slot__date', 'booking__slot__start_time']
+
+    def __str__(self):
+        return f"Online settlement line {self.settlement_id} - Booking {self.booking_id}"
 
 
 class InvoiceLineItem(models.Model):

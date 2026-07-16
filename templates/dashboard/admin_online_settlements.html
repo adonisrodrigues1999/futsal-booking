@@ -1,0 +1,127 @@
+{% extends 'base/base.html' %}
+{% block title %}Admin - Online Settlements{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+      <h3 class="mb-1">Online Settlements</h3>
+      <div class="text-muted">Settle online-collected amounts to each ground owner, then wait for owner acknowledgement.</div>
+    </div>
+    <a href="{% url 'admin_dashboard' %}" class="btn btn-outline-secondary">Back to Admin</a>
+  </div>
+
+  <div class="card p-3 mb-4">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Start</label>
+        <input type="date" name="start" value="{{ start_date }}" class="form-control">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">End</label>
+        <input type="date" name="end" value="{{ end_date }}" class="form-control">
+      </div>
+      <div class="col-md-4">
+        <button class="btn btn-primary">Filter</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-3 mb-4">
+    <h5 class="mb-3">Create Settlement</h5>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>Ground</th>
+            <th>Owner</th>
+            <th>Pending Bookings</th>
+            <th>Pending Amount</th>
+            <th>Create</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in pending_rows %}
+          <tr>
+            <td>{{ row.slot__ground__name }}</td>
+            <td>{{ row.slot__ground__owner__name }}</td>
+            <td>{{ row.bookings_count }}</td>
+            <td>₹{{ row.collected_amount }}</td>
+            <td>
+              <form method="post" class="d-flex flex-wrap gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="ground_id" value="{{ row.slot__ground_id }}">
+                <input type="hidden" name="period_start" value="{{ start_date }}">
+                <input type="hidden" name="period_end" value="{{ end_date }}">
+                <input type="text" name="admin_note" class="form-control form-control-sm" style="min-width: 220px;" placeholder="Optional note">
+                <button class="btn btn-sm btn-success">Create Settlement</button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted">No unsettled online bookings for this period.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card p-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="mb-0">Settlement History</h5>
+      <a href="{% url 'owner_online_settlements' %}" class="btn btn-outline-primary btn-sm">Owner View</a>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead>
+          <tr>
+            <th>Reference</th>
+            <th>Ground</th>
+            <th>Period</th>
+            <th>Bookings</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Owner Acknowledgement</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for settlement in settlements %}
+          <tr>
+            <td class="fw-semibold">{{ settlement.reference }}</td>
+            <td>{{ settlement.ground.name }}</td>
+            <td>{{ settlement.period_start }} to {{ settlement.period_end }}</td>
+            <td>{{ settlement.booking_count }}</td>
+            <td>₹{{ settlement.collected_amount }}</td>
+            <td>
+              <span class="badge {% if settlement.status == 'ACKNOWLEDGED' %}text-bg-success{% elif settlement.status == 'TRANSFERRED' %}text-bg-info{% elif settlement.status == 'DISPUTED' %}text-bg-danger{% else %}text-bg-secondary{% endif %}">
+                {{ settlement.get_status_display }}
+              </span>
+            </td>
+            <td>
+              {% if settlement.owner_confirmed_at %}
+                {{ settlement.owner_confirmed_at|date:"M j, Y g:i A" }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td>
+              {% if settlement.status != 'ACKNOWLEDGED' %}
+              <form method="post" action="{% url 'admin_mark_online_settlement_transferred' settlement.id %}">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-primary">Mark Transferred</button>
+              </form>
+              {% else %}
+                <span class="text-muted small">Verified by owner</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="text-center text-muted">No online settlements yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

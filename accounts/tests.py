@@ -215,12 +215,40 @@ class RegistrationResilienceTests(TestCase):
         self.assertContains(response, 'wa.me/918625877270')
         self.assertContains(response, 'newuser%40example.com')
 
+    def test_register_page_hides_referral_code_field(self):
+        response = self.client.get('/accounts/register/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Referral Code')
+        self.assertNotContains(response, 'referral_code')
+
+    def test_verify_email_auto_logs_user_in(self):
+        user = User.objects.create_user(
+            email='verifyme@example.com',
+            phone_number='9999912346',
+            name='Verify Me',
+            password='password123',
+            role='customer',
+            email_verified=False,
+        )
+        verification = EmailVerification.objects.create(user=user)
+
+        response = self.client.get(f'/accounts/verify-email/{verification.token}/')
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/')
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertEqual(int(self.client.session['_auth_user_id']), user.id)
+
     def test_login_page_shows_one_time_registration_popup(self):
         response = self.client.get('/accounts/login/')
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'releaseNotesModal')
         self.assertContains(response, 'Create Free Account')
+        self.assertContains(response, 'slot discounts')
+        self.assertContains(response, 'free booking credits')
         self.assertContains(response, 'data-release-notes-version="2026-07-16-v1"')
 
 
