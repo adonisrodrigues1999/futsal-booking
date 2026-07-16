@@ -12,9 +12,9 @@ class UserRegistrationForm(forms.ModelForm):
     class Meta:
         model = User
         fields = [
+            'name',
             'email',
             'phone_number',
-            'name',
             'notify_price_drops',
             'notify_last_minute',
             'notify_nearby_tournaments',
@@ -22,9 +22,9 @@ class UserRegistrationForm(forms.ModelForm):
             'push_alerts',
         ]
         widgets = {
-            'email': forms.EmailInput(attrs={'class': 'form-control'}),
-            'phone_number': forms.TextInput(attrs={'class': 'form-control'}),
             'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'phone_number': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '9999999999'}),
             'notify_price_drops': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'notify_last_minute': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'notify_nearby_tournaments': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -32,15 +32,42 @@ class UserRegistrationForm(forms.ModelForm):
             'push_alerts': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['phone_number'].help_text = 'Enter your 10-digit mobile number without +91'
+
     def clean(self):
         cleaned_data = super().clean()
         password = cleaned_data.get('password')
         password_confirm = cleaned_data.get('password_confirm')
+        email = cleaned_data.get('email')
+        phone = cleaned_data.get('phone_number')
 
         if password and password_confirm and password != password_confirm:
             raise forms.ValidationError("Passwords don't match")
 
+        # Strip any +91 from phone if accidentally entered
+        if phone:
+            cleaned_data['phone_number'] = phone.lstrip('+').lstrip('91').strip()
+
         return cleaned_data
+
+    def clean_email(self):
+        email = self.cleaned_data.get('email')
+        if email:
+            email = email.strip().lower()
+        return email
+
+    def clean_phone_number(self):
+        phone = self.cleaned_data.get('phone_number')
+        if phone:
+            phone = phone.strip()
+            # Remove +91 or 91 prefix if accidentally entered
+            if phone.startswith('+91'):
+                phone = phone[3:]
+            elif phone.startswith('91') and len(phone) > 10:
+                phone = phone[2:]
+        return phone
 
     def clean_referral_code(self):
         referral_code = (self.cleaned_data.get('referral_code') or '').strip()
@@ -60,6 +87,7 @@ class UserRegistrationForm(forms.ModelForm):
         if commit:
             user.save()
         return user
+# Note: field order changed — name, email, phone_number (moved name to top)
 
 
 class GroundOwnerCreationForm(forms.ModelForm):

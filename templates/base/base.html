@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>{% block title %}Smart Turf Booking{% endblock %} | FootBook</title>
+  <title>{% block title %}Footbook – Book Futsal & Football Turf Slots Online in Goa{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="FootBook - football turf booking and owner analytics platform.">
+  <meta name="description" content="{% block meta_description %}Footbook – Goa's simplest platform for booking futsal and football turf slots online. Check availability, compare prices, and book instantly.{% endblock %}">
   <meta name="theme-color" content="#163325">
+  <meta name="robots" content="index, follow">
 
   {% load static %}
 
@@ -14,6 +15,24 @@
   <link rel="icon" type="image/svg+xml" href="{% static 'images/footbook-favicon.svg' %}">
   <link rel="shortcut icon" href="{% static 'images/footbook-favicon.svg' %}">
   <link rel="stylesheet" href="{% static 'css/style.css' %}">
+
+  <!-- Structured Data (Schema.org JSON-LD) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SportsActivityLocation",
+    "name": "Footbook",
+    "description": "Online futsal and football turf slot booking platform in Goa, India",
+    "url": "https://footbook.online",
+    "areaServed": "Goa, India",
+    "priceRange": "₹99 - ₹2500",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://footbook.online/grounds/?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    }
+  }
+  </script>
 </head>
 <body>
 <div id="app-loader" class="app-loader" aria-hidden="true">
@@ -163,7 +182,7 @@
       '/my-bookings/'
     ];
 
-    const isGroundSlots = /^\\/grounds\\/\\d+\\/?$/.test(path);
+    const isGroundSlots = /^\/grounds\/\d+\/?$/.test(path);
     const shouldReload = autoReloadPaths.includes(path) || isGroundSlots;
     if (!shouldReload) return;
 

@@ -1,5 +1,7 @@
 {% extends 'base/base.html' %}
-{% block title %}Login{% endblock %}
+{% block title %}FootBook – Book Futsal & Football Turf Slots Online in Goa{% endblock %}
+
+{% block meta_description %}FootBook – Book Futsal and Football Turf Slots Online in Goa. Check real-time availability, compare prices, and book your game instantly.{% endblock %}
 
 {% block content %}
 <div class="ad-cta-banner mb-4">
@@ -10,6 +12,8 @@
   </div>
   <a href="https://wa.me/918625877270?text=Hi%20FootBook%2C%20I%20want%20to%20know%20more%20about%20advertising%20on%20FootBook." target="_blank" rel="noopener" class="btn btn-success">To know more click here</a>
 </div>
+
+<h1 class="visually-hidden">FootBook – Futsal & Football Turf Booking in Goa</h1>
 
 <div class="row justify-content-center g-4">
   <div class="col-lg-3 order-2 order-lg-1">
@@ -70,8 +74,22 @@
         </div>
       {% endif %}
 
+      {% if show_resend_verification %}
+        <div class="alert alert-info">
+          <strong>Email not verified.</strong> Please check your inbox/spam folder for the verification email.
+          <form method="post" action="{% url 'resend_verification' %}" class="mt-2">
+            {% csrf_token %}
+            <input type="hidden" name="email" value="{{ unverified_email }}">
+            <button type="submit" class="btn btn-sm btn-outline-primary">Resend Verification Email</button>
+          </form>
+        </div>
+      {% endif %}
+
       <form method="post">
         {% csrf_token %}
+
+        <input type="hidden" name="next" value="{{ next|default:'' }}">
+        <input type="hidden" name="slot" value="{{ slot|default:'' }}">
 
         <div class="mb-3">
           <label for="{{ form.email.id_for_label }}" class="form-label">Email Address</label>
@@ -89,6 +107,7 @@
           {% if form.phone.errors %}
             <div class="text-danger small">{% for error in form.phone.errors %}{{ error }}{% endfor %}</div>
           {% endif %}
+          <div class="form-text">Enter your 10-digit number without +91</div>
         </div>
 
         <div class="mb-3">
@@ -116,7 +135,6 @@
         <p class="mb-0"><a href="{% url 'password_reset' %}">Forgot password?</a></p>
       </div>
   </div>
-</div>
 
 <!-- Trending Data Section -->
 <div class="row g-3 mt-4">
@@ -309,16 +327,20 @@
         const slotsContainer = document.createElement('div');
         slotsContainer.className = 'row g-1';
 
-        // Show all slots — use slot.time (formatted string from backend) to avoid Date parsing issues
+        // Show all slots — make them clickable to login and then redirect to booking
+        const loginBaseUrl = "{% url 'login' %}";
         groundSlots.forEach(slot => {
           const slotTime = slot.time || '─';
           const slotDiv = document.createElement('div');
           slotDiv.className = 'col-4 col-sm-3 col-md-2';
+          const loginUrl = loginBaseUrl + '?slot=' + slot.slot_id;
           slotDiv.innerHTML = `
-            <div class="badge bg-success p-2 d-block text-center w-100">
-              <div class="small">${slotTime}</div>
-              <div class="small fw-semibold">₹${slot.price}</div>
-            </div>
+            <a href="${loginUrl}" class="text-decoration-none">
+              <div class="badge bg-success p-2 d-block text-center w-100 slot-badge-clickable">
+                <div class="small">${slotTime}</div>
+                <div class="small fw-semibold">₹${slot.price}</div>
+              </div>
+            </a>
           `;
           slotsContainer.appendChild(slotDiv);
         });

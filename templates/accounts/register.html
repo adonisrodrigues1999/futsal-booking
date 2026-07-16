@@ -33,6 +33,7 @@
             {% if form.email.errors %}
               <div class="text-danger small">{% for error in form.email.errors %}{{ error }}{% endfor %}</div>
             {% endif %}
+            <div class="form-text">Verification link will be sent to this email. Check inbox or spam folder.</div>
           </div>
         </div>
 
@@ -43,12 +44,8 @@
             {% if form.phone_number.errors %}
               <div class="text-danger small">{% for error in form.phone_number.errors %}{{ error }}{% endfor %}</div>
             {% endif %}
-          </div>
-          <div class="col-md-6 mb-3">
-            <label for="{{ form.role.id_for_label }}" class="form-label">Role</label>
-            {{ form.role }}
-            {% if form.role.errors %}
-              <div class="text-danger small">{% for error in form.role.errors %}{{ error }}{% endfor %}</div>
+            {% if form.phone_number.help_text %}
+              <div class="form-text">{{ form.phone_number.help_text }}</div>
             {% endif %}
           </div>
         </div>

@@ -77,6 +77,19 @@ def register(request):
     if request.method == 'POST':
         form = UserRegistrationForm(request.POST)
         if form.is_valid():
+            email = form.cleaned_data.get('email')
+            phone = form.cleaned_data.get('phone_number')
+
+            # Check if email already exists
+            if User.objects.filter(email__iexact=email).exists():
+                messages.info(request, 'An account with this email already exists. Please login instead.')
+                return redirect(f"{reverse('login')}?identifier={email}")
+
+            # Check if phone already exists
+            if User.objects.filter(phone_number=phone).exists():
+                messages.info(request, 'An account with this phone number already exists. Please login instead.')
+                return redirect(f"{reverse('login')}?identifier={phone}")
+
             user = form.save(commit=False)
             user.email_verified = False
             user.save()
@@ -128,6 +141,12 @@ def register(request):
                     'Registration successful! Please check your email to verify your account. '
                     'Also check your spam or junk folder if you do not see it in your inbox.'
                 )
+            else:
+                messages.warning(
+                    request,
+                    'Registration successful! We could not send the verification email right now. '
+                    'You can use WhatsApp support to get verified, or try logging in to resend the verification.'
+                )
             form = UserRegistrationForm()
             return render(request, 'accounts/register.html', {
                 'form': form,
@@ -140,9 +159,11 @@ def register(request):
                 )
             })
     else:
-        form = UserRegistrationForm(initial={
-            'email': request.GET.get('email', ''),
-        })
+        initial = {}
+        email_param = request.GET.get('email', '')
+        if email_param:
+            initial['email'] = email_param
+        form = UserRegistrationForm(initial=initial)
 
     return render(request, 'accounts/register.html', {'form': form})
 
@@ -171,63 +192,159 @@ def login_view(request):
         .order_by('-total_bookings', 'name')[:5]
     )
 
+    # Handle identifier pre-fill from register redirect
+    identifier_param = request.GET.get('identifier', '')
+    next_url = request.GET.get('next', '')
+    slot_id_param = request.GET.get('slot', '')
+
     if request.method == 'POST':
         form = UserLoginForm(request.POST)
+        next_url = request.POST.get('next', '')
+        slot_id = request.POST.get('slot', '')
+
         if form.is_valid():
             email = form.cleaned_data.get('email')
             phone = form.cleaned_data.get('phone')
             password = form.cleaned_data['password']
 
-            # Determine which identifier to use
-            identifier = email if email else phone
-
             # Try to authenticate with email first, then phone
+            user_obj = None
             user = None
             try:
                 if email:
-                    user_obj = User.objects.get(email=email)
-                    user = authenticate(request, username=email, password=password)
+                    user_obj = User.objects.get(email__iexact=email)
+                    user = authenticate(request, username=user_obj.email, password=password)
                 elif phone:
                     user_obj = User.objects.get(phone_number=phone)
                     user = authenticate(request, username=user_obj.email, password=password)
             except User.DoesNotExist:
                 identifier_value = email or phone or ''
                 messages.info(request, 'No account found with that login. You can register instead.')
-                return render(request, 'accounts/login.html', {
+                context = {
                     'form': form,
                     'public_top_grounds': public_top_grounds,
                     'public_top_tournaments': public_top_tournaments,
                     'public_top_players': public_top_players,
                     'show_register_prompt': True,
                     'missing_account_email': identifier_value,
-                })
+                    'next': next_url,
+                    'slot': slot_id,
+                }
+                return render(request, 'accounts/login.html', context)
 
-            if user is not None:
+            if user is not None and user_obj is not None:
                 if user.email_verified:
                     login(request, user)
                     messages.success(request, f'Welcome back, {user.name}!')
+
+                    # If there's a slot to redirect to, go there
+                    if slot_id:
+                        try:
+                            from bookings.models import Slot
+                            slot = Slot.objects.get(id=slot_id)
+                            return redirect(f'/grounds/{slot.ground.id}/?date={slot.date}')
+                        except Exception:
+                            pass
+
+                    # If there's a next_url, use it
+                    if next_url:
+                        return redirect(next_url)
 
                     # Redirect based on user role
                     if user.role == 'admin':
                         return redirect('admin_dashboard')
                     elif user.role == 'owner':
                         return redirect('owner_dashboard')
-                    else:  # customer
+                    else:
                         return redirect('customer_dashboard')
                 else:
+                    # User exists but email not verified - show resend option
                     messages.error(request, 'Please verify your email before logging in.')
-                    return redirect('login')
+                    context = {
+                        'form': form,
+                        'public_top_grounds': public_top_grounds,
+                        'public_top_tournaments': public_top_tournaments,
+                        'public_top_players': public_top_players,
+                        'unverified_email': user_obj.email,
+                        'show_resend_verification': True,
+                        'next': next_url,
+                        'slot': slot_id,
+                    }
+                    return render(request, 'accounts/login.html', context)
             else:
                 messages.error(request, 'Invalid credentials.')
+            # end if user is not None
+        # end if form.is_valid
+    # end if POST
     else:
         form = UserLoginForm()
+
+        # Pre-fill identifier from GET params
+        if identifier_param:
+            if '@' in identifier_param:
+                form.fields['email'].initial = identifier_param
+            else:
+                form.fields['phone'].initial = identifier_param
 
     return render(request, 'accounts/login.html', {
         'form': form,
         'public_top_grounds': public_top_grounds,
         'public_top_tournaments': public_top_tournaments,
         'public_top_players': public_top_players,
+        'next': next_url,
+        'slot': slot_id_param,
     })
+
+
+def resend_verification(request):
+    """Resend verification email for unverified accounts."""
+    if request.method != 'POST':
+        return redirect('login')
+
+    email = request.POST.get('email', '').strip()
+    if not email:
+        messages.error(request, 'Please provide your email address.')
+        return redirect('login')
+
+    try:
+        user = User.objects.get(email__iexact=email)
+    except User.DoesNotExist:
+        messages.error(request, 'No account found with that email.')
+        return redirect('login')
+
+    if user.email_verified:
+        messages.info(request, 'Your email is already verified. You can login.')
+        return redirect('login')
+
+    # Create a new verification token
+    EmailVerification.objects.filter(user=user).delete()
+    verification = EmailVerification.objects.create(user=user)
+
+    verification_url = request.build_absolute_uri(
+        reverse('verify_email', args=[verification.token])
+    )
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
+
+    try:
+        send_mail(
+            'Verify your email - FootBook',
+            f'Click the link to verify your email: {verification_url}',
+            from_email,
+            [user.email],
+            fail_silently=False,
+        )
+        messages.success(
+            request,
+            'Verification email sent! Please check your inbox and spam folder.'
+        )
+    except Exception:
+        logger.exception("Resend verification email failed for %s", user.email)
+        messages.error(
+            request,
+            'Could not send verification email right now. Please try again later or use WhatsApp support.'
+        )
+
+    return redirect('login')
 
 
 @login_required
