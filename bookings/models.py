@@ -60,6 +60,7 @@ class Booking(models.Model):
     razorpay_signature = models.CharField(max_length=200, blank=True, null=True)
     recurrence_group = models.UUIDField(null=True, blank=True, db_index=True)
     recurrence_position = models.PositiveIntegerField(default=0)
+    invoiced_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
@@ -129,13 +130,67 @@ class GroundInvoice(models.Model):
     charge_per_booking = models.DecimalField(max_digits=8, decimal_places=2)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
     is_paid = models.BooleanField(default=False)
+    settled_at = models.DateTimeField(null=True, blank=True)
+    settled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='settled_ground_invoices',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-period_start', '-ground']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ground', 'period_start', 'period_end'],
+                name='unique_ground_invoice_period',
+            ),
+        ]
 
     def __str__(self):
         return f"Invoice {self.ground.name} {self.period_start} - {self.period_end}"
+
+
+class InvoiceLineItem(models.Model):
+    invoice = models.ForeignKey(GroundInvoice, on_delete=models.CASCADE, related_name='line_items')
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE)
+    charge_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('invoice', 'booking')
+        ordering = ['booking__slot__date', 'booking__slot__start_time']
+
+    def __str__(self):
+        return f"Line {self.invoice_id} - Booking {self.booking_id}"
+
+
+class SettlementRefund(models.Model):
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending'),
+        ('PAID', 'Paid'),
+        ('CANCELLED', 'Cancelled'),
+    )
+
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='settlements')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    reason = models.CharField(max_length=200, blank=True)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='PENDING')
+    processed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='processed_settlements'
+    )
+    processed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Settlement {self.id} - ₹{self.amount} ({self.status})"
 
 
 class EmailVerification(models.Model):

@@ -2,7 +2,7 @@ from datetime import time, timedelta
 
 from unittest.mock import patch
 
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.utils import timezone
 
 from accounts.models import User
@@ -197,6 +197,7 @@ class AdminDashboardSettlementSplitTests(TestCase):
         self.assertEqual(ranking[0]['revenue'], 900)
 
 
+@override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
 class RegistrationResilienceTests(TestCase):
     @patch('accounts.views.send_mail', side_effect=Exception('SMTP down'))
     def test_register_succeeds_when_email_sending_fails(self, mocked_send_mail):
@@ -213,6 +214,14 @@ class RegistrationResilienceTests(TestCase):
         self.assertTrue(EmailVerification.objects.filter(user__email='newuser@example.com').exists())
         self.assertContains(response, 'wa.me/918625877270')
         self.assertContains(response, 'newuser%40example.com')
+
+    def test_login_page_shows_one_time_registration_popup(self):
+        response = self.client.get('/accounts/login/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'releaseNotesModal')
+        self.assertContains(response, 'Create Free Account')
+        self.assertContains(response, 'data-release-notes-version="2026-07-16-v1"')
 
 
 class CsrfFailurePageTests(TestCase):

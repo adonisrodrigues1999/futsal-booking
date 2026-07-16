@@ -113,6 +113,45 @@
   </div>
 </div>
 
+{% if not user.is_authenticated %}
+<div class="modal fade" id="releaseNotesModal" tabindex="-1" aria-labelledby="releaseNotesModalLabel" aria-hidden="true" data-release-notes-version="2026-07-16-v1">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-fullscreen-sm-down">
+    <div class="modal-content release-notes-modal">
+      <div class="modal-header border-0 pb-0">
+        <div>
+          <div class="release-notes-badge mb-2">New on FootBook</div>
+          <h5 class="modal-title mb-0" id="releaseNotesModalLabel">Book faster. Stay in the loop.</h5>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <p class="release-notes-copy mb-3">
+          Create a free account to save time on every booking, get slot alerts sooner, and come back with your details already ready.
+        </p>
+        <div class="release-notes-benefits">
+          <div class="release-notes-benefit">
+            <i class="fas fa-bolt" aria-hidden="true"></i>
+            <span>Faster checkout with saved details</span>
+          </div>
+          <div class="release-notes-benefit">
+            <i class="fas fa-bell" aria-hidden="true"></i>
+            <span>Early updates on open slots and offers</span>
+          </div>
+          <div class="release-notes-benefit">
+            <i class="fas fa-calendar-check" aria-hidden="true"></i>
+            <span>Simple access to bookings, tournaments, and reminders</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0 justify-content-between flex-wrap gap-2">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Maybe later</button>
+        <a href="{% url 'register' %}" class="btn btn-primary release-notes-cta">Create Free Account</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div id="login-goal-animation" class="goal-anim" aria-hidden="true">
   <div class="goal-anim__scene">
     <div class="goal-anim__goal"></div>
@@ -151,6 +190,7 @@
   window.currentUserName = "{{ user.name|default:''|escapejs }}";
   window.currentUserEmail = "{{ user.email|default:''|escapejs }}";
   window.currentUserPhone = "{{ user.phone_number|default:''|escapejs }}";
+  window.footbookReleaseNotesVersion = "2026-07-16-v1";
 </script>
 <script src="{% static 'js/live_booking.js' %}"></script>
 <script src="{% static 'js/ui.js' %}"></script>
@@ -169,6 +209,36 @@
     }, 3200);
   })();
 </script>
+{% if not user.is_authenticated %}
+<script>
+  (function() {
+    var modalEl = document.getElementById('releaseNotesModal');
+    if (!modalEl || typeof bootstrap === 'undefined') return;
+
+    var storageKey = 'footbook-release-notes-seen-' + (window.footbookReleaseNotesVersion || 'v1');
+    try {
+      if (localStorage.getItem(storageKey) === '1') return;
+      localStorage.setItem(storageKey, '1');
+    } catch (e) {}
+
+    var modal = new bootstrap.Modal(modalEl, {
+      backdrop: true,
+      keyboard: true
+    });
+
+    var registerLink = modalEl.querySelector('.release-notes-cta');
+    if (registerLink) {
+      registerLink.addEventListener('click', function() {
+        try { localStorage.setItem(storageKey, '1'); } catch (e) {}
+      });
+    }
+
+    setTimeout(function() {
+      modal.show();
+    }, 500);
+  })();
+</script>
+{% endif %}
 
 {% block extra_scripts %}{% endblock %}
 

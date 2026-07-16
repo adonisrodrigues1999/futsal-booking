@@ -33,7 +33,7 @@ try:
 except Exception:
     razorpay = None
 
-from .models import Ground, Slot, Booking, ActivityLog, OwnerExpense, BookingAttendance, AlertSubscription, RewardTransaction, AlertDispatchLog
+from .models import Ground, Slot, Booking, ActivityLog, OwnerExpense, BookingAttendance, AlertSubscription, RewardTransaction, AlertDispatchLog, SettlementRefund, InvoiceLineItem, GroundInvoice
 from .money import ground_collected_amount_expression, online_collected_amount_expression
 from grounds.forms import TournamentForm, TournamentRegistrationForm, GroundReviewForm
 from grounds.models import Tournament, TournamentRegistration, GroundReview
@@ -1572,12 +1572,18 @@ def mark_invoice_paid(request):
     if not inv_id:
         return JsonResponse({'success': False, 'error': 'Missing invoice_id'}, status=400)
 
-    from .models import GroundInvoice
     try:
-        inv = GroundInvoice.objects.get(id=inv_id)
-        inv.is_paid = True
-        inv.save(update_fields=['is_paid'])
-        return JsonResponse({'success': True, 'invoice_id': str(inv.id)})
+        with transaction.atomic():
+            inv = GroundInvoice.objects.select_for_update().get(id=inv_id)
+            inv.is_paid = True
+            inv.settled_at = timezone.now()
+            inv.settled_by = request.user
+            inv.save(update_fields=['is_paid', 'settled_at', 'settled_by'])
+        return JsonResponse({
+            'success': True,
+            'invoice_id': str(inv.id),
+            'settled_at': timezone.localtime(inv.settled_at).isoformat() if inv.settled_at else None,
+        })
     except GroundInvoice.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Invoice not found'}, status=404)
 
@@ -1592,12 +1598,18 @@ def mark_invoice_unpaid(request):
     if not inv_id:
         return JsonResponse({'success': False, 'error': 'Missing invoice_id'}, status=400)
 
-    from .models import GroundInvoice
     try:
-        inv = GroundInvoice.objects.get(id=inv_id)
-        inv.is_paid = False
-        inv.save(update_fields=['is_paid'])
-        return JsonResponse({'success': True, 'invoice_id': str(inv.id)})
+        with transaction.atomic():
+            inv = GroundInvoice.objects.select_for_update().get(id=inv_id)
+            inv.is_paid = False
+            inv.settled_at = None
+            inv.settled_by = None
+            inv.save(update_fields=['is_paid', 'settled_at', 'settled_by'])
+        return JsonResponse({
+            'success': True,
+            'invoice_id': str(inv.id),
+            'settled_at': None,
+        })
     except GroundInvoice.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Invoice not found'}, status=404)
 
@@ -1774,11 +1786,11 @@ def stripe_webhook(request):
         session = event['data']['object']
         invoice_id = session.get('metadata', {}).get('invoice_id')
         if invoice_id:
-            from .models import GroundInvoice
             try:
                 inv = GroundInvoice.objects.get(id=invoice_id)
                 inv.is_paid = True
-                inv.save(update_fields=['is_paid'])
+                inv.settled_at = timezone.now()
+                inv.save(update_fields=['is_paid', 'settled_at'])
             except GroundInvoice.DoesNotExist:
                 pass
 
@@ -1900,18 +1912,15 @@ def admin_invoices(request):
         gstart = request.POST.get('period_start')
         gend = request.POST.get('period_end')
         try:
-            # parse posted start/end into date objects (accept ISO and common localized formats)
             def _parse_date(s):
                 from datetime import datetime
                 if not s:
                     return None
-                # Try ISO first
                 for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%b. %d, %Y', '%b %d, %Y', '%B %d, %Y'):
                     try:
                         return datetime.strptime(s, fmt).date()
                     except Exception:
                         continue
-                # Fallback: try to split and reconstruct if possible (e.g. 'Feb. 1, 2026')
                 try:
                     return datetime.strptime(s.replace('.', ''), '%b %d, %Y').date()
                 except Exception:
@@ -1921,27 +1930,89 @@ def admin_invoices(request):
             gstart_date = _parse_date(gstart) if gstart else start_date
             gend_date = _parse_date(gend) if gend else end_date
 
-            ground = Ground.objects.get(id=ground_id)
-            bookings_count = Booking.objects.filter(status='BOOKED', slot__ground=ground, slot__date__gte=gstart_date, slot__date__lte=gend_date).count()
-            charge_val = float(charge)
-            total = bookings_count * charge_val
+            if not ground_id:
+                messages.error(request, 'Please select a ground.')
+                return redirect('admin_invoices')
 
-            inv = GroundInvoice.objects.create(
-                ground=ground,
-                period_start=gstart_date,
-                period_end=gend_date,
-                bookings_count=bookings_count,
-                charge_per_booking=charge_val,
-                total_amount=total,
-                is_paid=False
-            )
-            messages.success(request, f'Invoice created for {ground.name}: {bookings_count} bookings, total {total}')
+            charge_val = Decimal(str(charge))
+            if charge_val <= 0:
+                raise InvalidOperation()
+
+            with transaction.atomic():
+                ground = Ground.objects.select_for_update().get(id=ground_id)
+                period_bookings = list(
+                    Booking.objects.select_for_update()
+                    .filter(
+                        status='BOOKED',
+                        slot__ground=ground,
+                        slot__date__gte=gstart_date,
+                        slot__date__lte=gend_date,
+                    )
+                    .select_related('slot')
+                    .order_by('slot__date', 'slot__start_time', 'id')
+                )
+                bookings_count = len(period_bookings)
+                if bookings_count == 0:
+                    messages.warning(request, f'No bookings found for {ground.name} in the selected period.')
+                    return redirect('admin_invoices')
+
+                total = (Decimal(bookings_count) * charge_val).quantize(Decimal('0.01'))
+                invoice = GroundInvoice.objects.select_for_update().filter(
+                    ground=ground,
+                    period_start=gstart_date,
+                    period_end=gend_date,
+                ).first()
+
+                if invoice and invoice.is_paid:
+                    messages.error(request, 'This settlement is already marked paid. Mark it unpaid before updating it.')
+                    return redirect('admin_invoices')
+
+                if invoice is None:
+                    invoice = GroundInvoice.objects.create(
+                        ground=ground,
+                        period_start=gstart_date,
+                        period_end=gend_date,
+                        bookings_count=bookings_count,
+                        charge_per_booking=charge_val,
+                        total_amount=total,
+                        is_paid=False,
+                    )
+                else:
+                    invoice.bookings_count = bookings_count
+                    invoice.charge_per_booking = charge_val
+                    invoice.total_amount = total
+                    invoice.is_paid = False
+                    invoice.settled_at = None
+                    invoice.settled_by = None
+                    invoice.save(update_fields=[
+                        'bookings_count',
+                        'charge_per_booking',
+                        'total_amount',
+                        'is_paid',
+                        'settled_at',
+                        'settled_by',
+                    ])
+                    invoice.line_items.all().delete()
+
+                InvoiceLineItem.objects.bulk_create([
+                    InvoiceLineItem(
+                        invoice=invoice,
+                        booking=booking,
+                        charge_amount=charge_val,
+                    )
+                    for booking in period_bookings
+                ])
+                Booking.objects.filter(id__in=[booking.id for booking in period_bookings]).update(invoiced_at=timezone.now())
+
+            messages.success(request, f'Settlement saved for {ground.name}: {bookings_count} bookings, total {total}.')
             return redirect('admin_invoices')
         except Ground.DoesNotExist:
             messages.error(request, 'Invalid ground selected.')
+        except (InvalidOperation, ValueError):
+            messages.error(request, 'Enter a valid positive charge per booking.')
 
     # Fetch existing invoices for display (last 50)
-    existing_invoices = GroundInvoice.objects.all()[:50]
+    existing_invoices = GroundInvoice.objects.select_related('ground', 'settled_by').all()[:50]
 
     rows = []
     for g in grounds:

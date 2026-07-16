@@ -348,6 +348,58 @@ h6,
   color: var(--text-main);
 }
 
+.release-notes-modal {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 251, 247, 0.98));
+  border: 1px solid rgba(21, 128, 61, 0.14);
+  overflow: hidden;
+}
+
+.release-notes-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(21, 128, 61, 0.12);
+  border: 1px solid rgba(21, 128, 61, 0.18);
+  color: #0f5132;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.release-notes-copy {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.release-notes-benefits {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.release-notes-benefit {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 0.9rem;
+  background: rgba(21, 128, 61, 0.05);
+  border: 1px solid rgba(21, 128, 61, 0.08);
+  font-weight: 600;
+}
+
+.release-notes-benefit i {
+  margin-top: 0.15rem;
+  color: #15803d;
+}
+
+.release-notes-cta {
+  min-width: 180px;
+}
+
 .card-loading {
   position: relative;
   overflow: hidden;

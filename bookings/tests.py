@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from django.test import TestCase
 from datetime import datetime, time, date
@@ -9,7 +10,7 @@ from accounts.models import User
 from grounds.models import Ground, Tournament, TournamentRegistration
 from django.utils import timezone
 
-from .models import Slot, Booking, OwnerExpense, BookingAttendance
+from .models import Slot, Booking, OwnerExpense, BookingAttendance, GroundInvoice, InvoiceLineItem
 from .slot_generation import create_initial_slots_for_ground, ensure_slots_for_ground_date
 from .views import _slot_price_for_slot
 
@@ -751,6 +752,131 @@ class OwnerExpenseTests(TestCase):
         response = self.client.post(f'/dashboard/owner/expenses/{expense.id}/delete/', {'next': '/dashboard/owner/'})
         self.assertEqual(response.status_code, 302)
         self.assertTrue(OwnerExpense.objects.filter(id=expense.id).exists())
+
+
+class AdminInvoiceTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email='admin@example.com',
+            phone_number='4444444444',
+            name='Admin',
+            password='password123',
+            role='admin',
+            email_verified=True,
+        )
+        self.owner = User.objects.create_user(
+            email='invoiceowner@example.com',
+            phone_number='4333333333',
+            name='Invoice Owner',
+            password='password123',
+            role='owner',
+            email_verified=True,
+        )
+        self.ground_one = Ground.objects.create(
+            name='Invoice Arena One',
+            location='City',
+            owner=self.owner,
+            day_price=500,
+            night_price=900,
+            opening_time=time(6, 0),
+            closing_time=time(23, 0),
+        )
+        self.ground_two = Ground.objects.create(
+            name='Invoice Arena Two',
+            location='City',
+            owner=self.owner,
+            day_price=600,
+            night_price=1000,
+            opening_time=time(6, 0),
+            closing_time=time(23, 0),
+        )
+        self.settlement_date = timezone.localdate() + timedelta(days=1)
+        self.slot_one = Slot.objects.create(
+            ground=self.ground_one,
+            date=self.settlement_date,
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            is_booked=True,
+        )
+        self.slot_two = Slot.objects.create(
+            ground=self.ground_two,
+            date=self.settlement_date,
+            start_time=time(11, 0),
+            end_time=time(12, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=self.slot_one,
+            customer_name='Ground One User',
+            customer_phone='9000000001',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='MANUAL',
+            payment_mode='FULL',
+            payment_status='PENDING',
+            paid_amount=0,
+            due_amount=500,
+        )
+        Booking.objects.create(
+            slot=self.slot_two,
+            customer_name='Ground Two User',
+            customer_phone='9000000002',
+            total_amount=600,
+            owner_payout=600,
+            booking_source='MANUAL',
+            payment_mode='FULL',
+            payment_status='PENDING',
+            paid_amount=0,
+            due_amount=600,
+        )
+
+    def test_admin_creates_settlement_per_ground_with_line_items(self):
+        self.client.force_login(self.admin)
+        response = self.client.post('/dashboard/admin/invoices/', {
+            'ground_id': str(self.ground_one.id),
+            'charge_per_booking': '125.50',
+            'period_start': self.settlement_date.strftime('%Y-%m-%d'),
+            'period_end': self.settlement_date.strftime('%Y-%m-%d'),
+        })
+        self.assertEqual(response.status_code, 302)
+
+        invoice = GroundInvoice.objects.get(ground=self.ground_one)
+        self.assertEqual(invoice.bookings_count, 1)
+        self.assertEqual(invoice.charge_per_booking, Decimal('125.50'))
+        self.assertEqual(invoice.total_amount, Decimal('125.50'))
+        self.assertFalse(invoice.is_paid)
+        self.assertIsNone(invoice.settled_at)
+        self.assertEqual(InvoiceLineItem.objects.filter(invoice=invoice).count(), 1)
+        self.assertIsNotNone(Booking.objects.get(slot=self.slot_one).invoiced_at)
+        self.assertFalse(GroundInvoice.objects.filter(ground=self.ground_two).exists())
+
+    def test_admin_mark_paid_and_unpaid_updates_settlement_metadata(self):
+        invoice = GroundInvoice.objects.create(
+            ground=self.ground_one,
+            period_start=self.settlement_date,
+            period_end=self.settlement_date,
+            bookings_count=1,
+            charge_per_booking=100,
+            total_amount=100,
+            is_paid=False,
+        )
+
+        self.client.force_login(self.admin)
+        paid_response = self.client.post('/dashboard/admin/invoices/mark-paid/', {'invoice_id': str(invoice.id)})
+        self.assertEqual(paid_response.status_code, 200)
+
+        invoice.refresh_from_db()
+        self.assertTrue(invoice.is_paid)
+        self.assertIsNotNone(invoice.settled_at)
+        self.assertEqual(invoice.settled_by, self.admin)
+
+        unpaid_response = self.client.post('/dashboard/admin/invoices/mark-unpaid/', {'invoice_id': str(invoice.id)})
+        self.assertEqual(unpaid_response.status_code, 200)
+
+        invoice.refresh_from_db()
+        self.assertFalse(invoice.is_paid)
+        self.assertIsNone(invoice.settled_at)
+        self.assertIsNone(invoice.settled_by)
 
 
 class BookingFraudDetectionTests(TestCase):
