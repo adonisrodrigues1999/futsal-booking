@@ -1,0 +1,135 @@
+{% load custom_filters %}
+<div id="owner-section-bookings" class="mb-4">
+  <div class="card p-3 shadow-sm">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+      <h6 class="mb-0">{{ bookings_title }}</h6>
+      <form class="d-flex align-items-center gap-2 booking-date-form">
+        {% csrf_token %}
+        <label class="small text-muted mb-0" for="owner-booking-date">Date</label>
+        <input id="owner-booking-date" type="date" name="date" class="form-control form-control-sm" value="{{ selected_date|date:'Y-m-d' }}">
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Go</button>
+      </form>
+    </div>
+
+    {% if filtered_bookings %}
+      <div class="booking-accordion" data-booking-accordion>
+        {% for booking in filtered_bookings %}
+          <div class="booking-accordion-item">
+            <div class="booking-accordion-header" role="button" aria-expanded="false" data-booking-header="{{ booking.id }}">
+              <div class="booking-compact">
+                <span class="fw-semibold small">{{ booking.customer_name }}</span>
+                <span class="text-muted small">{{ booking.slot.ground.name }}</span>
+                <span class="text-muted small">{{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</span>
+                <span>
+                  {% if booking.payment_status == 'PAID' %}
+                    <span class="badge text-bg-success">Paid</span>
+                  {% elif booking.payment_status == 'PAID_AT_GROUND' %}
+                    <span class="badge text-bg-info">Paid (Ground)</span>
+                  {% elif booking.payment_status == 'PARTIALLY_PAID' %}
+                    <span class="badge text-bg-warning">Partial</span>
+                  {% elif booking.payment_status == 'PENDING' %}
+                    <span class="badge text-bg-secondary">Pending</span>
+                  {% else %}
+                    <span class="badge text-bg-danger">Failed</span>
+                  {% endif %}
+                </span>
+              </div>
+              <span class="booking-expand-arrow">
+                <i class="fas fa-chevron-down" aria-hidden="true"></i>
+              </span>
+            </div>
+            <div class="booking-accordion-body" data-booking-body="{{ booking.id }}">
+              <div class="booking-accordion-body-inner">
+                <div class="row g-2">
+                  <div class="col-md-6">
+                    <div class="small"><span class="text-muted">Customer:</span> <strong>{{ booking.customer_name }}</strong></div>
+                    <div class="small"><span class="text-muted">Phone:</span> {{ booking.customer_phone }}</div>
+                    <div class="small"><span class="text-muted">Ground:</span> {{ booking.slot.ground.name }}</div>
+                    <div class="small"><span class="text-muted">Slot:</span> {{ booking.slot.date|format_date_with_day }} • {{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="small">
+                      Payment:
+                      {% if booking.payment_status == 'PAID' %}
+                        <span class="badge text-bg-success">Paid</span>
+                      {% elif booking.payment_status == 'PAID_AT_GROUND' %}
+                        <span class="badge text-bg-info">Paid at Ground</span>
+                      {% elif booking.payment_status == 'PARTIALLY_PAID' %}
+                        <span class="badge text-bg-warning">Partially Paid</span>
+                      {% elif booking.payment_status == 'PENDING' %}
+                        <span class="badge text-bg-secondary">Pending</span>
+                      {% else %}
+                        <span class="badge text-bg-danger">Failed</span>
+                      {% endif %}
+                      • Mode: <strong>{{ booking.get_payment_mode_display }}</strong>
+                    </div>
+                    <div class="small">
+                      Source:
+                      {% if booking.booking_source == 'ONLINE' %}
+                        <span class="badge text-bg-primary">Online</span>
+                      {% else %}
+                        <span class="badge text-bg-secondary">Ground/Manual</span>
+                      {% endif %}
+                    </div>
+                    <div class="small text-muted">Paid: ₹{{ booking.paid_amount }} • Due: ₹{{ booking.due_amount }}</div>
+                    <div class="small text-muted">Amount: ₹{{ booking.total_amount }}</div>
+                    <div class="small text-muted">Payment Time: {% if booking.payment_paid_at %}{{ booking.payment_paid_at|date:"M j, Y g:i A" }}{% else %}-{% endif %}</div>
+                    <div class="small mt-1">
+                      Attendance:
+                      {% if booking.attendance_status == 'SHOWED_UP' %}
+                        <span class="badge text-bg-success">Showed Up</span>
+                      {% elif booking.attendance_status == 'NO_SHOW' %}
+                        <span class="badge text-bg-danger">No Show</span>
+                      {% else %}
+                        <span class="badge text-bg-secondary">Unmarked</span>
+                      {% endif %}
+                    </div>
+                    {% if booking.no_show_risk %}
+                      <div class="small mt-1">
+                        <span class="badge text-bg-warning">Call & Confirm</span>
+                        <span class="text-muted">History: {{ booking.no_show_history_count }} no-show{{ booking.no_show_history_count|pluralize }}</span>
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="d-flex flex-wrap gap-2 mt-3 pt-2 border-top dashboard-actions">
+                  {% if booking.can_mark_attendance %}
+                    <form method="post" action="{% url 'owner_mark_attendance' booking.id %}" class="d-inline ajax-form">
+                      {% csrf_token %}
+                      <input type="hidden" name="status" value="SHOWED_UP">
+                      <button type="submit" class="btn btn-sm btn-outline-success">Showed Up</button>
+                    </form>
+                    <form method="post" action="{% url 'owner_mark_attendance' booking.id %}" class="d-inline ajax-form">
+                      {% csrf_token %}
+                      <input type="hidden" name="status" value="NO_SHOW">
+                      <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm-message="Mark this booking as no-show?">No Show</button>
+                    </form>
+                  {% endif %}
+                  {% if booking.can_owner_reschedule %}
+                    <a href="{% url 'owner_reschedule_booking' booking.id %}" class="btn btn-sm btn-outline-primary">Emergency Reschedule</a>
+                  {% endif %}
+                  {% if booking.can_mark_paid_at_ground %}
+                    <form method="post" action="{% url 'owner_mark_paid_at_ground' booking.id %}" class="d-inline ajax-form">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-outline-success">Mark Paid At Ground</button>
+                    </form>
+                  {% endif %}
+                  {% if booking.can_owner_cancel %}
+                    <form method="post" action="{% url 'owner_cancel_booking' booking.id %}" class="d-inline ajax-form">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm-message="Delete this booking?">Delete</button>
+                    </form>
+                  {% else %}
+                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled>Past booking</button>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="p-3 text-center text-muted">No bookings found.</div>
+    {% endif %}
+  </div>
+</div>

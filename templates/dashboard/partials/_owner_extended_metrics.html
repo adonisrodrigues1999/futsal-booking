@@ -1,0 +1,80 @@
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-md-3">
+    <div class="card p-3 shadow-sm h-100">
+      <div class="small text-muted">Peak hour</div>
+      <div class="h5 mb-0">{{ stats.peak_hour }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="card p-3 shadow-sm h-100">
+      <div class="small text-muted">Gross Booking Value</div>
+      <div class="h5 mb-0">₹{{ stats.gross_revenue }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="card p-3 shadow-sm h-100">
+      <div class="small text-muted">Collected Amount</div>
+      <div class="h5 mb-0 text-success">₹{{ stats.collected_amount }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="card p-3 shadow-sm h-100">
+      <div class="small text-muted">Pending Amount</div>
+      <div class="h5 mb-0 text-warning">₹{{ stats.pending_amount }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-md-3">
+    <div class="card p-3 shadow-sm h-100">
+      <div class="small text-muted">Source Split (Count)</div>
+      <div class="small">Online bookings: <strong>{{ stats.online_bookings }}</strong></div>
+      <div class="small">Ground/manual: <strong>{{ stats.manual_bookings }}</strong></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="card p-3 shadow-sm h-100 border-start border-4 border-primary">
+      <div class="small text-muted mb-1">Online Money ({{ report_label }})</div>
+      <div class="small">Collected: <strong class="text-success">₹{{ stats.period_online_collection }}</strong></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="card p-3 shadow-sm h-100 border-start border-4 border-success">
+      <div class="small text-muted mb-1">Ground Money ({{ report_label }})</div>
+      <div class="small">Collected: <strong class="text-success">₹{{ stats.period_ground_collected }}</strong></div>
+      <div class="small">Pending: <strong class="text-warning">₹{{ stats.period_ground_pending }}</strong></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="card p-3 shadow-sm h-100">
+      <div class="small text-muted">Income ({{ report_label }})</div>
+      <div class="h5 mb-0 text-success">₹{{ stats.period_income|floatformat:2 }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-md-3">
+    <div class="card p-3 shadow-sm h-100">
+      <div class="small text-muted">Expenses ({{ report_label }})</div>
+      <div class="h5 mb-0 text-danger">₹{{ stats.period_expense|floatformat:2 }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="card p-3 shadow-sm h-100">
+      <div class="small text-muted">Net Result</div>
+      <div class="h5 mb-0 {% if stats.period_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+        ₹{{ stats.period_profit|floatformat:2 }}
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="card p-3 shadow-sm h-100">
+      <div class="small text-muted">Profit Margin</div>
+      <div class="h5 mb-0 {% if stats.period_margin >= 0 %}text-success{% else %}text-danger{% endif %}">
+        {{ stats.period_margin|floatformat:1 }}%
+      </div>
+    </div>
+  </div>
+</div>

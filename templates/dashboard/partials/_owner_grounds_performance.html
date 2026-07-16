@@ -1,0 +1,130 @@
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card p-3 shadow-sm mb-3">
+      <h6 class="mb-3">Top Grounds by Revenue</h6>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Ground</th>
+              <th>Bookings</th>
+              <th>Owner Revenue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in ground_performance %}
+              <tr>
+                <td>{{ row.slot__ground__name }}</td>
+                <td>{{ row.bookings_count }}</td>
+                <td>₹{{ row.revenue }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="3" class="text-muted text-center">No data available</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card p-3 shadow-sm">
+      <h6 class="mb-3">Expense Categories ({{ report_label }})</h6>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in expense_by_category %}
+              <tr>
+                <td>{{ row.label }}</td>
+                <td>₹{{ row.total|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="2" class="text-muted text-center">No expenses in selected period.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card p-3 shadow-sm mb-3">
+      <h6 class="mb-3">Add Expense</h6>
+      <form method="post" action="{% url 'owner_add_expense' %}" class="ajax-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label mb-1">Title</label>
+            <input type="text" name="title" class="form-control" maxlength="120" placeholder="Eg. Turf light repair" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label mb-1">Category</label>
+            <select name="category" class="form-select" required>
+              {% for key, val in expense_categories %}
+                <option value="{{ key }}">{{ val }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label mb-1">Amount (₹)</label>
+            <input type="number" name="amount" class="form-control" step="0.01" min="0.01" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label mb-1">Ground</label>
+            <select name="ground_id" class="form-select">
+              <option value="">All / shared</option>
+              {% for g in owner_grounds %}
+                <option value="{{ g.id }}">{{ g.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label mb-1">Spent On</label>
+            <input type="date" name="spent_on" class="form-control" value="{% now 'Y-m-d' %}">
+          </div>
+          <div class="col-12">
+            <label class="form-label mb-1">Note</label>
+            <textarea name="note" class="form-control" rows="2" placeholder="Optional details..."></textarea>
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-primary w-100">Save Expense</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="card p-3 shadow-sm">
+      <h6 class="mb-3">Recent Expense Entries</h6>
+      <div id="recent-expenses-list" class="list-group list-group-flush">
+        {% for exp in recent_expenses %}
+          <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-start gap-2">
+            <div>
+              <div class="fw-semibold">{{ exp.title }}</div>
+              <div class="small text-muted">{{ exp.spent_on }} • {{ exp.get_category_display }}{% if exp.ground %} • {{ exp.ground.name }}{% endif %}</div>
+              {% if exp.note %}<div class="small text-muted">{{ exp.note|truncatechars:70 }}</div>{% endif %}
+            </div>
+            <div class="text-end">
+              <div class="fw-semibold text-danger">₹{{ exp.amount|floatformat:2 }}</div>
+              <form method="post" action="{% url 'owner_delete_expense' exp.id %}" class="ajax-form">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger mt-1" data-confirm-message="Delete this expense entry?">Delete</button>
+              </form>
+            </div>
+          </div>
+        {% empty %}
+          <div class="text-muted text-center py-2">No expenses added yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
