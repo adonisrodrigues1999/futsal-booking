@@ -89,7 +89,7 @@
         {% csrf_token %}
 
         <input type="hidden" name="next" value="{{ next|default:'' }}">
-        <input type="hidden" name="slot" value="{{ slot|default:'' }}">
+          <input type="hidden" name="slot" id="booking-slot-id" value="{{ slot|default:'' }}">
 
         <div class="mb-3">
           <label for="{{ form.email.id_for_label }}" class="form-label">Email Address</label>
@@ -327,21 +327,41 @@
         const slotsContainer = document.createElement('div');
         slotsContainer.className = 'row g-1';
 
-        // Show all slots — make them clickable to login and then redirect to booking
-        const loginBaseUrl = "{% url 'login' %}";
+        // Show all slots — clicking a slot highlights the login section and sets the slot ID
+        const loginSection = document.getElementById('login-section');
+        const slotInput = document.getElementById('booking-slot-id');
         groundSlots.forEach(slot => {
           const slotTime = slot.time || '─';
           const slotDiv = document.createElement('div');
           slotDiv.className = 'col-4 col-sm-3 col-md-2';
-          const loginUrl = loginBaseUrl + '?slot=' + slot.slot_id;
           slotDiv.innerHTML = `
-            <a href="${loginUrl}" class="text-decoration-none">
-              <div class="badge bg-success p-2 d-block text-center w-100 slot-badge-clickable">
-                <div class="small">${slotTime}</div>
-                <div class="small fw-semibold">₹${slot.price}</div>
-              </div>
-            </a>
+            <button type="button" class="btn btn-sm bg-success text-white p-2 d-block text-center w-100 slot-badge-clickable border-0" data-slot-id="${slot.slot_id}">
+              <div class="small">${slotTime}</div>
+              <div class="small fw-semibold">₹${slot.price}</div>
+            </button>
           `;
+          // Attach click handler to scroll to login section and set slot ID
+          const badge = slotDiv.querySelector('button');
+          badge.addEventListener('click', function(e) {
+            if (slotInput) {
+              slotInput.value = this.getAttribute('data-slot-id');
+            }
+            // Scroll the login section into view with smooth animation
+            if (loginSection) {
+              loginSection.classList.remove('login-highlight');
+              // Force reflow then add class to restart animation
+              void loginSection.offsetWidth;
+              loginSection.classList.add('login-highlight');
+              loginSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            // Focus the email field for immediate use
+            var loginEmailInput = document.getElementById('{{ form.email.auto_id }}');
+            if (loginEmailInput) {
+              setTimeout(function() {
+                loginEmailInput.focus();
+              }, 600);
+            }
+          });
           slotsContainer.appendChild(slotDiv);
         });
 

@@ -14,6 +14,19 @@
   --highlight: #f6a800;
   --danger: #e04545;
   --shadow: 0 18px 40px rgba(12, 28, 18, 0.12);
+  /* Message colors - subtle */
+  --msg-info: #e8f4fd;
+  --msg-info-border: #b6d4fe;
+  --msg-info-text: #0c4a6e;
+  --msg-success: #e6f7ec;
+  --msg-success-border: #b8e6cc;
+  --msg-success-text: #166534;
+  --msg-warning: #fef8e6;
+  --msg-warning-border: #fdebba;
+  --msg-warning-text: #8a6200;
+  --msg-error: #fdeeef;
+  --msg-error-border: #f5c6cb;
+  --msg-error-text: #8a2020;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -620,6 +633,195 @@ h6,
   transition: width 0.2s ease;
 }
 
+/* ===== Subtle Message Styles ===== */
+.msg-subtle {
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.92rem;
+  border: 1px solid;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  animation: msg-slide 0.3s ease both;
+}
+
+.msg-subtle .msg-icon {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.1rem;
+}
+
+.msg-subtle .msg-body {
+  flex: 1;
+}
+
+.msg-subtle .msg-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0.5;
+  padding: 0.1rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: inherit;
+}
+
+.msg-subtle .msg-close:hover {
+  opacity: 0.9;
+}
+
+.msg-subtle-info {
+  background: var(--msg-info);
+  border-color: var(--msg-info-border);
+  color: var(--msg-info-text);
+}
+
+.msg-subtle-success {
+  background: var(--msg-success);
+  border-color: var(--msg-success-border);
+  color: var(--msg-success-text);
+}
+
+.msg-subtle-warning {
+  background: var(--msg-warning);
+  border-color: var(--msg-warning-border);
+  color: var(--msg-warning-text);
+}
+
+.msg-subtle-error {
+  background: var(--msg-error);
+  border-color: var(--msg-error-border);
+  color: var(--msg-error-text);
+}
+
+@keyframes msg-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== Owner Dashboard Accordion ===== */
+.owner-section-toggle {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.75rem;
+  background: rgba(247, 251, 248, 0.8);
+  border: 1px solid rgba(25, 195, 125, 0.15);
+  transition: background 0.2s ease;
+}
+
+.owner-section-toggle:hover {
+  background: rgba(247, 251, 248, 1);
+  border-color: rgba(25, 195, 125, 0.3);
+}
+
+.owner-section-toggle .toggle-arrow {
+  transition: transform 0.25s ease;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+
+.owner-section-toggle.collapsed .toggle-arrow {
+  transform: rotate(-90deg);
+}
+
+.owner-section-body {
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.25s ease, margin 0.25s ease;
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
+}
+
+.owner-section-body.open {
+  max-height: 5000px;
+  opacity: 1;
+  margin-top: 0.5rem;
+}
+
+/* ===== Booking Accordion (today's bookings) ===== */
+.booking-accordion-item {
+  border: 1px solid rgba(18, 37, 28, 0.08);
+  border-radius: 0.6rem;
+  margin-bottom: 0.35rem;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+.booking-accordion-item:hover {
+  box-shadow: 0 2px 8px rgba(12, 28, 18, 0.08);
+}
+
+.booking-accordion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem;
+  cursor: pointer;
+  user-select: none;
+  gap: 0.5rem;
+  background: #ffffff;
+  transition: background 0.15s ease;
+}
+
+.booking-accordion-header:hover {
+  background: rgba(247, 251, 248, 0.7);
+}
+
+.booking-accordion-header .booking-compact {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.booking-accordion-header .booking-expand-arrow {
+  flex-shrink: 0;
+  transition: transform 0.25s ease;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(18, 37, 28, 0.06);
+}
+
+.booking-accordion-header[aria-expanded="true"] .booking-expand-arrow {
+  transform: rotate(180deg);
+}
+
+.booking-accordion-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  background: rgba(247, 251, 248, 0.4);
+}
+
+.booking-accordion-body.open {
+  max-height: 2000px;
+}
+
+.booking-accordion-body-inner {
+  padding: 0.65rem 0.75rem;
+  border-top: 1px solid rgba(18, 37, 28, 0.06);
+}
+
 /* Clickable slot badges on login page */
 .slot-badge-clickable {
   cursor: pointer;
@@ -628,6 +830,23 @@ h6,
 .slot-badge-clickable:hover {
   transform: scale(1.05);
   box-shadow: 0 4px 12px rgba(25, 195, 125, 0.35);
+}
+
+/* Login section highlight animation when slot is selected */
+#login-section.login-highlight {
+  animation: login-highlight-pulse 0.8s ease-in-out 3;
+  border-radius: 0.75rem;
+}
+
+@keyframes login-highlight-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(25, 195, 125, 0);
+    background-color: transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(25, 195, 125, 0.25), 0 0 20px rgba(25, 195, 125, 0.15);
+    background-color: rgba(25, 195, 125, 0.06);
+  }
 }
 
 .slots-grid {

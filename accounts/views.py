@@ -75,20 +75,42 @@ def register(request):
         return redirect('home')
 
     if request.method == 'POST':
+        # Normalise raw values before form validation so we catch duplicates early.
+        raw_email = (request.POST.get('email') or '').strip().lower()
+        raw_phone = (request.POST.get('phone_number') or '').strip()
+        if raw_phone.startswith('+91'):
+            raw_phone = raw_phone[3:]
+        elif raw_phone.startswith('91') and len(raw_phone) > 10:
+            raw_phone = raw_phone[2:]
+
+        if raw_email:
+            existing = User.objects.filter(email__iexact=raw_email).first()
+            if existing:
+                if existing.email_verified:
+                    messages.info(
+                        request,
+                        'An account with this email already exists and is verified. Please login instead.'
+                    )
+                else:
+                    messages.info(
+                        request,
+                        'An account with this email already exists but is not yet verified. '
+                        'Please check your inbox for the verification link or login to resend it.'
+                    )
+                return redirect(f"{reverse('login')}?identifier={raw_email}")
+
+        if raw_phone:
+            if User.objects.filter(phone_number=raw_phone).exists():
+                messages.info(
+                    request,
+                    'An account with this phone number already exists. Please login instead.'
+                )
+                return redirect(f"{reverse('login')}?identifier={raw_phone}")
+
         form = UserRegistrationForm(request.POST)
         if form.is_valid():
             email = form.cleaned_data.get('email')
             phone = form.cleaned_data.get('phone_number')
-
-            # Check if email already exists
-            if User.objects.filter(email__iexact=email).exists():
-                messages.info(request, 'An account with this email already exists. Please login instead.')
-                return redirect(f"{reverse('login')}?identifier={email}")
-
-            # Check if phone already exists
-            if User.objects.filter(phone_number=phone).exists():
-                messages.info(request, 'An account with this phone number already exists. Please login instead.')
-                return redirect(f"{reverse('login')}?identifier={phone}")
 
             user = form.save(commit=False)
             user.email_verified = False

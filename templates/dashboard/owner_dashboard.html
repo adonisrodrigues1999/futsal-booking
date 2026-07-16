@@ -14,12 +14,10 @@
     </div>
   </div>
 
-
-  <div id="owner-section-overview">
-
-  <div class="row g-3 mb-4">
-    <div class="col-sm-6 col-md-3">
-      <div class="card p-3 shadow-sm metric-card">
+  <!-- ===== ALWAYS VISIBLE: Core Metrics ===== -->
+  <div class="row g-3 mb-4" id="owner-core-metrics">
+    <div class="col-sm-6 col-md-4">
+      <div class="card p-3 shadow-sm metric-card h-100">
         <div class="d-flex align-items-center justify-content-between">
           <div>
             <div class="small text-muted">Total bookings</div>
@@ -35,8 +33,8 @@
       </div>
     </div>
 
-    <div class="col-sm-6 col-md-3">
-      <div class="card p-3 shadow-sm metric-card">
+    <div class="col-sm-6 col-md-4">
+      <div class="card p-3 shadow-sm metric-card h-100">
         <div class="d-flex align-items-center justify-content-between">
           <div>
             <div class="small text-muted">Owner Revenue</div>
@@ -52,25 +50,8 @@
       </div>
     </div>
 
-    <div class="col-sm-6 col-md-3">
-      <div class="card p-3 shadow-sm metric-card">
-        <div class="d-flex align-items-center justify-content-between">
-          <div>
-            <div class="small text-muted">Peak hour</div>
-            <div class="h3 mb-0">{{ stats.peak_hour }}</div>
-          </div>
-          <div class="ms-3 metric-icon">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="8" stroke="#f59e0b" stroke-width="1.5"/>
-              <path d="M12 8v5l3 2" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-sm-6 col-md-3">
-      <div class="card p-3 shadow-sm metric-card">
+    <div class="col-sm-6 col-md-4">
+      <div class="card p-3 shadow-sm metric-card h-100">
         <div class="d-flex align-items-center justify-content-between">
           <div>
             <div class="small text-muted">Active grounds</div>
@@ -88,251 +69,144 @@
     </div>
   </div>
 
-  <div class="card mb-4">
-    <div class="card-body">
-      <div class="d-flex align-items-center justify-content-between mb-3">
-        <h5 class="mb-0">Ground Availability</h5>
-        <span class="small text-muted">Pause or resume bookings per ground</span>
+  <!-- ===== TODAY'S BOOKINGS (Accordion) ===== -->
+  <div id="owner-section-bookings" class="mb-4">
+    <div class="card p-3 shadow-sm">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <h6 class="mb-0">{{ bookings_title }}</h6>
+        <form method="get" class="d-flex align-items-center gap-2">
+          <label class="small text-muted mb-0" for="owner-booking-date">Date</label>
+          <input id="owner-booking-date" type="date" name="date" class="form-control form-control-sm" value="{{ selected_date|date:'Y-m-d' }}">
+          <button type="submit" class="btn btn-sm btn-outline-secondary">Go</button>
+        </form>
       </div>
-      <div class="row g-3">
-        {% for ground in owner_ground_objects %}
-          <div class="col-md-6 col-lg-4">
-            <div class="border rounded p-3 h-100 d-flex flex-column justify-content-between">
-              <div>
-                <div class="fw-semibold">{{ ground.name }}</div>
-                <div class="small text-muted">{{ ground.location }}</div>
-                {% if ground.is_active %}
-                  <span class="badge bg-success mt-2">Available</span>
-                {% else %}
-                  <span class="badge bg-danger mt-2">Temporarily unavailable</span>
-                {% endif %}
-              </div>
-              <form method="post" action="{% url 'toggle_ground_availability' ground.id %}" class="mt-3">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="{% url 'owner_dashboard' %}">
-                <button type="submit" class="btn btn-sm {% if ground.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
-                  {% if ground.is_active %}Make Unavailable{% else %}Make Available{% endif %}
-                </button>
-              </form>
-            </div>
-          </div>
-        {% empty %}
-          <div class="col-12 text-muted">No grounds available.</div>
-        {% endfor %}
-      </div>
-    </div>
-  </div>
 
-  <div class="row g-3 mb-4">
-    <div class="col-md-3">
-      <div class="card p-3 shadow-sm h-100">
-        <div class="small text-muted">Gross Booking Value</div>
-        <div class="h5 mb-0">₹{{ stats.gross_revenue }}</div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card p-3 shadow-sm h-100">
-        <div class="small text-muted">Collected Amount</div>
-        <div class="h5 mb-0 text-success">₹{{ stats.collected_amount }}</div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card p-3 shadow-sm h-100">
-        <div class="small text-muted">Pending Amount</div>
-        <div class="h5 mb-0 text-warning">₹{{ stats.pending_amount }}</div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card p-3 shadow-sm h-100">
-        <div class="small text-muted">Source Split (Count)</div>
-        <div class="small">Online bookings: <strong>{{ stats.online_bookings }}</strong></div>
-        <div class="small">Ground/manual bookings: <strong>{{ stats.manual_bookings }}</strong></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="row g-3 mb-4">
-    <div class="col-md-6">
-      <div class="card p-3 shadow-sm h-100 border-start border-4 border-primary">
-        <div class="small text-muted mb-1">Online Money ({{ report_label }})</div>
-        <div class="small">Collected online: <strong class="text-success">₹{{ stats.period_online_collection }}</strong></div>
-      </div>
-    </div>
-    <div class="col-md-6">
-      <div class="card p-3 shadow-sm h-100 border-start border-4 border-success">
-        <div class="small text-muted mb-1">Ground Money ({{ report_label }})</div>
-        <div class="small">Collected at ground: <strong class="text-success">₹{{ stats.period_ground_collected }}</strong></div>
-        <div class="small">Pending at ground: <strong class="text-warning">₹{{ stats.period_ground_pending }}</strong></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="row g-3 mb-4">
-    <div class="col-md-3">
-      <div class="card p-3 shadow-sm h-100">
-        <div class="small text-muted">Income ({{ report_label }})</div>
-        <div class="h5 mb-0 text-success">₹{{ stats.period_income|floatformat:2 }}</div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card p-3 shadow-sm h-100">
-        <div class="small text-muted">Expenses ({{ report_label }})</div>
-        <div class="h5 mb-0 text-danger">₹{{ stats.period_expense|floatformat:2 }}</div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card p-3 shadow-sm h-100">
-        <div class="small text-muted">Net Result</div>
-        <div class="h5 mb-0 {% if stats.period_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
-          ₹{{ stats.period_profit|floatformat:2 }}
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card p-3 shadow-sm h-100">
-        <div class="small text-muted">Profit Margin</div>
-        <div class="h5 mb-0 {% if stats.period_margin >= 0 %}text-success{% else %}text-danger{% endif %}">
-          {{ stats.period_margin|floatformat:1 }}%
-        </div>
-      </div>
-    </div>
-  </div>
-  </div>
-
-  <div id="owner-section-bookings">
-  <div class="row g-4">
-    <div class="col-12">
-      <div class="card p-3 shadow-sm">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-          <h6 class="mb-0">{{ bookings_title }}</h6>
-          <form method="get" class="d-flex align-items-center gap-2">
-            <label class="small text-muted mb-0" for="owner-booking-date">Date</label>
-            <input id="owner-booking-date" type="date" name="date" class="form-control form-control-sm" value="{{ selected_date|date:'Y-m-d' }}">
-            <button type="submit" class="btn btn-sm btn-outline-secondary">Go</button>
-          </form>
-        </div>
-        <div class="list-group list-group-flush">
+      {% if filtered_bookings %}
+        <div class="booking-accordion" data-booking-accordion>
           {% for booking in filtered_bookings %}
-            <div class="list-group-item d-flex justify-content-between align-items-start gap-3">
-              <div>
-                <div class="fw-semibold">{{ booking.slot.ground.name }}</div>
-                <div class="small text-muted">{{ booking.slot.date|format_date_with_day }} • {{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</div>
-                <div class="small mt-1">Customer: <strong>{{ booking.customer_name }}</strong> • {{ booking.customer_phone }}</div>
-                <div class="small mt-1">
-                  Payment Status:
-                  {% if booking.payment_status == 'PAID' %}
-                    <span class="badge text-bg-success">Paid</span>
-                  {% elif booking.payment_status == 'PAID_AT_GROUND' %}
-                    <span class="badge text-bg-info">Paid at Ground</span>
-                  {% elif booking.payment_status == 'PARTIALLY_PAID' %}
-                    <span class="badge text-bg-warning">Partially Paid</span>
-                  {% elif booking.payment_status == 'PENDING' %}
-                    <span class="badge text-bg-secondary">Pending</span>
-                  {% else %}
-                    <span class="badge text-bg-danger">Failed</span>
-                  {% endif %}
-                  • Mode: <strong>{{ booking.get_payment_mode_display }}</strong>
+            <div class="booking-accordion-item">
+              <div class="booking-accordion-header" role="button" aria-expanded="false" data-booking-header="{{ booking.id }}">
+                <div class="booking-compact">
+                  <span class="fw-semibold small">{{ booking.customer_name }}</span>
+                  <span class="text-muted small">{{ booking.slot.ground.name }}</span>
+                  <span class="text-muted small">{{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</span>
+                  <span>
+                    {% if booking.payment_status == 'PAID' %}
+                      <span class="badge text-bg-success">Paid</span>
+                    {% elif booking.payment_status == 'PAID_AT_GROUND' %}
+                      <span class="badge text-bg-info">Paid (Ground)</span>
+                    {% elif booking.payment_status == 'PARTIALLY_PAID' %}
+                      <span class="badge text-bg-warning">Partial</span>
+                    {% elif booking.payment_status == 'PENDING' %}
+                      <span class="badge text-bg-secondary">Pending</span>
+                    {% else %}
+                      <span class="badge text-bg-danger">Failed</span>
+                    {% endif %}
+                  </span>
                 </div>
-                <div class="small mt-1">
-                  Source:
-                  {% if booking.booking_source == 'ONLINE' %}
-                    <span class="badge text-bg-primary">Online</span>
-                  {% else %}
-                    <span class="badge text-bg-secondary">Ground/Manual</span>
-                  {% endif %}
-                </div>
-                <div class="small text-muted">Paid: ₹{{ booking.paid_amount }} • Due: ₹{{ booking.due_amount }}</div>
-                <div class="small text-muted">Payment Time: {% if booking.payment_paid_at %}{{ booking.payment_paid_at|date:"M j, Y g:i A" }}{% else %}-{% endif %}</div>
-                <div class="small mt-1">
-                  Attendance:
-                  {% if booking.attendance_status == 'SHOWED_UP' %}
-                    <span class="badge text-bg-success">Showed Up</span>
-                  {% elif booking.attendance_status == 'NO_SHOW' %}
-                    <span class="badge text-bg-danger">No Show</span>
-                  {% else %}
-                    <span class="badge text-bg-secondary">Unmarked</span>
-                  {% endif %}
-                  {% if booking.no_show_risk %}
-                    <span class="badge text-bg-warning">Call & Confirm</span>
-                    <span class="text-muted">History: {{ booking.no_show_history_count }} no-show{{ booking.no_show_history_count|pluralize }}</span>
-                  {% endif %}
-                </div>
+                <span class="booking-expand-arrow">
+                  <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                </span>
               </div>
-              <div class="text-end">
-                <div class="small text-muted">₹{{ booking.total_amount }}</div>
-                <div class="d-flex flex-column align-items-end gap-2 mt-2">
-                  {% if booking.can_mark_attendance %}
-                    <form method="post" action="{% url 'owner_mark_attendance' booking.id %}">
-                      {% csrf_token %}
-                      <input type="hidden" name="status" value="SHOWED_UP">
-                      <button type="submit" class="btn btn-sm btn-outline-success">Showed Up</button>
-                    </form>
-                    <form method="post" action="{% url 'owner_mark_attendance' booking.id %}">
-                      {% csrf_token %}
-                      <input type="hidden" name="status" value="NO_SHOW">
-                      <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm-message="Mark this booking as no-show?">No Show</button>
-                    </form>
-                  {% endif %}
-                  {% if booking.can_owner_reschedule %}
-                    <a href="{% url 'owner_reschedule_booking' booking.id %}" class="btn btn-sm btn-outline-primary">Emergency Reschedule</a>
-                  {% endif %}
-                  {% if booking.can_mark_paid_at_ground %}
-                    <form method="post" action="{% url 'owner_mark_paid_at_ground' booking.id %}">
-                      {% csrf_token %}
-                      <button type="submit" class="btn btn-sm btn-outline-success">Mark Paid At Ground</button>
-                    </form>
-                  {% endif %}
-                  {% if booking.can_owner_cancel %}
-                    <a href="{% url 'owner_cancel_booking' booking.id %}" class="btn btn-sm btn-outline-danger" data-confirm-message="Delete this booking?">Delete</a>
-                  {% else %}
-                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled>Past booking</button>
-                  {% endif %}
+              <div class="booking-accordion-body" data-booking-body="{{ booking.id }}">
+                <div class="booking-accordion-body-inner">
+                  <div class="row g-2">
+                    <div class="col-md-6">
+                      <div class="small"><span class="text-muted">Customer:</span> <strong>{{ booking.customer_name }}</strong></div>
+                      <div class="small"><span class="text-muted">Phone:</span> {{ booking.customer_phone }}</div>
+                      <div class="small"><span class="text-muted">Ground:</span> {{ booking.slot.ground.name }}</div>
+                      <div class="small"><span class="text-muted">Slot:</span> {{ booking.slot.date|format_date_with_day }} • {{ booking.slot.start_time|time:"g:i A" }} - {{ booking.slot.end_time|time:"g:i A" }}</div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="small">
+                        Payment:
+                        {% if booking.payment_status == 'PAID' %}
+                          <span class="badge text-bg-success">Paid</span>
+                        {% elif booking.payment_status == 'PAID_AT_GROUND' %}
+                          <span class="badge text-bg-info">Paid at Ground</span>
+                        {% elif booking.payment_status == 'PARTIALLY_PAID' %}
+                          <span class="badge text-bg-warning">Partially Paid</span>
+                        {% elif booking.payment_status == 'PENDING' %}
+                          <span class="badge text-bg-secondary">Pending</span>
+                        {% else %}
+                          <span class="badge text-bg-danger">Failed</span>
+                        {% endif %}
+                        • Mode: <strong>{{ booking.get_payment_mode_display }}</strong>
+                      </div>
+                      <div class="small">
+                        Source:
+                        {% if booking.booking_source == 'ONLINE' %}
+                          <span class="badge text-bg-primary">Online</span>
+                        {% else %}
+                          <span class="badge text-bg-secondary">Ground/Manual</span>
+                        {% endif %}
+                      </div>
+                      <div class="small text-muted">Paid: ₹{{ booking.paid_amount }} • Due: ₹{{ booking.due_amount }}</div>
+                      <div class="small text-muted">Amount: ₹{{ booking.total_amount }}</div>
+                      <div class="small text-muted">Payment Time: {% if booking.payment_paid_at %}{{ booking.payment_paid_at|date:"M j, Y g:i A" }}{% else %}-{% endif %}</div>
+                      <div class="small mt-1">
+                        Attendance:
+                        {% if booking.attendance_status == 'SHOWED_UP' %}
+                          <span class="badge text-bg-success">Showed Up</span>
+                        {% elif booking.attendance_status == 'NO_SHOW' %}
+                          <span class="badge text-bg-danger">No Show</span>
+                        {% else %}
+                          <span class="badge text-bg-secondary">Unmarked</span>
+                        {% endif %}
+                      </div>
+                      {% if booking.no_show_risk %}
+                        <div class="small mt-1">
+                          <span class="badge text-bg-warning">Call & Confirm</span>
+                          <span class="text-muted">History: {{ booking.no_show_history_count }} no-show{{ booking.no_show_history_count|pluralize }}</span>
+                        </div>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div class="d-flex flex-wrap gap-2 mt-3 pt-2 border-top">
+                    {% if booking.can_mark_attendance %}
+                      <form method="post" action="{% url 'owner_mark_attendance' booking.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="status" value="SHOWED_UP">
+                        <button type="submit" class="btn btn-sm btn-outline-success">Showed Up</button>
+                      </form>
+                      <form method="post" action="{% url 'owner_mark_attendance' booking.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="status" value="NO_SHOW">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm-message="Mark this booking as no-show?">No Show</button>
+                      </form>
+                    {% endif %}
+                    {% if booking.can_owner_reschedule %}
+                      <a href="{% url 'owner_reschedule_booking' booking.id %}" class="btn btn-sm btn-outline-primary">Emergency Reschedule</a>
+                    {% endif %}
+                    {% if booking.can_mark_paid_at_ground %}
+                      <form method="post" action="{% url 'owner_mark_paid_at_ground' booking.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-success">Mark Paid At Ground</button>
+                      </form>
+                    {% endif %}
+                    {% if booking.can_owner_cancel %}
+                      <a href="{% url 'owner_cancel_booking' booking.id %}" class="btn btn-sm btn-outline-danger" data-confirm-message="Delete this booking?">Delete</a>
+                    {% else %}
+                      <button type="button" class="btn btn-sm btn-outline-secondary" disabled>Past booking</button>
+                    {% endif %}
+                  </div>
                 </div>
               </div>
             </div>
-          {% empty %}
-            <div class="p-3 text-center text-muted">No bookings found.</div>
           {% endfor %}
         </div>
-      </div>
+      {% else %}
+        <div class="p-3 text-center text-muted">No bookings found.</div>
+      {% endif %}
     </div>
-  </div>
   </div>
 
-  <div class="row g-4 mt-1">
-    <div class="col-lg-7">
-      <div class="card p-3 shadow-sm mb-3">
-        <h6 class="mb-3">Top Grounds by Revenue</h6>
-        <div class="table-responsive">
-          <table class="table table-sm align-middle mb-0">
-            <thead>
-              <tr>
-                <th>Ground</th>
-                <th>Bookings</th>
-                <th>Owner Revenue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in ground_performance %}
-                <tr>
-                  <td>{{ row.slot__ground__name }}</td>
-                  <td>{{ row.bookings_count }}</td>
-                  <td>₹{{ row.revenue }}</td>
-                </tr>
-              {% empty %}
-                <tr>
-                  <td colspan="3" class="text-muted text-center">No data available</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-    <div class="col-lg-5">
+  <!-- ===== QUICK ACTIONS ===== -->
+  <div class="row g-4 mb-4">
+    <div class="col-12">
       <div class="card p-3 shadow-sm">
         <h6>Quick Actions</h6>
-        <div class="d-grid gap-2">
+        <div class="d-flex flex-wrap gap-2">
           <a href="/owner/manual-booking/" class="btn btn-outline-primary">Create manual booking</a>
           <a href="{% url 'owner_tournaments' %}" class="btn btn-outline-primary">Manage tournaments</a>
           <a href="/grounds/" class="btn btn-outline-secondary">Manage Grounds</a>
@@ -341,8 +215,243 @@
     </div>
   </div>
 
-  <div class="row g-4 mt-1">
-    <div class="col-12">
+  <!-- ===== COLLAPSIBLE: Extended Metrics & Finance ===== -->
+  <div class="mb-3" data-owner-accordion-section>
+    <div class="owner-section-toggle collapsed" role="button" data-toggle-section="owner-extended-metrics" aria-expanded="false">
+      <span class="fw-semibold small">Financial Details & Extra Metrics</span>
+      <span class="toggle-arrow"><i class="fas fa-chevron-down"></i></span>
+    </div>
+    <div class="owner-section-body" id="owner-extended-metrics">
+      <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 shadow-sm h-100">
+            <div class="small text-muted">Peak hour</div>
+            <div class="h5 mb-0">{{ stats.peak_hour }}</div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 shadow-sm h-100">
+            <div class="small text-muted">Gross Booking Value</div>
+            <div class="h5 mb-0">₹{{ stats.gross_revenue }}</div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 shadow-sm h-100">
+            <div class="small text-muted">Collected Amount</div>
+            <div class="h5 mb-0 text-success">₹{{ stats.collected_amount }}</div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 shadow-sm h-100">
+            <div class="small text-muted">Pending Amount</div>
+            <div class="h5 mb-0 text-warning">₹{{ stats.pending_amount }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 shadow-sm h-100">
+            <div class="small text-muted">Source Split (Count)</div>
+            <div class="small">Online bookings: <strong>{{ stats.online_bookings }}</strong></div>
+            <div class="small">Ground/manual: <strong>{{ stats.manual_bookings }}</strong></div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 shadow-sm h-100 border-start border-4 border-primary">
+            <div class="small text-muted mb-1">Online Money ({{ report_label }})</div>
+            <div class="small">Collected: <strong class="text-success">₹{{ stats.period_online_collection }}</strong></div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 shadow-sm h-100 border-start border-4 border-success">
+            <div class="small text-muted mb-1">Ground Money ({{ report_label }})</div>
+            <div class="small">Collected: <strong class="text-success">₹{{ stats.period_ground_collected }}</strong></div>
+            <div class="small">Pending: <strong class="text-warning">₹{{ stats.period_ground_pending }}</strong></div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 shadow-sm h-100">
+            <div class="small text-muted">Income ({{ report_label }})</div>
+            <div class="h5 mb-0 text-success">₹{{ stats.period_income|floatformat:2 }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 shadow-sm h-100">
+            <div class="small text-muted">Expenses ({{ report_label }})</div>
+            <div class="h5 mb-0 text-danger">₹{{ stats.period_expense|floatformat:2 }}</div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 shadow-sm h-100">
+            <div class="small text-muted">Net Result</div>
+            <div class="h5 mb-0 {% if stats.period_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+              ₹{{ stats.period_profit|floatformat:2 }}
+            </div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 shadow-sm h-100">
+            <div class="small text-muted">Profit Margin</div>
+            <div class="h5 mb-0 {% if stats.period_margin >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {{ stats.period_margin|floatformat:1 }}%
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== COLLAPSIBLE: Top Grounds & Performance ===== -->
+  <div class="mb-3" data-owner-accordion-section>
+    <div class="owner-section-toggle collapsed" role="button" data-toggle-section="owner-grounds-performance" aria-expanded="false">
+      <span class="fw-semibold small">Top Grounds & Expenses</span>
+      <span class="toggle-arrow"><i class="fas fa-chevron-down"></i></span>
+    </div>
+    <div class="owner-section-body" id="owner-grounds-performance">
+      <div class="row g-4">
+        <div class="col-lg-7">
+          <div class="card p-3 shadow-sm mb-3">
+            <h6 class="mb-3">Top Grounds by Revenue</h6>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Ground</th>
+                    <th>Bookings</th>
+                    <th>Owner Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in ground_performance %}
+                    <tr>
+                      <td>{{ row.slot__ground__name }}</td>
+                      <td>{{ row.bookings_count }}</td>
+                      <td>₹{{ row.revenue }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr>
+                      <td colspan="3" class="text-muted text-center">No data available</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card p-3 shadow-sm">
+            <h6 class="mb-3">Expense Categories ({{ report_label }})</h6>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in expense_by_category %}
+                    <tr>
+                      <td>{{ row.label }}</td>
+                      <td>₹{{ row.total|floatformat:2 }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr>
+                      <td colspan="2" class="text-muted text-center">No expenses in selected period.</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-5">
+          <div class="card p-3 shadow-sm mb-3">
+            <h6 class="mb-3">Add Expense</h6>
+            <form method="post" action="{% url 'owner_add_expense' %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <div class="row g-2">
+                <div class="col-12">
+                  <label class="form-label mb-1">Title</label>
+                  <input type="text" name="title" class="form-control" maxlength="120" placeholder="Eg. Turf light repair" required>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label mb-1">Category</label>
+                  <select name="category" class="form-select" required>
+                    {% for key, val in expense_categories %}
+                      <option value="{{ key }}">{{ val }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label mb-1">Amount (₹)</label>
+                  <input type="number" name="amount" class="form-control" step="0.01" min="0.01" required>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label mb-1">Ground</label>
+                  <select name="ground_id" class="form-select">
+                    <option value="">All / shared</option>
+                    {% for g in owner_grounds %}
+                      <option value="{{ g.id }}">{{ g.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label mb-1">Spent On</label>
+                  <input type="date" name="spent_on" class="form-control" value="{% now 'Y-m-d' %}">
+                </div>
+                <div class="col-12">
+                  <label class="form-label mb-1">Note</label>
+                  <textarea name="note" class="form-control" rows="2" placeholder="Optional details..."></textarea>
+                </div>
+                <div class="col-12">
+                  <button type="submit" class="btn btn-primary w-100">Save Expense</button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <div class="card p-3 shadow-sm">
+            <h6 class="mb-3">Recent Expense Entries</h6>
+            <div class="list-group list-group-flush">
+              {% for exp in recent_expenses %}
+                <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="fw-semibold">{{ exp.title }}</div>
+                    <div class="small text-muted">{{ exp.spent_on }} • {{ exp.get_category_display }}{% if exp.ground %} • {{ exp.ground.name }}{% endif %}</div>
+                    {% if exp.note %}<div class="small text-muted">{{ exp.note|truncatechars:70 }}</div>{% endif %}
+                  </div>
+                  <div class="text-end">
+                    <div class="fw-semibold text-danger">₹{{ exp.amount|floatformat:2 }}</div>
+                    <form method="post" action="{% url 'owner_delete_expense' exp.id %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <button type="submit" class="btn btn-sm btn-outline-danger mt-1" data-confirm-message="Delete this expense entry?">Delete</button>
+                    </form>
+                  </div>
+                </div>
+              {% empty %}
+                <div class="text-muted text-center py-2">No expenses added yet.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== COLLAPSIBLE: Tournaments ===== -->
+  <div class="mb-3" data-owner-accordion-section>
+    <div class="owner-section-toggle collapsed" role="button" data-toggle-section="owner-tournaments-section" aria-expanded="false">
+      <span class="fw-semibold small">Tournaments</span>
+      <span class="toggle-arrow"><i class="fas fa-chevron-down"></i></span>
+    </div>
+    <div class="owner-section-body" id="owner-tournaments-section">
       <div class="card p-3 shadow-sm">
         <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
           <h6 class="mb-0">Upcoming Tournaments</h6>
@@ -380,176 +489,155 @@
     </div>
   </div>
 
-  <div id="owner-section-finance">
-  <div class="row g-4 mt-1">
-    <div class="col-lg-7">
-      <div class="card p-3 shadow-sm">
-        <h6 class="mb-3">Expense Categories ({{ report_label }})</h6>
-        <div class="table-responsive">
-          <table class="table table-sm align-middle mb-0">
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in expense_by_category %}
-                <tr>
-                  <td>{{ row.label }}</td>
-                  <td>₹{{ row.total|floatformat:2 }}</td>
-                </tr>
-              {% empty %}
-                <tr>
-                  <td colspan="2" class="text-muted text-center">No expenses in selected period.</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+  <!-- ===== GROUND AVAILABILITY (Extreme Bottom) ===== -->
+  <div class="card shadow-sm" id="owner-ground-availability">
+    <div class="card-body">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h5 class="mb-0">Ground Availability</h5>
+        <span class="small text-muted">Pause or resume bookings per ground</span>
       </div>
-    </div>
-
-    <div class="col-lg-5">
-      <div class="card p-3 shadow-sm mb-3">
-        <h6 class="mb-3">Add Expense</h6>
-        <form method="post" action="{% url 'owner_add_expense' %}">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <div class="row g-2">
-            <div class="col-12">
-              <label class="form-label mb-1">Title</label>
-              <input type="text" name="title" class="form-control" maxlength="120" placeholder="Eg. Turf light repair" required>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label mb-1">Category</label>
-              <select name="category" class="form-select" required>
-                {% for key, val in expense_categories %}
-                  <option value="{{ key }}">{{ val }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label mb-1">Amount (₹)</label>
-              <input type="number" name="amount" class="form-control" step="0.01" min="0.01" required>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label mb-1">Ground</label>
-              <select name="ground_id" class="form-select">
-                <option value="">All / shared</option>
-                {% for g in owner_grounds %}
-                  <option value="{{ g.id }}">{{ g.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label mb-1">Spent On</label>
-              <input type="date" name="spent_on" class="form-control" value="{% now 'Y-m-d' %}">
-            </div>
-            <div class="col-12">
-              <label class="form-label mb-1">Note</label>
-              <textarea name="note" class="form-control" rows="2" placeholder="Optional details..."></textarea>
-            </div>
-            <div class="col-12">
-              <button type="submit" class="btn btn-primary w-100">Save Expense</button>
+      <div class="row g-3">
+        {% for ground in owner_ground_objects %}
+          <div class="col-md-6 col-lg-4">
+            <div class="border rounded p-3 h-100 d-flex flex-column justify-content-between">
+              <div>
+                <div class="fw-semibold">{{ ground.name }}</div>
+                <div class="small text-muted">{{ ground.location }}</div>
+                {% if ground.is_active %}
+                  <span class="badge bg-success mt-2">Available</span>
+                {% else %}
+                  <span class="badge bg-danger mt-2">Temporarily unavailable</span>
+                {% endif %}
+              </div>
+              <form method="post" action="{% url 'toggle_ground_availability' ground.id %}" class="mt-3">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{% url 'owner_dashboard' %}">
+                <button type="submit" class="btn btn-sm {% if ground.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                  {% if ground.is_active %}Make Unavailable{% else %}Make Available{% endif %}
+                </button>
+              </form>
             </div>
           </div>
-        </form>
-      </div>
-
-      <div class="card p-3 shadow-sm">
-        <h6 class="mb-3">Recent Expense Entries</h6>
-        <div class="list-group list-group-flush">
-          {% for exp in recent_expenses %}
-            <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-start gap-2">
-              <div>
-                <div class="fw-semibold">{{ exp.title }}</div>
-                <div class="small text-muted">{{ exp.spent_on }} • {{ exp.get_category_display }}{% if exp.ground %} • {{ exp.ground.name }}{% endif %}</div>
-                {% if exp.note %}<div class="small text-muted">{{ exp.note|truncatechars:70 }}</div>{% endif %}
-              </div>
-              <div class="text-end">
-                <div class="fw-semibold text-danger">₹{{ exp.amount|floatformat:2 }}</div>
-                <form method="post" action="{% url 'owner_delete_expense' exp.id %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                  <button type="submit" class="btn btn-sm btn-outline-danger mt-1" data-confirm-message="Delete this expense entry?">Delete</button>
-                </form>
-              </div>
-            </div>
-          {% empty %}
-            <div class="text-muted text-center py-2">No expenses added yet.</div>
-          {% endfor %}
-        </div>
+        {% empty %}
+          <div class="col-12 text-muted">No grounds available.</div>
+        {% endfor %}
       </div>
     </div>
-  </div>
   </div>
 </div>
 
 <script>
+  // ===== Bookings Accordion (auto-collapse: only one open at a time) =====
+  (function() {
+    var headers = document.querySelectorAll('[data-booking-header]');
+    var bodies = {};
+    document.querySelectorAll('[data-booking-body]').forEach(function(el) {
+      bodies[el.getAttribute('data-booking-body')] = el;
+    });
 
+    headers.forEach(function(header) {
+      header.addEventListener('click', function() {
+        var id = header.getAttribute('data-booking-header');
+        var body = bodies[id];
+        if (!body) return;
+
+        var isOpen = body.classList.contains('open');
+
+        // Close all other open booking bodies
+        document.querySelectorAll('[data-booking-body].open').forEach(function(el) {
+          el.classList.remove('open');
+          var h = document.querySelector('[data-booking-header="' + el.getAttribute('data-booking-body') + '"]');
+          if (h) h.setAttribute('aria-expanded', 'false');
+        });
+
+        // Toggle this one
+        if (!isOpen) {
+          body.classList.add('open');
+          header.setAttribute('aria-expanded', 'true');
+        }
+      });
+    });
+  })();
+
+  // ===== Section Accordion (expand/collapse sections) =====
+  (function() {
+    var toggles = document.querySelectorAll('[data-toggle-section]');
+    var sectionStateKey = 'owner_dashboard_sections_v2';
+    var sectionState = {};
+    try {
+      sectionState = JSON.parse(localStorage.getItem(sectionStateKey) || '{}');
+    } catch (e) {
+      sectionState = {};
+    }
+
+    toggles.forEach(function(toggle) {
+      var targetId = toggle.getAttribute('data-toggle-section');
+      var target = document.getElementById(targetId);
+
+      // Restore saved state
+      var savedCollapsed = sectionState[targetId];
+      if (savedCollapsed === true) {
+        toggle.classList.add('collapsed');
+        toggle.setAttribute('aria-expanded', 'false');
+        if (target) target.classList.remove('open');
+      } else if (savedCollapsed === false) {
+        toggle.classList.remove('collapsed');
+        toggle.setAttribute('aria-expanded', 'true');
+        if (target) target.classList.add('open');
+      }
+
+      toggle.addEventListener('click', function() {
+        var isCollapsed = toggle.classList.contains('collapsed');
+        if (isCollapsed) {
+          toggle.classList.remove('collapsed');
+          toggle.setAttribute('aria-expanded', 'true');
+          if (target) target.classList.add('open');
+          sectionState[targetId] = false;
+        } else {
+          toggle.classList.add('collapsed');
+          toggle.setAttribute('aria-expanded', 'false');
+          if (target) target.classList.remove('open');
+          sectionState[targetId] = true;
+        }
+        try {
+          localStorage.setItem(sectionStateKey, JSON.stringify(sectionState));
+        } catch (e) {}
+      });
+    });
+  })();
+
+  // ===== Django Messages as subtle toasts =====
   {% if messages %}
     window.addEventListener('load', function() {
       {% for message in messages %}
         if (typeof window.showAppToast === 'function') {
-          window.showAppToast({{ message|escapejs }}, '{{ message.tags|default:"info" }}', 4200);
+          var msgType = '{{ message.tags|default:"info" }}';
+          var msgText = {{ message|escapejs }};
+          // Map Django tags to our subtle classes
+          var subtleMap = {
+            'success': 'success',
+            'error': 'error',
+            'warning': 'warning',
+            'info': 'info'
+          };
+          window.showAppToast(msgText, subtleMap[msgType] || 'info', 4200);
         }
       {% endfor %}
     });
   {% endif %}
 
-  const ownerToggleButtons = document.querySelectorAll('.owner-toggle-btn');
-  const sectionStateKey = 'owner_dashboard_section_state_v1';
-  let sectionState = {};
-  try {
-    sectionState = JSON.parse(localStorage.getItem(sectionStateKey) || '{}');
-  } catch (e) {
-    sectionState = {};
-  }
-
-  function updateToggleLabel(btn, collapsed) {
-    const target = btn.getAttribute('data-target') || '';
-    const name = target.replace('owner-section-', '').replace('-', ' ');
-    const title = name.charAt(0).toUpperCase() + name.slice(1);
-    btn.textContent = (collapsed ? 'Expand ' : 'Minimize ') + title;
-  }
-
-  function applySectionState(target, collapsed) {
-    const section = document.getElementById(target);
-    if (!section) return;
-    section.classList.toggle('d-none', !!collapsed);
-    ownerToggleButtons.forEach(function(btn) {
-      if (btn.getAttribute('data-target') === target) {
-        updateToggleLabel(btn, !!collapsed);
+  // ===== Back-navigation warning =====
+  (function(){
+    try { history.pushState(null, null, location.href); } catch(e){}
+    window.addEventListener('popstate', function(){
+      var ok = confirm('Going back from the dashboard will log you out. Continue?');
+      if(ok){
+        window.location.href = "{% url 'logout' %}";
+      } else {
+        try { history.pushState(null, null, location.href); } catch(e){}
       }
     });
-  }
-
-  ownerToggleButtons.forEach(function(btn) {
-    const target = btn.getAttribute('data-target');
-    const collapsed = !!sectionState[target];
-    applySectionState(target, collapsed);
-    btn.addEventListener('click', function() {
-      sectionState[target] = !sectionState[target];
-      localStorage.setItem(sectionStateKey, JSON.stringify(sectionState));
-      applySectionState(target, sectionState[target]);
-    });
-  });
+  })();
 </script>
 
-  <script>
-    // Warn and logout if user navigates back from dashboard
-    (function(){
-      try { history.pushState(null, null, location.href); } catch(e){}
-      window.addEventListener('popstate', function(){
-        var ok = confirm('Going back from the dashboard will log you out. Continue?');
-        if(ok){
-          window.location.href = "{% url 'logout' %}";
-        } else {
-          try { history.pushState(null, null, location.href); } catch(e){}
-        }
-      });
-    })();
-  </script>
-
-  {% endblock %}
+{% endblock %}
