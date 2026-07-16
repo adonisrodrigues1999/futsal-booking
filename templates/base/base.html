@@ -173,23 +173,9 @@
 {% block extra_scripts %}{% endblock %}
 
 <script>
-  (function() {
-    const path = window.location.pathname || '';
-    const autoReloadPaths = [
-      '/dashboard/owner/',
-      '/owner/manual/',
-      '/owner/manual-booking/',
-      '/my-bookings/'
-    ];
-
-    const isGroundSlots = /^\/grounds\/\d+\/?$/.test(path);
-    const shouldReload = autoReloadPaths.includes(path) || isGroundSlots;
-    if (!shouldReload) return;
-
-    setTimeout(function() {
-      window.location.reload();
-    }, 30000);
-  })();
+  // Replaced full-page auto-reload with targeted polling.
+  // The slot-availability AJAX auto-refresh (every 8s in ui.js) keeps booking data
+  // fresh without the side effects of location.reload().
 </script>
 
 </body>
