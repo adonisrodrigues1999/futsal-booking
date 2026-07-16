@@ -212,6 +212,46 @@
     </div>
   </div>
 
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="mb-3">Per-Ground Breakdown (This Month)</h5>
+      <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Ground</th>
+              <th>Owner</th>
+              <th>Total Bookings (All Time)</th>
+              <th>Month Bookings</th>
+              <th>Online Bookings (Month)</th>
+              <th>Online Collected</th>
+              <th>Manual/At-Ground Collected</th>
+              <th>Total Collected</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in per_ground_data %}
+            <tr>
+              <td><strong>{{ row.ground.name }}</strong></td>
+              <td>{{ row.owner_name }}</td>
+              <td>{{ row.total_bookings }}</td>
+              <td>{{ row.month_bookings }}</td>
+              <td>{{ row.month_online_bookings }}</td>
+              <td>₹{{ row.month_online_collected }}</td>
+              <td>₹{{ row.month_manual_collected }}</td>
+              <td><strong>₹{{ row.month_total_collected }}</strong></td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="8" class="text-center text-muted">No grounds or bookings yet</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-body">
       <h5 class="mb-3">All Grounds</h5>

@@ -556,6 +556,29 @@ def admin_dashboard(request):
         .order_by('-bookings_count', '-revenue', 'name')[:8]
     )
 
+    # Per-ground breakdown: total bookings & online money collected (all time + this month)
+    per_ground_data = []
+    for g in grounds:
+        all_bookings = booked.filter(slot__ground=g)
+        month_ground_bookings = month_bookings.filter(slot__ground=g)
+        month_ground_online = month_ground_bookings.filter(booking_source='ONLINE')
+        month_ground_manual = month_ground_bookings.filter(booking_source='MANUAL')
+        total_bookings_count = all_bookings.count()
+        month_bookings_count = month_ground_bookings.count()
+        month_online_bookings_count = month_ground_online.count()
+        month_online_collected = int(month_ground_online.aggregate(v=Coalesce(Sum(online_collected_amount_expression()), 0))['v'] or 0)
+        month_manual_collected = int(month_ground_manual.aggregate(v=Coalesce(Sum(ground_collected_amount_expression()), 0))['v'] or 0)
+        per_ground_data.append({
+            'ground': g,
+            'owner_name': g.owner.name if g.owner else '-',
+            'total_bookings': total_bookings_count,
+            'month_bookings': month_bookings_count,
+            'month_online_bookings': month_online_bookings_count,
+            'month_online_collected': month_online_collected,
+            'month_manual_collected': month_manual_collected,
+            'month_total_collected': month_online_collected + month_manual_collected,
+        })
+
     context = {
         'ground_owners': ground_owners,
         'grounds': grounds,
@@ -581,6 +604,7 @@ def admin_dashboard(request):
         'top_grounds': top_grounds,
         'ground_income_ranking': ground_income_ranking,
         'owner_leaderboard': owner_leaderboard,
+        'per_ground_data': per_ground_data,
     }
     return render(request, 'accounts/admin_dashboard.html', context)
 
