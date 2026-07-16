@@ -527,35 +527,51 @@
 </div>
 
 <script>
-  // ===== Bookings Accordion (auto-collapse: only one open at a time) =====
+  // ===== Bookings Accordion — event delegation on the container =====
+  // Using delegation avoids issues with popstate/bfcache/interrupted loads
+  // that can cause direct event listeners to detach after POST redirects.
   (function() {
-    var headers = document.querySelectorAll('[data-booking-header]');
-    var bodies = {};
-    document.querySelectorAll('[data-booking-body]').forEach(function(el) {
-      bodies[el.getAttribute('data-booking-body')] = el;
-    });
+    var accordion = document.querySelector('[data-booking-accordion]');
+    if (!accordion) return;
 
-    headers.forEach(function(header) {
-      header.addEventListener('click', function() {
-        var id = header.getAttribute('data-booking-header');
-        var body = bodies[id];
-        if (!body) return;
+    // Use a click threshold: if the user clicked a form button, link, or
+    // interactive element inside the body, do NOT toggle the accordion.
+    function isInteractiveClick(target) {
+      while (target && target !== accordion) {
+        var tag = target.tagName.toLowerCase();
+        if (tag === 'a' || tag === 'button' || tag === 'input' || tag === 'select' || tag === 'textarea') return true;
+        if (target.getAttribute('role') === 'button') return true;
+        target = target.parentElement;
+      }
+      return false;
+    }
 
-        var isOpen = body.classList.contains('open');
+    accordion.addEventListener('click', function(e) {
+      // Find the closest header (if any) up the event path
+      var header = e.target.closest('[data-booking-header]');
+      if (!header) return;
 
-        // Close all other open booking bodies
-        document.querySelectorAll('[data-booking-body].open').forEach(function(el) {
-          el.classList.remove('open');
-          var h = document.querySelector('[data-booking-header="' + el.getAttribute('data-booking-body') + '"]');
-          if (h) h.setAttribute('aria-expanded', 'false');
-        });
+      // Do not toggle if the click originated inside a form/button/link within the body
+      if (isInteractiveClick(e.target)) return;
 
-        // Toggle this one
-        if (!isOpen) {
-          body.classList.add('open');
-          header.setAttribute('aria-expanded', 'true');
-        }
+      var id = header.getAttribute('data-booking-header');
+      var body = document.querySelector('[data-booking-body="' + id + '"]');
+      if (!body) return;
+
+      var isOpen = body.classList.contains('open');
+
+      // Close all other open booking bodies
+      document.querySelectorAll('[data-booking-body].open').forEach(function(el) {
+        el.classList.remove('open');
+        var h = document.querySelector('[data-booking-header="' + el.getAttribute('data-booking-body') + '"]');
+        if (h) h.setAttribute('aria-expanded', 'false');
       });
+
+      // Toggle this one
+      if (!isOpen) {
+        body.classList.add('open');
+        header.setAttribute('aria-expanded', 'true');
+      }
     });
   })();
 
@@ -612,7 +628,7 @@
       {% for message in messages %}
         if (typeof window.showAppToast === 'function') {
           var msgType = '{{ message.tags|default:"info" }}';
-          var msgText = {{ message|escapejs }};
+          var msgText = '{{ message|escapejs }}';
           // Map Django tags to our subtle classes
           var subtleMap = {
             'success': 'success',
