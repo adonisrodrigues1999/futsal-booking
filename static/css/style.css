@@ -935,6 +935,16 @@ h6,
   gap: 0.5rem;
   background: #ffffff;
   transition: background 0.15s ease;
+  width: 100%;
+  border: 0;
+  text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.booking-accordion-header:focus {
+  outline: 2px solid rgba(25, 195, 125, 0.35);
+  outline-offset: 2px;
 }
 
 .booking-accordion-header:hover {

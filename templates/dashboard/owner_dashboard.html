@@ -85,7 +85,7 @@
         <div class="booking-accordion" data-booking-accordion>
           {% for booking in filtered_bookings %}
             <div class="booking-accordion-item">
-              <div class="booking-accordion-header" role="button" aria-expanded="false" data-booking-header="{{ booking.id }}">
+              <button type="button" class="booking-accordion-header" aria-expanded="false" data-booking-header="{{ booking.id }}" aria-controls="booking-body-{{ booking.id }}">
                 <div class="booking-compact">
                   <span class="fw-semibold small">{{ booking.customer_name }}</span>
                   <span class="text-muted small">{{ booking.slot.ground.name }}</span>
@@ -107,8 +107,8 @@
                 <span class="booking-expand-arrow">
                   <i class="fas fa-chevron-down" aria-hidden="true"></i>
                 </span>
-              </div>
-              <div class="booking-accordion-body" data-booking-body="{{ booking.id }}">
+              </button>
+              <div class="booking-accordion-body" id="booking-body-{{ booking.id }}" data-booking-body="{{ booking.id }}">
                 <div class="booking-accordion-body-inner">
                   <div class="row g-2">
                     <div class="col-md-6">
@@ -534,44 +534,45 @@
   (function() {
     var accordion = document.querySelector('[data-booking-accordion]');
     if (!accordion) return;
+    var headers = accordion.querySelectorAll('[data-booking-header]');
 
-    // Ignore clicks on real interactive controls inside the body, but allow
-    // clicks on the accordion header itself to toggle the section.
-    function isInteractiveClick(target) {
-      while (target && target !== accordion) {
-        var tag = target.tagName.toLowerCase();
-        if (tag === 'a' || tag === 'button' || tag === 'input' || tag === 'select' || tag === 'textarea') return true;
-        target = target.parentElement;
+    function setBodyOpen(header, body, isOpen) {
+      if (!header || !body) return;
+      header.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      if (isOpen) {
+        body.classList.add('open');
+        body.style.maxHeight = body.scrollHeight + 'px';
+      } else {
+        body.classList.remove('open');
+        body.style.maxHeight = '0px';
       }
-      return false;
     }
 
-    accordion.addEventListener('click', function(e) {
-      // Find the closest header (if any) up the event path
-      var header = e.target.closest('[data-booking-header]');
-      if (!header) return;
-
-      // Do not toggle if the click originated inside a form/button/link within the body
-      if (isInteractiveClick(e.target)) return;
-
+    headers.forEach(function(header) {
       var id = header.getAttribute('data-booking-header');
-      var body = document.querySelector('[data-booking-body="' + id + '"]');
+      var body = document.getElementById('booking-body-' + id) || document.querySelector('[data-booking-body="' + id + '"]');
       if (!body) return;
 
-      var isOpen = body.classList.contains('open');
+      setBodyOpen(header, body, false);
 
-      // Close all other open booking bodies
-      document.querySelectorAll('[data-booking-body].open').forEach(function(el) {
-        el.classList.remove('open');
-        var h = document.querySelector('[data-booking-header="' + el.getAttribute('data-booking-body') + '"]');
-        if (h) h.setAttribute('aria-expanded', 'false');
+      header.addEventListener('click', function(e) {
+        e.preventDefault();
+        var isOpen = body.classList.contains('open');
+
+        document.querySelectorAll('[data-booking-body].open').forEach(function(el) {
+          var otherId = el.getAttribute('data-booking-body');
+          var otherHeader = accordion.querySelector('[data-booking-header="' + otherId + '"]');
+          setBodyOpen(otherHeader, el, false);
+        });
+
+        setBodyOpen(header, body, !isOpen);
       });
+    });
 
-      // Toggle this one
-      if (!isOpen) {
-        body.classList.add('open');
-        header.setAttribute('aria-expanded', 'true');
-      }
+    window.addEventListener('resize', function() {
+      accordion.querySelectorAll('[data-booking-body].open').forEach(function(body) {
+        body.style.maxHeight = body.scrollHeight + 'px';
+      });
     });
   })();
 

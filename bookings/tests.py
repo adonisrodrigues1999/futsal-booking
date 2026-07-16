@@ -437,6 +437,35 @@ class BookingFlowTests(TestCase):
         self.assertContains(response, 'aria-controls="owner-grounds-performance"')
         self.assertContains(response, 'aria-controls="owner-tournaments-section"')
 
+    def test_owner_dashboard_booking_rows_use_button_headers(self):
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate(),
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=slot,
+            user=self.customer,
+            customer_name='Accordion Customer',
+            customer_phone='7000007777',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='FULL',
+            payment_status='PAID',
+            paid_amount=500,
+            due_amount=0,
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get('/dashboard/owner/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="booking-accordion-header"')
+        self.assertContains(response, 'aria-controls="booking-body-')
+
     def test_partial_online_payment_monthly_split_and_ground_tally(self):
         today = timezone.localdate()
         partial_slot = Slot.objects.create(

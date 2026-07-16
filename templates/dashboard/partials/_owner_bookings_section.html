@@ -15,7 +15,7 @@
       <div class="booking-accordion" data-booking-accordion>
         {% for booking in filtered_bookings %}
           <div class="booking-accordion-item">
-            <div class="booking-accordion-header" role="button" aria-expanded="false" data-booking-header="{{ booking.id }}">
+            <button type="button" class="booking-accordion-header" aria-expanded="false" data-booking-header="{{ booking.id }}" aria-controls="booking-body-{{ booking.id }}">
               <div class="booking-compact">
                 <span class="fw-semibold small">{{ booking.customer_name }}</span>
                 <span class="text-muted small">{{ booking.slot.ground.name }}</span>
@@ -37,8 +37,8 @@
               <span class="booking-expand-arrow">
                 <i class="fas fa-chevron-down" aria-hidden="true"></i>
               </span>
-            </div>
-            <div class="booking-accordion-body" data-booking-body="{{ booking.id }}">
+            </button>
+            <div class="booking-accordion-body" id="booking-body-{{ booking.id }}" data-booking-body="{{ booking.id }}">
               <div class="booking-accordion-body-inner">
                 <div class="row g-2">
                   <div class="col-md-6">
