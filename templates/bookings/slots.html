@@ -50,11 +50,14 @@
           data-availability="{% if obj.is_booked %}booked{% elif is_past %}past{% else %}available{% endif %}"
         >
           <div class="slot-meta">
-            <div class="slot-time">{{ obj.time_icon }} {{ slot.start_time|time:"g:i A" }} to {{ slot.end_time|time:"g:i A" }}</div>
-            <div class="slot-price">
-              ₹{{ obj.price }}
+            <div class="slot-time-wrap">
+              <span class="slot-time-icon" aria-hidden="true">{{ obj.time_icon }}</span>
+              <div class="slot-time">{{ slot.start_time|time:"g:i A" }} to {{ slot.end_time|time:"g:i A" }}</div>
+            </div>
+            <div class="slot-price-wrap">
+              <div class="slot-price">₹{{ obj.price }}</div>
               {% if obj.discount %}
-                <span class="badge text-bg-warning ms-1">Last-minute ₹{{ obj.discount }} off</span>
+                <span class="slot-discount">-₹{{ obj.discount }}</span>
               {% endif %}
             </div>
           </div>

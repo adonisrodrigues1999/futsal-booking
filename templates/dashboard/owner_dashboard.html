@@ -535,13 +535,12 @@
     var accordion = document.querySelector('[data-booking-accordion]');
     if (!accordion) return;
 
-    // Use a click threshold: if the user clicked a form button, link, or
-    // interactive element inside the body, do NOT toggle the accordion.
+    // Ignore clicks on real interactive controls inside the body, but allow
+    // clicks on the accordion header itself to toggle the section.
     function isInteractiveClick(target) {
       while (target && target !== accordion) {
         var tag = target.tagName.toLowerCase();
         if (tag === 'a' || tag === 'button' || tag === 'input' || tag === 'select' || tag === 'textarea') return true;
-        if (target.getAttribute('role') === 'button') return true;
         target = target.parentElement;
       }
       return false;
