@@ -2430,12 +2430,12 @@ def owner_manual_booking(request):
                                 return redirect('/owner/manual-booking/')
                             if target_slot.is_booked or Booking.objects.filter(slot=target_slot, status='BOOKED').exists():
                                 conflict_rows.append({
-                                'date': target_slot.date,
-                                'start_time': target_slot.start_time,
-                                'end_time': target_slot.end_time,
-                                'label': f"{target_slot.date.strftime('%a, %b %d, %Y')} · {target_slot.start_time.strftime('%I:%M %p')} - {target_slot.end_time.strftime('%I:%M %p')}",
-                            })
-                            continue
+                                    'date': target_slot.date,
+                                    'start_time': target_slot.start_time,
+                                    'end_time': target_slot.end_time,
+                                    'label': f"{target_slot.date.strftime('%a, %b %d, %Y')} · {target_slot.start_time.strftime('%I:%M %p')} - {target_slot.end_time.strftime('%I:%M %p')}",
+                                })
+                                continue
                             target_rows.append((target_slot, occurrence_index * max(len(slot_weekdays), 1) + weekday_index))
 
                 if conflict_rows and not confirm_conflicts:
