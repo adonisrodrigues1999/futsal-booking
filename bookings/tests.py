@@ -466,6 +466,55 @@ class BookingFlowTests(TestCase):
         self.assertContains(response, 'class="booking-accordion-header"')
         self.assertContains(response, 'aria-controls="booking-body-')
 
+    def test_owner_dashboard_bookings_title_uses_weekday_abbreviation(self):
+        target_date = timezone.localdate() + timedelta(days=3)
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=target_date,
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=slot,
+            user=self.customer,
+            customer_name='Title Customer',
+            customer_phone='7000008888',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='FULL',
+            payment_status='PAID',
+            paid_amount=500,
+            due_amount=0,
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get(f'/dashboard/owner/?date={target_date.isoformat()}')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, target_date.strftime('%a, %b %d, %Y'))
+
+    def test_manual_booking_page_prompts_for_review_before_submit(self):
+        target_date = timezone.localdate() + timedelta(days=1)
+        Slot.objects.create(
+            ground=self.ground,
+            date=target_date,
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            is_booked=False,
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            f'/owner/manual-booking/?ground={self.ground.id}&date={target_date.isoformat()}'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Review & Book')
+        self.assertContains(response, 'id="manualReviewModal"')
+        self.assertContains(response, 'data-processing-overlay="true"')
+
     def test_partial_online_payment_monthly_split_and_ground_tally(self):
         today = timezone.localdate()
         partial_slot = Slot.objects.create(

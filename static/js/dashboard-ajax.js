@@ -145,6 +145,9 @@
       var refreshSelectors = getRefreshSelectors(action);
 
       showToast('Processing...', 'info');
+      if (typeof window.showProcessingOverlay === 'function') {
+        window.showProcessingOverlay('Processing request...', 'Updating dashboard');
+      }
 
       fetch(action, {
         method: method,
@@ -170,8 +173,14 @@
         rebindAjaxForms(document);
         reinitBookingAccordion();
         refreshCountAnimations();
+        if (typeof window.hideProcessingOverlay === 'function') {
+          window.hideProcessingOverlay(true);
+        }
       }).catch(function (err) {
         showToast(err.message || 'Something went wrong. Please try again.', 'danger');
+        if (typeof window.hideProcessingOverlay === 'function') {
+          window.hideProcessingOverlay(true);
+        }
       });
     });
   }
@@ -187,6 +196,9 @@
       var date = dateInput.value;
       var url = window.location.pathname + '?date=' + encodeURIComponent(date);
       showToast('Loading bookings...', 'info');
+      if (typeof window.showProcessingOverlay === 'function') {
+        window.showProcessingOverlay('Loading bookings...', 'Refreshing the list');
+      }
       fetch(url, {
         method: 'GET',
         credentials: 'same-origin',
@@ -196,8 +208,14 @@
         updateSection('#owner-section-bookings', html);
         rebindAjaxForms(document);
         reinitBookingAccordion();
+        if (typeof window.hideProcessingOverlay === 'function') {
+          window.hideProcessingOverlay(true);
+        }
       }).catch(function () {
         showToast('Failed to load bookings.', 'danger');
+        if (typeof window.hideProcessingOverlay === 'function') {
+          window.hideProcessingOverlay(true);
+        }
       });
     });
   }

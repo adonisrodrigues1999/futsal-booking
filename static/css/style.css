@@ -467,6 +467,30 @@ h6,
   font-weight: 700;
 }
 
+.review-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.review-summary-item,
+.review-summary-item-wide {
+  padding: 0.75rem;
+  border-radius: 0.9rem;
+  background: rgba(247, 251, 248, 0.8);
+  border: 1px solid rgba(25, 195, 125, 0.12);
+}
+
+.review-summary-item-wide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 576px) {
+  .review-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 576px) {
   .verification-popup-shell {
     align-items: flex-end;
@@ -1652,27 +1676,25 @@ h6,
   }
 
   .slot-meta {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.35rem;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.45rem;
     margin-bottom: 0.45rem;
   }
 
   .slot-time-wrap,
   .slot-price-wrap {
-    width: 100%;
-  }
-
-  .slot-price-wrap {
-    justify-content: flex-start;
+    width: auto;
   }
 
   .slot-time {
-    font-size: 0.88rem;
+    font-size: 0.86rem;
   }
 
   .slot-price {
-    font-size: 0.8rem;
+    font-size: 0.76rem;
+    padding: 0.22rem 0.44rem;
   }
 
   .slot-body {

@@ -29,6 +29,12 @@ document.addEventListener('DOMContentLoaded', function() {
     };
   })();
   window.appLoader = appLoader;
+  window.showProcessingOverlay = function(message, subtext) {
+    appLoader.show(message || 'Processing request...', subtext || 'Please wait');
+  };
+  window.hideProcessingOverlay = function(force) {
+    appLoader.hide(force);
+  };
 
   function getCookie(name) {
     var match = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
@@ -47,6 +53,12 @@ document.addEventListener('DOMContentLoaded', function() {
   syncFormCsrfTokens();
   document.querySelectorAll('form').forEach(function(form) {
     form.addEventListener('submit', syncFormCsrfTokens);
+  });
+
+  document.querySelectorAll('form[data-processing-overlay="true"]').forEach(function(form) {
+    form.addEventListener('submit', function() {
+      window.showProcessingOverlay('Processing request...', 'Please wait');
+    });
   });
 
   function showAppToast(message, type, delay) {
@@ -585,6 +597,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function verifyAndFinalizeBooking(slotId, paymentMode, rpResponse, confirmBtn) {
     recordSupportActivity('payment_verify_start', 'slot_id=' + slotId + ' mode=' + paymentMode);
+    window.showProcessingOverlay('Confirming booking...', 'Securing your slot');
     var csrftoken = getCookie('csrftoken');
     fetch('/payments/razorpay/verify-and-book/', {
       method: 'POST',
@@ -608,10 +621,12 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }).then(function(data) {
       recordSupportActivity('payment_verify_success', 'booking_id=' + (data.booking_id || '-'));
+      window.hideProcessingOverlay(true);
       showAppToast(data.message || 'Booking confirmed. Non-refundable payment.', 'success', 2600);
       showRedirectCountdown(data.redirect_url || '/my-bookings/');
     }).catch(function(err) {
       recordSupportActivity('payment_verify_failed', err.message || 'Booking verification failed');
+      window.hideProcessingOverlay(true);
       showAppToast(err.message || 'Payment verified but booking failed. Contact support.', 'danger', 4200);
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Proceed to Pay';
@@ -631,6 +646,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var csrftoken = getCookie('csrftoken');
 
+    window.showProcessingOverlay('Preparing booking...', 'Please keep this page open');
     confirmBtn.disabled = true;
     confirmBtn.textContent = 'Initializing...';
 
@@ -653,6 +669,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }).then(function(orderData) {
       recordSupportActivity('checkout_order_ready', 'order_id=' + (orderData.order_id || '-') + ' amount=' + (orderData.pay_now_amount || '-'));
+      window.hideProcessingOverlay(true);
       if (orderData.free_booking) {
         showAppToast(orderData.message || 'Free booking redeemed successfully.', 'success', 2800);
         setTimeout(function() {
@@ -700,6 +717,7 @@ document.addEventListener('DOMContentLoaded', function() {
       checkout.open();
     }).catch(function(err) {
       recordSupportActivity('checkout_error', err.message || 'Unable to start payment');
+      window.hideProcessingOverlay(true);
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Proceed to Pay';
       showAppToast(err.message || 'Unable to start payment.', 'danger', 3200);

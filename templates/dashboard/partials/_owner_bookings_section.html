@@ -6,8 +6,7 @@
       <form class="d-flex align-items-center gap-2 booking-date-form">
         {% csrf_token %}
         <label class="small text-muted mb-0" for="owner-booking-date">Date</label>
-        <input id="owner-booking-date" type="date" name="date" class="form-control form-control-sm" value="{{ selected_date|date:'Y-m-d' }}">
-        <button type="submit" class="btn btn-sm btn-outline-secondary">Go</button>
+        <input id="owner-booking-date" type="date" name="date" class="form-control form-control-sm" value="{{ selected_date|date:'Y-m-d' }}" onchange="this.form.requestSubmit();">
       </form>
     </div>
 

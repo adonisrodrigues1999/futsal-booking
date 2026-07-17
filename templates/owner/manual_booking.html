@@ -55,7 +55,7 @@
   </div>
 
   {% if selected_ground and selected_date %}
-    <form method="post" class="card shadow-sm">
+    <form method="post" class="card shadow-sm" id="manual-booking-form" data-processing-overlay="true">
       {% csrf_token %}
       <input type="hidden" name="ground" value="{{ selected_ground.id }}">
       <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
@@ -166,13 +166,60 @@
       </div>
       <div class="card-footer d-flex justify-content-end">
         <button type="submit" class="btn btn-primary" id="manual-book-btn" disabled>
-          {% if manual_booking_preview %}Confirm and Create Available Bookings{% else %}Create Manual Booking{% endif %}
+          Review & Book
         </button>
       </div>
     </form>
   {% else %}
     <div class="alert alert-info">Select a ground to load today&apos;s slots.</div>
   {% endif %}
+</div>
+
+<div class="modal fade" id="manualReviewModal" tabindex="-1" aria-labelledby="manualReviewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-fullscreen-sm-down">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <div>
+          <h5 class="modal-title" id="manualReviewModalLabel">Review Manual Booking</h5>
+          <div class="small text-muted">Confirm the details before saving.</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <div class="review-summary-grid">
+          <div class="review-summary-item">
+            <div class="small text-muted">Ground</div>
+            <div class="fw-semibold" id="review-ground"></div>
+          </div>
+          <div class="review-summary-item">
+            <div class="small text-muted">Date</div>
+            <div class="fw-semibold" id="review-date"></div>
+          </div>
+          <div class="review-summary-item">
+            <div class="small text-muted">Customer</div>
+            <div class="fw-semibold" id="review-name"></div>
+          </div>
+          <div class="review-summary-item">
+            <div class="small text-muted">Phone</div>
+            <div class="fw-semibold" id="review-phone"></div>
+          </div>
+          <div class="review-summary-item review-summary-item-wide">
+            <div class="small text-muted">Selected Slots</div>
+            <div class="fw-semibold" id="review-slots"></div>
+          </div>
+          <div class="review-summary-item">
+            <div class="small text-muted">Total Amount</div>
+            <div class="fw-semibold text-success" id="review-total"></div>
+          </div>
+        </div>
+        <div class="alert alert-light border mt-3 mb-0 py-2 small" id="review-repeat"></div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Edit</button>
+        <button type="button" class="btn btn-primary" id="manual-review-confirm">Confirm & Book</button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -222,6 +269,17 @@
     const submitBtn = document.getElementById('manual-book-btn');
     const repeatToggle = document.getElementById('repeat_enabled');
     const repeatFields = document.querySelectorAll('.repeat-booking-fields');
+    const manualForm = document.getElementById('manual-booking-form');
+    const reviewModalEl = document.getElementById('manualReviewModal');
+    const reviewModal = reviewModalEl && window.bootstrap ? new bootstrap.Modal(reviewModalEl, { backdrop: 'static' }) : null;
+    const reviewConfirmBtn = document.getElementById('manual-review-confirm');
+    const reviewGround = document.getElementById('review-ground');
+    const reviewDate = document.getElementById('review-date');
+    const reviewName = document.getElementById('review-name');
+    const reviewPhone = document.getElementById('review-phone');
+    const reviewSlots = document.getElementById('review-slots');
+    const reviewTotal = document.getElementById('review-total');
+    const reviewRepeat = document.getElementById('review-repeat');
 
     function updateSummary() {
       let count = 0;
@@ -262,6 +320,71 @@
     if (repeatToggle) {
       repeatToggle.addEventListener('change', updateRepeatFields);
       updateRepeatFields();
+    }
+
+    function formatReviewDate(raw) {
+      if (!raw) return '';
+      const dateValue = new Date(raw + 'T00:00:00');
+      if (Number.isNaN(dateValue.getTime())) return raw;
+      const day = dateValue.toLocaleDateString('en-US', { weekday: 'short' });
+      const month = dateValue.toLocaleDateString('en-US', { month: 'short' });
+      const dayNum = String(dateValue.getDate()).padStart(2, '0');
+      const year = dateValue.getFullYear();
+      return `${day}, ${month} ${dayNum}, ${year}`;
+    }
+
+    if (manualForm && reviewModal && reviewConfirmBtn) {
+      manualForm.addEventListener('submit', function(event) {
+        if (manualForm.dataset.manualConfirmed === '1') {
+          return;
+        }
+        event.preventDefault();
+        updateSummary();
+
+        if (reviewGround) {
+          const selectedGroundText = "{{ selected_ground.name|escapejs }}";
+          reviewGround.textContent = selectedGroundText || (manualForm.querySelector('input[name="ground"]') ? manualForm.querySelector('input[name="ground"]').value : '');
+        }
+        if (reviewDate) {
+          const dateField = manualForm.querySelector('input[name="date"]');
+          reviewDate.textContent = formatReviewDate(dateField ? dateField.value : '');
+        }
+        if (reviewName) {
+          const nameField = document.getElementById('name');
+          reviewName.textContent = nameField ? nameField.value : '';
+        }
+        if (reviewPhone) {
+          const phoneField = document.getElementById('phone');
+          reviewPhone.textContent = phoneField ? phoneField.value : '';
+        }
+        if (reviewSlots) {
+          reviewSlots.textContent = summary ? summary.textContent.replace(/^Selected:\s*/, '') : '';
+        }
+        if (reviewTotal) {
+          reviewTotal.textContent = totalEl ? totalEl.textContent : '₹0';
+        }
+        if (reviewRepeat) {
+          const repeatEnabled = repeatToggle && repeatToggle.checked;
+          if (!repeatEnabled) {
+            reviewRepeat.textContent = 'Single booking only.';
+          } else {
+            const occurrencesField = document.getElementById('repeat_occurrences');
+            const everyWeeksField = document.getElementById('repeat_every_weeks');
+            const occurrences = occurrencesField ? occurrencesField.value : '1';
+            const everyWeeks = everyWeeksField ? everyWeeksField.value : '1';
+            reviewRepeat.textContent = `Repeat enabled • ${occurrences} occurrence(s) • every ${everyWeeks} week(s).`;
+          }
+        }
+        reviewModal.show();
+      });
+
+      reviewConfirmBtn.addEventListener('click', function() {
+        reviewModal.hide();
+        if (typeof window.showProcessingOverlay === 'function') {
+          window.showProcessingOverlay('Submitting booking...', 'Finalizing the manual booking');
+        }
+        manualForm.submit();
+      });
     }
 
     updateSummary();
