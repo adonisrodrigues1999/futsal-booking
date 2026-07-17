@@ -1092,6 +1092,37 @@ class AdminInvoiceTests(TestCase):
         self.assertEqual(settlement.owner_confirmed_by, self.owner)
         self.assertIsNotNone(settlement.owner_confirmed_at)
 
+    def test_admin_online_settlements_page_renders_submit_form(self):
+        settlement_slot = Slot.objects.create(
+            ground=self.ground_one,
+            date=self.settlement_date,
+            start_time=time(13, 0),
+            end_time=time(14, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=settlement_slot,
+            customer_name='Online User',
+            customer_phone='9000000099',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='FULL',
+            payment_status='PAID',
+            paid_amount=500,
+            due_amount=0,
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            f'/dashboard/admin/online-settlements/?start={self.settlement_date.strftime("%Y-%m-%d")}&end={self.settlement_date.strftime("%Y-%m-%d")}'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'action="/dashboard/admin/online-settlements/"')
+        self.assertContains(response, 'data-processing-overlay="true"')
+        self.assertContains(response, 'type="submit" class="btn btn-sm btn-success"')
+
 
 class BookingFraudDetectionTests(TestCase):
     def setUp(self):

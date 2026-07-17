@@ -3,6 +3,17 @@
 
 {% block content %}
 <div class="container">
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
     <div>
       <h3 class="mb-1">Online Settlements</h3>
@@ -48,13 +59,13 @@
             <td>{{ row.bookings_count }}</td>
             <td>₹{{ row.collected_amount }}</td>
             <td>
-              <form method="post" class="d-flex flex-wrap gap-2">
+              <form method="post" action="{% url 'admin_online_settlements' %}" class="d-flex flex-wrap gap-2" data-processing-overlay="true">
                 {% csrf_token %}
                 <input type="hidden" name="ground_id" value="{{ row.slot__ground_id }}">
                 <input type="hidden" name="period_start" value="{{ start_date }}">
                 <input type="hidden" name="period_end" value="{{ end_date }}">
                 <input type="text" name="admin_note" class="form-control form-control-sm" style="min-width: 220px;" placeholder="Optional note">
-                <button class="btn btn-sm btn-success">Create Settlement</button>
+                <button type="submit" class="btn btn-sm btn-success">Create Settlement</button>
               </form>
             </td>
           </tr>
