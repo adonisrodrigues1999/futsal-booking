@@ -1121,7 +1121,9 @@ class AdminInvoiceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'action="/dashboard/admin/online-settlements/"')
         self.assertContains(response, 'data-processing-overlay="true"')
-        self.assertContains(response, 'type="submit" class="btn btn-sm btn-success"')
+        self.assertContains(response, 'data-inline-loading="true"')
+        self.assertContains(response, 'data-inline-submit-button')
+        self.assertContains(response, 'data-inline-spinner')
 
 
 class BookingFraudDetectionTests(TestCase):

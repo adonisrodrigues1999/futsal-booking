@@ -59,13 +59,16 @@
             <td>{{ row.bookings_count }}</td>
             <td>₹{{ row.collected_amount }}</td>
             <td>
-              <form method="post" action="{% url 'admin_online_settlements' %}" class="d-flex flex-wrap gap-2" data-processing-overlay="true">
+              <form method="post" action="{% url 'admin_online_settlements' %}" class="d-flex flex-wrap gap-2" data-processing-overlay="true" data-inline-loading="true" data-inline-loading-label="Creating...">
                 {% csrf_token %}
                 <input type="hidden" name="ground_id" value="{{ row.slot__ground_id }}">
                 <input type="hidden" name="period_start" value="{{ start_date }}">
                 <input type="hidden" name="period_end" value="{{ end_date }}">
                 <input type="text" name="admin_note" class="form-control form-control-sm" style="min-width: 220px;" placeholder="Optional note">
-                <button type="submit" class="btn btn-sm btn-success">Create Settlement</button>
+                <button type="submit" class="btn btn-sm btn-success" data-inline-submit-button>
+                  <span class="btn-label">Create Settlement</span>
+                  <span class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true" data-inline-spinner></span>
+                </button>
               </form>
             </td>
           </tr>

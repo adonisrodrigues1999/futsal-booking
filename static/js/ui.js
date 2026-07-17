@@ -77,6 +77,39 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
+  document.querySelectorAll('form[data-inline-loading="true"]').forEach(function(form) {
+    var submitButton = form.querySelector('[data-inline-submit-button]');
+    if (!submitButton) return;
+    var labelEl = submitButton.querySelector('.btn-label');
+    var spinnerEl = submitButton.querySelector('[data-inline-spinner]');
+    var defaultLabel = (labelEl && labelEl.textContent) || submitButton.textContent.trim();
+    var loadingLabel = form.getAttribute('data-inline-loading-label') || 'Working...';
+
+    form.addEventListener('submit', function() {
+      submitButton.disabled = true;
+      if (labelEl) {
+        labelEl.textContent = loadingLabel;
+      } else {
+        submitButton.textContent = loadingLabel;
+      }
+      if (spinnerEl) {
+        spinnerEl.classList.remove('d-none');
+      }
+    });
+
+    window.addEventListener('pageshow', function() {
+      submitButton.disabled = false;
+      if (labelEl) {
+        labelEl.textContent = defaultLabel;
+      } else {
+        submitButton.textContent = defaultLabel;
+      }
+      if (spinnerEl) {
+        spinnerEl.classList.add('d-none');
+      }
+    });
+  });
+
   function showAppToast(message, type, delay) {
     var toastEl = document.getElementById('app-toast');
     if (!toastEl) return;
