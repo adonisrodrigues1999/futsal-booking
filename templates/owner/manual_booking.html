@@ -339,6 +339,7 @@
           return;
         }
         event.preventDefault();
+        event.stopImmediatePropagation();
         updateSummary();
 
         if (reviewGround) {
@@ -376,7 +377,7 @@
           }
         }
         reviewModal.show();
-      });
+      }, true);
 
       reviewConfirmBtn.addEventListener('click', function() {
         reviewModal.hide();

@@ -4,18 +4,34 @@ document.addEventListener('DOMContentLoaded', function() {
     var textEl = root ? root.querySelector('.loader-text') : null;
     var subEl = root ? root.querySelector('.loader-subtext') : null;
     var lockCount = 0;
+    var autoHideTimer = null;
+    var AUTO_HIDE_MS = 4000;
 
     function show(message, subtext) {
       if (!root) return;
+      if (autoHideTimer) {
+        clearTimeout(autoHideTimer);
+        autoHideTimer = null;
+      }
       lockCount += 1;
       if (textEl && message) textEl.textContent = message;
       if (subEl && subtext) subEl.textContent = subtext;
       root.classList.add('is-active');
       root.setAttribute('aria-hidden', 'false');
+      autoHideTimer = setTimeout(function() {
+        autoHideTimer = null;
+        lockCount = 0;
+        root.classList.remove('is-active');
+        root.setAttribute('aria-hidden', 'true');
+      }, AUTO_HIDE_MS);
     }
 
     function hide(force) {
       if (!root) return;
+      if (autoHideTimer) {
+        clearTimeout(autoHideTimer);
+        autoHideTimer = null;
+      }
       if (force) lockCount = 0;
       else lockCount = Math.max(0, lockCount - 1);
       if (lockCount > 0) return;
