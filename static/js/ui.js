@@ -78,35 +78,60 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   document.querySelectorAll('form[data-inline-loading="true"]').forEach(function(form) {
-    var submitButton = form.querySelector('[data-inline-submit-button]');
-    if (!submitButton) return;
-    var labelEl = submitButton.querySelector('.btn-label');
-    var spinnerEl = submitButton.querySelector('[data-inline-spinner]');
-    var defaultLabel = (labelEl && labelEl.textContent) || submitButton.textContent.trim();
+    var submitButtons = Array.prototype.slice.call(form.querySelectorAll('[data-inline-submit-button]'));
+    if (!submitButtons.length) return;
+    var defaultLabels = submitButtons.map(function(button) {
+      var labelEl = button.querySelector('.btn-label');
+      return (labelEl && labelEl.textContent) || button.textContent.trim();
+    });
     var loadingLabel = form.getAttribute('data-inline-loading-label') || 'Working...';
+    var lastSubmitter = null;
 
-    form.addEventListener('submit', function() {
-      submitButton.disabled = true;
-      if (labelEl) {
-        labelEl.textContent = loadingLabel;
-      } else {
-        submitButton.textContent = loadingLabel;
-      }
-      if (spinnerEl) {
-        spinnerEl.classList.remove('d-none');
-      }
+    submitButtons.forEach(function(button) {
+      button.addEventListener('click', function() {
+        lastSubmitter = button;
+      });
+    });
+
+    form.addEventListener('submit', function(event) {
+      var activeButton = event.submitter || lastSubmitter || submitButtons[0];
+      submitButtons.forEach(function(button, index) {
+        button.disabled = true;
+        var labelEl = button.querySelector('.btn-label');
+        var spinnerEl = button.querySelector('[data-inline-spinner]');
+        if (button === activeButton) {
+          if (labelEl) {
+            labelEl.textContent = loadingLabel;
+          } else {
+            button.textContent = loadingLabel;
+          }
+          if (spinnerEl) {
+            spinnerEl.classList.remove('d-none');
+          }
+        } else if (labelEl) {
+          labelEl.textContent = defaultLabels[index];
+          if (spinnerEl) {
+            spinnerEl.classList.add('d-none');
+          }
+        }
+      });
     });
 
     window.addEventListener('pageshow', function() {
-      submitButton.disabled = false;
-      if (labelEl) {
-        labelEl.textContent = defaultLabel;
-      } else {
-        submitButton.textContent = defaultLabel;
-      }
-      if (spinnerEl) {
-        spinnerEl.classList.add('d-none');
-      }
+      submitButtons.forEach(function(button, index) {
+        button.disabled = false;
+        var labelEl = button.querySelector('.btn-label');
+        var spinnerEl = button.querySelector('[data-inline-spinner]');
+        if (labelEl) {
+          labelEl.textContent = defaultLabels[index];
+        } else {
+          button.textContent = defaultLabels[index];
+        }
+        if (spinnerEl) {
+          spinnerEl.classList.add('d-none');
+        }
+      });
+      lastSubmitter = null;
     });
   });
 

@@ -1998,6 +1998,7 @@ def admin_invoices(request):
                         is_paid=False,
                     )
                 else:
+                    previous_booking_ids = list(invoice.line_items.values_list('booking_id', flat=True))
                     invoice.bookings_count = bookings_count
                     invoice.charge_per_booking = charge_val
                     invoice.total_amount = total
@@ -2013,6 +2014,9 @@ def admin_invoices(request):
                         'settled_by',
                     ])
                     invoice.line_items.all().delete()
+                    stale_booking_ids = [booking_id for booking_id in previous_booking_ids if booking_id not in {booking.id for booking in period_bookings}]
+                    if stale_booking_ids:
+                        Booking.objects.filter(id__in=stale_booking_ids, invoiced_at__isnull=False).update(invoiced_at=None)
 
                 InvoiceLineItem.objects.bulk_create([
                     InvoiceLineItem(
@@ -2194,6 +2198,7 @@ def admin_online_settlements(request):
                     )
                 else:
                     settlement = existing
+                    previous_booking_ids = list(settlement.line_items.values_list('booking_id', flat=True))
                     settlement.booking_count = booking_count
                     settlement.collected_amount = collected_amount
                     settlement.admin_note = admin_note
@@ -2213,6 +2218,9 @@ def admin_online_settlements(request):
                         'owner_confirmed_by',
                     ])
                     settlement.line_items.all().delete()
+                    stale_booking_ids = [booking_id for booking_id in previous_booking_ids if booking_id not in {booking.id for booking in bookings_list}]
+                    if stale_booking_ids:
+                        Booking.objects.filter(id__in=stale_booking_ids, online_settlement__id=settlement.id).update(online_settlement=None)
 
                 OnlineSettlementLineItem.objects.bulk_create([
                     OnlineSettlementLineItem(

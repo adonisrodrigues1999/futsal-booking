@@ -1066,6 +1066,10 @@ class AdminInvoiceTests(TestCase):
         self.assertEqual(Booking.objects.get(slot=online_slot_one).online_settlement, settlement)
         self.assertEqual(Booking.objects.get(slot=online_slot_two).online_settlement, settlement)
 
+        admin_page = self.client.get('/dashboard/admin/online-settlements/')
+        self.assertEqual(admin_page.status_code, 200)
+        self.assertContains(admin_page, self.admin.name)
+
         self.client.force_login(self.admin)
         transfer_response = self.client.post(f'/dashboard/admin/online-settlements/{settlement.id}/transferred/')
         self.assertEqual(transfer_response.status_code, 302)

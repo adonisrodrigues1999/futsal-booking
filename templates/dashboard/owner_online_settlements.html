@@ -1,8 +1,20 @@
 {% extends 'base/base.html' %}
+{% load custom_filters %}
 {% block title %}Owner - Online Settlements{% endblock %}
 
 {% block content %}
 <div class="container">
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
     <div>
       <h3 class="mb-1">Online Settlement Verification</h3>
@@ -40,17 +52,23 @@
           <tr>
             <td class="fw-semibold">{{ settlement.reference }}</td>
             <td>{{ settlement.ground.name }}</td>
-            <td>{{ settlement.period_start }} to {{ settlement.period_end }}</td>
+            <td>{{ settlement.period_start|format_date_with_day }} to {{ settlement.period_end|format_date_with_day }}</td>
             <td>{{ settlement.booking_count }}</td>
             <td>₹{{ settlement.collected_amount }}</td>
             <td><span class="badge text-bg-info">{{ settlement.get_status_display }}</span></td>
             <td>
-              <form method="post" class="d-flex flex-wrap gap-2">
+              <form method="post" class="d-flex flex-wrap gap-2" data-processing-overlay="true" data-inline-loading="true" data-inline-loading-label="Sending...">
                 {% csrf_token %}
                 <input type="hidden" name="settlement_id" value="{{ settlement.id }}">
                 <input type="text" name="note" class="form-control form-control-sm" style="min-width: 220px;" placeholder="Optional note">
-                <button type="submit" name="action" value="ACKNOWLEDGE" class="btn btn-sm btn-success">I Received It</button>
-                <button type="submit" name="action" value="DISPUTE" class="btn btn-sm btn-outline-danger">Dispute</button>
+                <button type="submit" name="action" value="ACKNOWLEDGE" class="btn btn-sm btn-success" data-inline-submit-button>
+                  <span class="btn-label">I Received It</span>
+                  <span class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true" data-inline-spinner></span>
+                </button>
+                <button type="submit" name="action" value="DISPUTE" class="btn btn-sm btn-outline-danger" data-inline-submit-button>
+                  <span class="btn-label">Dispute</span>
+                  <span class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true" data-inline-spinner></span>
+                </button>
               </form>
             </td>
           </tr>
@@ -87,8 +105,14 @@
                 {{ settlement.get_status_display }}
               </span>
             </td>
-            <td>{% if settlement.transferred_at %}{{ settlement.transferred_at|date:"M j, Y g:i A" }}{% else %}-{% endif %}</td>
-            <td>{% if settlement.owner_confirmed_at %}{{ settlement.owner_confirmed_at|date:"M j, Y g:i A" }}{% else %}-{% endif %}</td>
+            <td>
+              <div>{% if settlement.transferred_at %}{{ settlement.transferred_at|date:"M j, Y g:i A" }}{% else %}-{% endif %}</div>
+              <div class="small text-muted">{% if settlement.transferred_by %}{{ settlement.transferred_by.name }}{% else %}-{% endif %}</div>
+            </td>
+            <td>
+              <div>{% if settlement.owner_confirmed_at %}{{ settlement.owner_confirmed_at|date:"M j, Y g:i A" }}{% else %}-{% endif %}</div>
+              <div class="small text-muted">{% if settlement.owner_confirmed_by %}{{ settlement.owner_confirmed_by.name }}{% else %}-{% endif %}</div>
+            </td>
           </tr>
           {% empty %}
           <tr><td colspan="6" class="text-center text-muted">No settlement history yet.</td></tr>
