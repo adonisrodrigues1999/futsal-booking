@@ -1,4 +1,5 @@
 {% extends 'base/base.html' %}
+{% load custom_filters %}
 {% block title %}Admin - Ground Invoices{% endblock %}
 
 {% block content %}
@@ -29,6 +30,77 @@
       <button class="btn btn-primary">Filter</button>
     </div>
   </form>
+
+  <div class="card p-3 mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h5 class="mb-1">Tracking Timeline</h5>
+        <div class="text-muted small">Invoice and settlement progress by ground for the selected period.</div>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Ground</th>
+            <th>Invoice Step</th>
+            <th>Settlement Step</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in finance_tracking_rows %}
+          <tr>
+            <td class="fw-semibold">{{ row.ground.name }}</td>
+            <td>
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="badge {% if row.invoice_pending_count %}text-bg-warning{% else %}text-bg-success{% endif %}">
+                  {% if row.invoice_pending_count %}Invoice Pending{% else %}Invoiced{% endif %}
+                </span>
+                <span class="small text-muted">{{ row.invoice_pending_count }} uninvoiced booking{{ row.invoice_pending_count|pluralize }}</span>
+              </div>
+              <div class="small text-muted mt-1">
+                {% if row.latest_invoice %}
+                  Latest invoice: {{ row.latest_invoice.period_start|format_date_with_day }} to {{ row.latest_invoice.period_end|format_date_with_day }}
+                  {% if row.latest_invoice.is_paid %}
+                    • Paid
+                  {% else %}
+                    • Unpaid
+                  {% endif %}
+                  {% if row.latest_invoice.settled_at %}
+                    • Settled {{ row.latest_invoice.settled_at|date:"M j, Y g:i A" }}{% if row.latest_invoice.settled_by %} by {{ row.latest_invoice.settled_by.name }}{% endif %}
+                  {% endif %}
+                {% else %}
+                  No invoice yet
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="badge {% if row.online_pending_count %}text-bg-warning{% else %}text-bg-success{% endif %}">
+                  {% if row.online_pending_count %}Settlement Pending{% else %}Settled{% endif %}
+                </span>
+                <span class="small text-muted">{{ row.online_pending_count }} pending online booking{{ row.online_pending_count|pluralize }}</span>
+              </div>
+              <div class="small text-muted mt-1">
+                {% if row.latest_settlement %}
+                  Latest settlement: {{ row.latest_settlement.period_start|format_date_with_day }} to {{ row.latest_settlement.period_end|format_date_with_day }}
+                  • {{ row.latest_settlement.get_status_display }}
+                  {% if row.latest_settlement.owner_confirmed_at %}
+                    • Owner confirmed {{ row.latest_settlement.owner_confirmed_at|date:"M j, Y g:i A" }}
+                  {% elif row.latest_settlement.transferred_at %}
+                    • Transferred {{ row.latest_settlement.transferred_at|date:"M j, Y g:i A" }}
+                  {% endif %}
+                {% else %}
+                  No settlement yet
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 
   <table class="table table-striped">
     <thead>

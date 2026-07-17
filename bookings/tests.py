@@ -1129,6 +1129,70 @@ class AdminInvoiceTests(TestCase):
         self.assertContains(response, 'data-inline-submit-button')
         self.assertContains(response, 'data-inline-spinner')
 
+    def test_admin_invoice_page_shows_tracking_timeline(self):
+        online_slot = Slot.objects.create(
+            ground=self.ground_one,
+            date=self.settlement_date,
+            start_time=time(16, 0),
+            end_time=time(17, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=online_slot,
+            customer_name='Timeline Online User',
+            customer_phone='9000000098',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='FULL',
+            payment_status='PAID',
+            paid_amount=500,
+            due_amount=0,
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            f'/dashboard/admin/invoices/?start={self.settlement_date.strftime("%Y-%m-%d")}&end={self.settlement_date.strftime("%Y-%m-%d")}'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Tracking Timeline')
+        self.assertContains(response, self.ground_one.name)
+        self.assertContains(response, 'Invoice Pending')
+        self.assertContains(response, 'Settlement Pending')
+
+    def test_admin_online_settlement_page_shows_tracking_timeline(self):
+        online_slot = Slot.objects.create(
+            ground=self.ground_one,
+            date=self.settlement_date,
+            start_time=time(16, 0),
+            end_time=time(17, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=online_slot,
+            customer_name='Timeline Online User',
+            customer_phone='9000000098',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='ONLINE',
+            payment_mode='FULL',
+            payment_status='PAID',
+            paid_amount=500,
+            due_amount=0,
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            f'/dashboard/admin/online-settlements/?start={self.settlement_date.strftime("%Y-%m-%d")}&end={self.settlement_date.strftime("%Y-%m-%d")}'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Tracking Timeline')
+        self.assertContains(response, self.ground_one.name)
+        self.assertContains(response, 'Invoice Pending')
+        self.assertContains(response, 'Settlement Pending')
+
 
 class BookingFraudDetectionTests(TestCase):
     def setUp(self):

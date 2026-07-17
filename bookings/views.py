@@ -113,6 +113,62 @@ def _online_collected_amount_for_booking(booking):
     return Decimal(str(booking.paid_amount or 0)).quantize(Decimal('0.01'))
 
 
+def _finance_tracking_rows(grounds, start_date, end_date):
+    ground_list = list(grounds)
+    ground_ids = [ground.id for ground in ground_list]
+
+    invoice_pending_counts = {
+        row['slot__ground']: row['count']
+        for row in Booking.objects.filter(
+            status='BOOKED',
+            invoiced_at__isnull=True,
+            slot__ground_id__in=ground_ids,
+            slot__date__gte=start_date,
+            slot__date__lte=end_date,
+        ).values('slot__ground').annotate(count=Count('id'))
+    }
+    online_pending_counts = {
+        row['slot__ground']: row['count']
+        for row in Booking.objects.filter(
+            status='BOOKED',
+            booking_source='ONLINE',
+            online_settlement__isnull=True,
+            slot__ground_id__in=ground_ids,
+            slot__date__gte=start_date,
+            slot__date__lte=end_date,
+        ).values('slot__ground').annotate(count=Count('id'))
+    }
+
+    latest_invoices = {}
+    for invoice in (
+        GroundInvoice.objects
+        .filter(ground_id__in=ground_ids, period_start__lte=end_date, period_end__gte=start_date)
+        .select_related('settled_by')
+        .order_by('ground_id', '-created_at')
+    ):
+        latest_invoices.setdefault(invoice.ground_id, invoice)
+
+    latest_settlements = {}
+    for settlement in (
+        OnlineSettlement.objects
+        .filter(ground_id__in=ground_ids, period_start__lte=end_date, period_end__gte=start_date)
+        .select_related('created_by', 'transferred_by', 'owner_confirmed_by')
+        .order_by('ground_id', '-created_at')
+    ):
+        latest_settlements.setdefault(settlement.ground_id, settlement)
+
+    rows = []
+    for ground in ground_list:
+        rows.append({
+            'ground': ground,
+            'invoice_pending_count': invoice_pending_counts.get(ground.id, 0),
+            'online_pending_count': online_pending_counts.get(ground.id, 0),
+            'latest_invoice': latest_invoices.get(ground.id),
+            'latest_settlement': latest_settlements.get(ground.id),
+        })
+    return rows
+
+
 def _hours_to_slot_start(slot):
     now_dt = timezone.localtime(timezone.now())
     return (_slot_start_datetime(slot) - now_dt).total_seconds() / 3600
@@ -2061,6 +2117,7 @@ def admin_invoices(request):
         'end_date': end_date,
         'existing_invoices': existing_invoices,
         'selected_ground': selected_ground,
+        'finance_tracking_rows': _finance_tracking_rows(grounds, start_date, end_date),
     })
 
 
@@ -2108,6 +2165,8 @@ def admin_online_settlements(request):
             end_date = timezone.localdate()
     except Exception:
         end_date = timezone.localdate()
+
+    grounds = Ground.objects.all().order_by('name')
 
     pending_bookings = Booking.objects.filter(
         status='BOOKED',
@@ -2244,6 +2303,7 @@ def admin_online_settlements(request):
         'end_date': end_date,
         'pending_rows': pending_rows,
         'settlements': settlements,
+        'finance_tracking_rows': _finance_tracking_rows(grounds, start_date, end_date),
     })
 
 
