@@ -251,6 +251,13 @@ class RegistrationResilienceTests(TestCase):
         self.assertContains(response, 'free booking credits')
         self.assertContains(response, 'data-release-notes-version="2026-07-16-v1"')
 
+    def test_login_page_sets_csrf_cookie(self):
+        response = self.client.get('/accounts/login/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('csrftoken', response.cookies)
+        self.assertTrue(response.cookies['csrftoken'].value)
+
 
 class CsrfFailurePageTests(TestCase):
     def setUp(self):
@@ -286,3 +293,16 @@ class CsrfFailurePageTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertContains(response, 'Report via WhatsApp', status_code=403)
         self.assertContains(response, 'Request blocked', status_code=403)
+
+    def test_login_csrf_failure_shows_retry_link(self):
+        client = Client(enforce_csrf_checks=True)
+        response = client.post('/accounts/login/', {
+            'email': 'missing@example.com',
+            'password': 'password123',
+            'next': '/',
+        })
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, 'Continue to Login', status_code=403)
+        self.assertContains(response, 'missing%40example.com', status_code=403)
+        self.assertContains(response, 'Your browser blocked the login submission', status_code=403)

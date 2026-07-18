@@ -5,6 +5,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout, authenticate
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.core.mail import send_mail
 from django.conf import settings
 from django.urls import reverse
@@ -60,6 +61,29 @@ def _build_support_issue_link(*, request, reason):
 
 
 def csrf_failure(request, reason=""):
+    retry_login_url = None
+    login_prompt = None
+    if request.path == reverse('login') and request.method == 'POST':
+        identifier = (
+            request.POST.get('email')
+            or request.POST.get('phone')
+            or request.GET.get('identifier')
+            or ''
+        ).strip()
+        next_url = (request.POST.get('next') or request.GET.get('next') or '').strip()
+        retry_login_url = reverse('login')
+        query_bits = []
+        if identifier:
+            query_bits.append(f'identifier={quote(identifier)}')
+            login_prompt = (
+                'Your browser blocked the login submission. '
+                'Continue to login after reporting the issue; your details are preserved.'
+            )
+        if next_url:
+            query_bits.append(f'next={quote(next_url)}')
+        if query_bits:
+            retry_login_url = f"{retry_login_url}?{'&'.join(query_bits)}"
+
     support_link = _build_support_issue_link(
         request=request,
         reason=reason or "CSRF verification failed",
@@ -67,6 +91,8 @@ def csrf_failure(request, reason=""):
     return render(request, 'errors/csrf_failure.html', {
         'reason': reason or 'CSRF verification failed',
         'support_link': support_link,
+        'retry_login_url': retry_login_url,
+        'login_prompt': login_prompt,
     }, status=403)
 
 
@@ -190,6 +216,7 @@ def register(request):
     return render(request, 'accounts/register.html', {'form': form})
 
 
+@ensure_csrf_cookie
 def login_view(request):
     if request.user.is_authenticated:
         return redirect('home')

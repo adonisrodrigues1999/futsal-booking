@@ -16,8 +16,16 @@
       <div class="alert alert-warning text-start">
         Please refresh the page and try again. If it still fails, report it so we can check logs and booking activity.
       </div>
+      {% if login_prompt %}
+        <div class="alert alert-info text-start">
+          {{ login_prompt }}
+        </div>
+      {% endif %}
       <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center">
         <a href="{{ support_link }}" target="_blank" rel="noopener" class="btn btn-success">Report via WhatsApp</a>
+        {% if retry_login_url %}
+          <a href="{{ retry_login_url }}" class="btn btn-primary">Continue to Login</a>
+        {% endif %}
         <a href="/" class="btn btn-outline-secondary">Go Home</a>
       </div>
       {% if reason %}
