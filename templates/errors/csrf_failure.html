@@ -6,16 +6,30 @@
   <div class="card shadow-sm mx-auto" style="max-width: 720px;">
     <div class="card-body p-4 p-md-5 text-center">
       <div class="mb-3">
-        <span class="badge text-bg-danger">Request blocked</span>
+        {% if recovered_redirect_url %}
+          <span class="badge text-bg-success">Login recovered</span>
+        {% else %}
+          <span class="badge text-bg-danger">Request blocked</span>
+        {% endif %}
       </div>
-      <h3 class="mb-3">We could not verify your request</h3>
-      <p class="text-muted mb-4">
-        This usually happens when the page is stale, cookies are blocked, or you moved between
-        `footbook.online` and `www.footbook.online`.
-      </p>
-      <div class="alert alert-warning text-start">
-        Please refresh the page and try again. If it still fails, report it so we can check logs and booking activity.
-      </div>
+      {% if recovered_redirect_url %}
+        <h3 class="mb-3">You are signed in</h3>
+        <p class="text-muted mb-4">
+          Your login details were verified, your email is marked verified, and this issue has been logged for support.
+        </p>
+        <div class="alert alert-info text-start">
+          You can report this issue on WhatsApp if you want us to review the logs. You will be redirected automatically.
+        </div>
+      {% else %}
+        <h3 class="mb-3">We could not verify your request</h3>
+        <p class="text-muted mb-4">
+          This usually happens when the page is stale, cookies are blocked, or you moved between
+          footbook.online and www.footbook.online.
+        </p>
+        <div class="alert alert-warning text-start">
+          Please refresh the page and try again. If it still fails, report it so we can check logs and booking activity.
+        </div>
+      {% endif %}
       {% if login_prompt %}
         <div class="alert alert-info text-start">
           {{ login_prompt }}
@@ -23,6 +37,9 @@
       {% endif %}
       <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center">
         <a href="{{ support_link }}" target="_blank" rel="noopener" class="btn btn-success">Report via WhatsApp</a>
+        {% if recovered_redirect_url %}
+          <a href="{{ recovered_redirect_url }}" class="btn btn-primary">Continue</a>
+        {% endif %}
         {% if retry_login_url %}
           <a href="{{ retry_login_url }}" class="btn btn-primary">Continue to Login</a>
         {% endif %}
@@ -34,4 +51,11 @@
     </div>
   </div>
 </div>
+{% if recovered_redirect_url %}
+  <script>
+    window.setTimeout(function() {
+      window.location.href = "{{ recovered_redirect_url|escapejs }}";
+    }, 6000);
+  </script>
+{% endif %}
 {% endblock %}

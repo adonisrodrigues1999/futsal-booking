@@ -258,6 +258,54 @@ class RegistrationResilienceTests(TestCase):
         self.assertIn('csrftoken', response.cookies)
         self.assertTrue(response.cookies['csrftoken'].value)
 
+    def test_csrf_failed_login_with_valid_credentials_recovers_session(self):
+        user = User.objects.create_user(
+            email='csrf-user@example.com',
+            phone_number='9999912347',
+            name='CSRF User',
+            password='password123',
+            role='customer',
+            email_verified=False,
+        )
+        EmailVerification.objects.create(user=user)
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post('/accounts/login/?next=/', {
+            'email': 'csrf-user@example.com',
+            'password': 'password123',
+            'next': '/',
+        }, HTTP_REFERER='http://footbook.online/accounts/login/?next=/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'You are signed in')
+        self.assertContains(response, 'Report via WhatsApp')
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertEqual(int(csrf_client.session['_auth_user_id']), user.id)
+        self.assertTrue(EmailVerification.objects.filter(user=user, is_verified=True).exists())
+
+    def test_csrf_failed_login_with_invalid_credentials_stays_blocked(self):
+        user = User.objects.create_user(
+            email='csrf-invalid@example.com',
+            phone_number='9999912348',
+            name='CSRF Invalid',
+            password='password123',
+            role='customer',
+            email_verified=False,
+        )
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post('/accounts/login/', {
+            'email': 'csrf-invalid@example.com',
+            'password': 'wrong-password',
+        }, HTTP_REFERER='http://footbook.online/accounts/login/')
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, 'We could not verify your request', status_code=403)
+        user.refresh_from_db()
+        self.assertFalse(user.email_verified)
+        self.assertNotIn('_auth_user_id', csrf_client.session)
+
 
 class CsrfFailurePageTests(TestCase):
     def setUp(self):

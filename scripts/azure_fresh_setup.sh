@@ -135,6 +135,7 @@ fi
 az webapp config set \
   --resource-group "$RESOURCE_GROUP" \
   --name "$WEBAPP_NAME" \
+  --https-only true \
   --startup-file "python -m config.startup" \
   --output none
 
@@ -146,6 +147,13 @@ az webapp config appsettings set \
     SECRET_KEY="$DJANGO_SECRET_KEY" \
     ALLOWED_HOSTS="$WEBAPP_NAME.azurewebsites.net,.azurewebsites.net,footbook.online,www.footbook.online" \
     CSRF_TRUSTED_ORIGINS="https://$WEBAPP_NAME.azurewebsites.net,https://*.azurewebsites.net,https://footbook.online,https://www.footbook.online" \
+    SESSION_COOKIE_DOMAIN=.footbook.online \
+    CSRF_COOKIE_DOMAIN=.footbook.online \
+    SESSION_COOKIE_SECURE=True \
+    CSRF_COOKIE_SECURE=True \
+    SESSION_COOKIE_SAMESITE=Lax \
+    CSRF_COOKIE_SAMESITE=Lax \
+    SECURE_SSL_REDIRECT=True \
     EMAIL_HOST=smtp.gmail.com \
     EMAIL_PORT=587 \
     EMAIL_USE_TLS=True \

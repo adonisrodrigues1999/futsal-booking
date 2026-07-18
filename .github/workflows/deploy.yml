@@ -60,10 +60,16 @@ jobs:
           RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
         run: |
           settings=(
+            DJANGO_DEBUG=False
             ALLOWED_HOSTS="$AZURE_WEBAPP_NAME.azurewebsites.net,.azurewebsites.net,footbook.online,www.footbook.online"
             CSRF_TRUSTED_ORIGINS="https://$AZURE_WEBAPP_NAME.azurewebsites.net,https://*.azurewebsites.net,https://footbook.online,https://www.footbook.online"
             SESSION_COOKIE_DOMAIN=.footbook.online
             CSRF_COOKIE_DOMAIN=.footbook.online
+            SESSION_COOKIE_SECURE=True
+            CSRF_COOKIE_SECURE=True
+            SESSION_COOKIE_SAMESITE=Lax
+            CSRF_COOKIE_SAMESITE=Lax
+            SECURE_SSL_REDIRECT=True
             EMAIL_HOST=smtp.gmail.com
             EMAIL_PORT=587
             EMAIL_USE_TLS=True
@@ -85,6 +91,7 @@ jobs:
           az webapp config set \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --name "$AZURE_WEBAPP_NAME" \
+            --https-only true \
             --startup-file "python -m config.startup"
 
       - name: Build clean deployment package

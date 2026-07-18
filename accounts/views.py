@@ -11,7 +11,7 @@ from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.http import url_has_allowed_host_and_scheme, urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.forms import SetPasswordForm
 from datetime import timedelta
@@ -45,11 +45,19 @@ def _build_support_issue_link(*, request, reason):
     user = getattr(request, 'user', None)
     user_name = getattr(user, 'name', '') if user and getattr(user, 'is_authenticated', False) else ''
     user_email = getattr(user, 'email', '') if user and getattr(user, 'is_authenticated', False) else ''
+    submitted_identifier = ''
+    if request.method == 'POST':
+        submitted_identifier = (
+            request.POST.get('email')
+            or request.POST.get('phone')
+            or ''
+        ).strip()
     message = (
         "Hi FootBook, I hit a production error.\n\n"
         f"Reason: {reason}\n"
         f"User: {user_name or '-'}\n"
-        f"Email: {user_email or '-'}\n"
+        f"Email: {user_email or (submitted_identifier if '@' in submitted_identifier else '-')}\n"
+        f"Login identifier: {submitted_identifier or '-'}\n"
         f"Path: {request.path}\n"
         f"Method: {request.method}\n"
         f"Referer: {request.META.get('HTTP_REFERER', '-')}\n"
@@ -60,16 +68,108 @@ def _build_support_issue_link(*, request, reason):
     return f"https://wa.me/{WHATSAPP_SUPPORT_NUMBER}?text={quote(message)}"
 
 
+def _safe_next_url(request, next_url):
+    if not next_url:
+        return ''
+    return next_url if url_has_allowed_host_and_scheme(
+        url=next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ) else ''
+
+
+def _post_login_redirect_url(request, user, *, next_url='', slot_id=''):
+    if slot_id:
+        try:
+            from bookings.models import Slot
+            slot = Slot.objects.select_related('ground').get(id=slot_id)
+            return f'/grounds/{slot.ground.id}/?date={slot.date}'
+        except Exception:
+            logger.exception("Unable to build slot redirect for login slot_id=%s", slot_id)
+
+    safe_next = _safe_next_url(request, next_url)
+    if safe_next:
+        return safe_next
+
+    if user.role == 'admin':
+        return reverse('admin_dashboard')
+    if user.role == 'owner':
+        return reverse('owner_dashboard')
+    return reverse('customer_dashboard')
+
+
+def _recover_login_after_csrf_failure(request):
+    if request.path != reverse('login') or request.method != 'POST':
+        return None
+
+    form = UserLoginForm(request.POST)
+    if not form.is_valid():
+        return None
+
+    email = form.cleaned_data.get('email')
+    phone = form.cleaned_data.get('phone')
+    password = form.cleaned_data['password']
+    user_obj = None
+    user = None
+
+    try:
+        if email:
+            user_obj = User.objects.get(email__iexact=email)
+        elif phone:
+            user_obj = User.objects.get(phone_number=phone)
+    except User.DoesNotExist:
+        return None
+
+    if user_obj is not None:
+        user = authenticate(request, username=user_obj.email, password=password)
+    if user is None:
+        return None
+
+    if not user.email_verified:
+        user.email_verified = True
+        user.save(update_fields=['email_verified'])
+        EmailVerification.objects.filter(user=user).update(is_verified=True)
+        logger.warning("Auto-verified email during CSRF login recovery for user_id=%s", user.id)
+
+    login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+    return _post_login_redirect_url(
+        request,
+        user,
+        next_url=request.POST.get('next', ''),
+        slot_id=request.POST.get('slot', ''),
+    )
+
+
 def csrf_failure(request, reason=""):
-    retry_login_url = None
-    login_prompt = None
-    if request.path == reverse('login') and request.method == 'POST':
-        identifier = (
+    recovered_redirect_url = _recover_login_after_csrf_failure(request)
+    submitted_identifier = ''
+    if request.method == 'POST':
+        submitted_identifier = (
             request.POST.get('email')
             or request.POST.get('phone')
-            or request.GET.get('identifier')
             or ''
         ).strip()
+    logger.warning(
+        "CSRF failure path=%s method=%s reason=%s referer=%s user_agent=%s ip=%s identifier=%s recovered=%s",
+        request.path,
+        request.method,
+        reason or "CSRF verification failed",
+        request.META.get('HTTP_REFERER', '-'),
+        request.META.get('HTTP_USER_AGENT', '-'),
+        request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '-')),
+        submitted_identifier or '-',
+        bool(recovered_redirect_url),
+    )
+
+    retry_login_url = None
+    login_prompt = None
+    if recovered_redirect_url:
+        login_prompt = (
+            'We verified your login details, marked your email as verified, and signed you in. '
+            'This issue has been logged for FootBook support. You will be redirected automatically.'
+        )
+    elif request.path == reverse('login') and request.method == 'POST':
+        identifier = submitted_identifier or request.GET.get('identifier', '').strip()
         next_url = (request.POST.get('next') or request.GET.get('next') or '').strip()
         retry_login_url = reverse('login')
         query_bits = []
@@ -93,7 +193,8 @@ def csrf_failure(request, reason=""):
         'support_link': support_link,
         'retry_login_url': retry_login_url,
         'login_prompt': login_prompt,
-    }, status=403)
+        'recovered_redirect_url': recovered_redirect_url,
+    }, status=200 if recovered_redirect_url else 403)
 
 
 def register(request):
@@ -285,27 +386,7 @@ def login_view(request):
                 if user.email_verified:
                     login(request, user)
                     messages.success(request, f'Welcome back, {user.name}!')
-
-                    # If there's a slot to redirect to, go there
-                    if slot_id:
-                        try:
-                            from bookings.models import Slot
-                            slot = Slot.objects.get(id=slot_id)
-                            return redirect(f'/grounds/{slot.ground.id}/?date={slot.date}')
-                        except Exception:
-                            pass
-
-                    # If there's a next_url, use it
-                    if next_url:
-                        return redirect(next_url)
-
-                    # Redirect based on user role
-                    if user.role == 'admin':
-                        return redirect('admin_dashboard')
-                    elif user.role == 'owner':
-                        return redirect('owner_dashboard')
-                    else:
-                        return redirect('customer_dashboard')
+                    return redirect(_post_login_redirect_url(request, user, next_url=next_url, slot_id=slot_id))
                 else:
                     # User exists but email not verified - show resend option
                     messages.error(request, 'Please verify your email before logging in.')
