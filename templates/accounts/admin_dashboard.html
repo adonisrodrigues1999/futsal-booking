@@ -166,8 +166,7 @@
               <td>{{ owner.grounds_count }}</td>
               <td>
                 <a href="{% url 'create_ground' owner.id %}" class="btn btn-sm btn-success">Create Ground</a>
-                <a href="#" class="btn btn-sm btn-outline-primary">View Grounds</a>
-                <a href="#" class="btn btn-sm btn-outline-secondary">Edit</a>
+                <a href="{% url 'admin_dashboard' %}?owner={{ owner.id }}#all-grounds" class="btn btn-sm btn-outline-primary">View Grounds</a>
               </td>
             </tr>
             {% empty %}
@@ -253,9 +252,14 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="all-grounds">
     <div class="card-body">
-      <h5 class="mb-3">All Grounds</h5>
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h5 class="mb-0">{% if selected_owner %}Grounds for {{ selected_owner.name }}{% else %}All Grounds{% endif %}</h5>
+        {% if selected_owner %}
+          <a href="{% url 'admin_dashboard' %}#all-grounds" class="btn btn-sm btn-outline-secondary">Show All Grounds</a>
+        {% endif %}
+      </div>
       <div class="table-responsive">
         <table class="table table-striped table-hover align-middle">
           <thead>
@@ -263,18 +267,24 @@
               <th>Name</th>
               <th>Location</th>
               <th>Owner</th>
-              <th>Day/Night Price</th>
+              <th>Rates</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {% for ground in grounds %}
+            {% for ground in displayed_grounds %}
             <tr>
               <td>{{ ground.name }}</td>
               <td>{{ ground.location }}</td>
               <td>{{ ground.owner.name }}</td>
-              <td>₹{{ ground.day_price }} / ₹{{ ground.night_price }}</td>
+              <td>
+                {% for rate in ground.groundpricing_set.all %}
+                  <div class="small">{{ rate.start_time|time:"g:i A" }} - {{ rate.end_time|time:"g:i A" }}: ₹{{ rate.price_per_hour }}</div>
+                {% empty %}
+                  ₹{{ ground.day_price }} / ₹{{ ground.night_price }}
+                {% endfor %}
+              </td>
               <td>
                 {% if ground.is_active %}
                   <span class="badge bg-success">Available</span>

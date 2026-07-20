@@ -596,12 +596,12 @@ class BookingFlowTests(TestCase):
         self.assertEqual(attendance.marked_by, self.owner)
 
     def test_last_minute_dynamic_pricing_discount(self):
-        fixed_now = timezone.make_aware(datetime(2026, 6, 25, 17, 40), timezone.get_current_timezone())
+        fixed_now = timezone.make_aware(datetime(2026, 6, 25, 20, 55), timezone.get_current_timezone())
         slot = Slot.objects.create(
             ground=self.ground,
             date=fixed_now.date(),
-            start_time=time(18, 0),
-            end_time=time(19, 0),
+            start_time=time(21, 0),
+            end_time=time(22, 0),
             is_booked=False,
         )
 
@@ -609,9 +609,22 @@ class BookingFlowTests(TestCase):
             self.assertEqual(_slot_price_for_slot(slot), self.ground.night_price - 101)
 
     def test_last_minute_discount_uses_lower_amount_for_sub_700_bookings(self):
-        fixed_now = timezone.make_aware(datetime(2026, 6, 25, 17, 40), timezone.get_current_timezone())
+        fixed_now = timezone.make_aware(datetime(2026, 6, 25, 20, 55), timezone.get_current_timezone())
         self.ground.night_price = 650
         self.ground.save(update_fields=['night_price'])
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=fixed_now.date(),
+            start_time=time(21, 0),
+            end_time=time(22, 0),
+            is_booked=False,
+        )
+
+        with patch('bookings.views.timezone.now', return_value=fixed_now):
+            self.assertEqual(_slot_price_for_slot(slot), 599)
+
+    def test_last_minute_discount_skips_peak_evening_slots(self):
+        fixed_now = timezone.make_aware(datetime(2026, 6, 25, 17, 55), timezone.get_current_timezone())
         slot = Slot.objects.create(
             ground=self.ground,
             date=fixed_now.date(),
@@ -621,7 +634,7 @@ class BookingFlowTests(TestCase):
         )
 
         with patch('bookings.views.timezone.now', return_value=fixed_now):
-            self.assertEqual(_slot_price_for_slot(slot), 599)
+            self.assertEqual(_slot_price_for_slot(slot), self.ground.night_price)
 
     def test_booked_slot_does_not_receive_dynamic_discount(self):
         fixed_now = timezone.make_aware(datetime(2026, 6, 25, 9, 40), timezone.get_current_timezone())
@@ -743,12 +756,12 @@ class BookingFlowTests(TestCase):
         self.assertEqual(bookings.first().slot, first_slot)
 
     def test_discounted_free_slot_bypasses_razorpay(self):
-        fixed_now = timezone.make_aware(datetime(2026, 6, 25, 16, 30), timezone.get_current_timezone())
+        fixed_now = timezone.make_aware(datetime(2026, 6, 25, 15, 55), timezone.get_current_timezone())
         slot = Slot.objects.create(
             ground=self.ground,
             date=fixed_now.date(),
-            start_time=time(17, 0),
-            end_time=time(18, 0),
+            start_time=time(16, 0),
+            end_time=time(17, 0),
             is_booked=False,
         )
 

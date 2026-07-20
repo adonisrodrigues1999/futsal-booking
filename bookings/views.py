@@ -77,14 +77,18 @@ def _is_morning_slot(slot_time):
 
 
 def _slot_price(ground, slot_time):
-    return ground.day_price if _is_day_slot(slot_time) else ground.night_price
+    return ground.get_price_for_time(slot_time)
+
+
+def _is_peak_discount_blocked(slot_time):
+    return 17 <= slot_time.hour < 21
 
 
 def _slot_discount(slot):
     if slot.is_booked:
         return 0
     minutes_to_start = (_slot_start_datetime(slot) - timezone.localtime(timezone.now())).total_seconds() / 60
-    if 0 < minutes_to_start <= 30:
+    if 0 < minutes_to_start <= 10 and not _is_peak_discount_blocked(slot.start_time):
         base_price = _slot_price(slot.ground, slot.start_time)
         return 51 if base_price < 700 else 101
     return 0
@@ -608,7 +612,11 @@ def tournament_list(request):
 
 @login_required
 def ground_slots(request, ground_id):
-    ground = get_object_or_404(Ground, id=ground_id, is_active=True)
+    ground = get_object_or_404(
+        Ground.objects.prefetch_related('groundpricing_set'),
+        id=ground_id,
+        is_active=True,
+    )
     if request.method == 'POST' and request.user.is_authenticated:
         action = (request.POST.get('action') or '').strip()
         if action == 'review':

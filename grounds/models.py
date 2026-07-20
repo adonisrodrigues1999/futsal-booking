@@ -2,6 +2,15 @@ from django.db import models
 from django.conf import settings
 import uuid
 
+
+def _time_in_range(check_time, start_time, end_time):
+    if start_time == end_time:
+        return True
+    if start_time < end_time:
+        return start_time <= check_time < end_time
+    return check_time >= start_time or check_time < end_time
+
+
 class Ground(models.Model):
     name = models.CharField(max_length=100)
     location = models.CharField(max_length=200)
@@ -29,12 +38,25 @@ class Ground(models.Model):
     def __str__(self):
         return self.name
 
+    def get_price_for_time(self, slot_time):
+        pricing_blocks = list(self.groundpricing_set.all())
+        for pricing in pricing_blocks:
+            if _time_in_range(slot_time, pricing.start_time, pricing.end_time):
+                return pricing.price_per_hour
+        return self.day_price if 6 <= slot_time.hour < 18 else self.night_price
+
+    def get_price(self, start_time, hours=1):
+        return self.get_price_for_time(start_time) * max(int(hours or 1), 1)
+
 
 class GroundPricing(models.Model):
     ground = models.ForeignKey(Ground, on_delete=models.CASCADE)
     start_time = models.TimeField()
     end_time = models.TimeField()
     price_per_hour = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ['start_time', 'end_time']
 
 
 class Tournament(models.Model):

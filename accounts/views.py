@@ -592,7 +592,16 @@ def admin_dashboard(request):
     ground_owners = User.objects.filter(role='owner').annotate(
         grounds_count=Count('ground', distinct=True),
     )
-    grounds = Ground.objects.select_related('owner').all()
+    owner_filter = request.GET.get('owner')
+    selected_owner = None
+    grounds = Ground.objects.select_related('owner').prefetch_related('groundpricing_set').all()
+    displayed_grounds = grounds
+    if owner_filter:
+        try:
+            selected_owner = ground_owners.get(id=owner_filter)
+            displayed_grounds = grounds.filter(owner=selected_owner)
+        except (User.DoesNotExist, ValueError):
+            selected_owner = None
     customers = User.objects.filter(role='customer')
     booked = Booking.objects.filter(status='BOOKED')
 
@@ -693,6 +702,8 @@ def admin_dashboard(request):
     context = {
         'ground_owners': ground_owners,
         'grounds': grounds,
+        'displayed_grounds': displayed_grounds,
+        'selected_owner': selected_owner,
         'customers': customers,
         'total_owners': ground_owners.count(),
         'total_grounds': grounds.count(),
@@ -751,14 +762,13 @@ def create_ground(request, owner_id):
         return redirect('admin_dashboard')
 
     if request.method == 'POST':
-        form = GroundCreationForm(request.POST, owner=owner)
+        form = GroundCreationForm(request.POST, request.FILES, owner=owner)
         if form.is_valid():
             ground = form.save()
             create_initial_slots_for_ground(
                 ground=ground,
                 days=14,
                 start_date=timezone.localdate(),
-                slot_config=form.cleaned_data,
             )
 
             messages.success(request, f'Ground "{ground.name}" created successfully with slots for {owner.name}!')

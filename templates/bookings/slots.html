@@ -13,6 +13,13 @@
         <a href="https://wa.me/?text={{ ground.share_url|urlencode }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success">Share Ground</a>
       </div>
     </div>
+    <div class="ground-slot-photo">
+      {% if ground.image %}
+        <img src="{{ ground.image }}" alt="{{ ground.name }}">
+      {% else %}
+        <img src="{% url 'ground_image' ground.id %}" alt="{{ ground.name }}" onerror="this.onerror=null;this.src='/static/images/ground_placeholder.svg'">
+      {% endif %}
+    </div>
     <form class="d-flex align-items-center gap-2 flex-wrap" method="get" id="slot-date-form">
       <label class="small text-muted mb-0" for="slot-date-picker">Pick date</label>
       <input

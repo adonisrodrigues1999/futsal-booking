@@ -21,7 +21,7 @@
         {% endfor %}
       {% endif %}
 
-      <form method="post" id="create-ground-form">
+      <form method="post" enctype="multipart/form-data" id="create-ground-form">
         {% csrf_token %}
 
         <div class="panel-soft mb-3">
@@ -40,17 +40,14 @@
           </div>
 
           <div class="row">
-            <div class="col-md-6 mb-3">
-              <label for="{{ form.day_price.id_for_label }}" class="form-label">Day Price (₹)</label>
-              {{ form.day_price }}
-              {% if form.day_price.errors %}<div class="text-danger small">{% for error in form.day_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              <div class="form-text">Used for daytime slots (example: 6 AM - 6 PM).</div>
+            <div class="col-md-7 mb-3">
+              <label for="{{ form.image_upload.id_for_label }}" class="form-label">Ground Photo</label>
+              {{ form.image_upload }}
+              {% if form.image_upload.errors %}<div class="text-danger small">{% for error in form.image_upload.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              <div class="form-text">Shown on ground cards and slot pages.</div>
             </div>
-            <div class="col-md-6 mb-3">
-              <label for="{{ form.night_price.id_for_label }}" class="form-label">Night Price (₹)</label>
-              {{ form.night_price }}
-              {% if form.night_price.errors %}<div class="text-danger small">{% for error in form.night_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              <div class="form-text">Used for nighttime slots (example: 6 PM - 1 AM).</div>
+            <div class="col-md-5 mb-3">
+              <img id="ground-photo-preview" class="ground-photo-preview d-none" alt="Ground photo preview">
             </div>
           </div>
         </div>
@@ -59,90 +56,118 @@
           <h6 class="panel-title">Operating Hours</h6>
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label class="form-label">Opening Time</label>
-              <div class="time-select-row">
-                <select class="form-select time-hour" data-target="opening_time_hour">
-                  <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
-                  <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
-                  <option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
-                </select>
-                <select class="form-select time-minute" data-target="opening_time_min"><option value="00">:00</option><option value="30">:30</option></select>
-                <select class="form-select time-ampm" data-target="opening_time_ampm"><option value="AM">AM</option><option value="PM">PM</option></select>
-              </div>
-              <input type="hidden" name="opening_time" id="opening_time_hidden" />
+              <label for="{{ form.opening_time.id_for_label }}" class="form-label">Opening Time</label>
+              {{ form.opening_time }}
+              {% if form.opening_time.errors %}<div class="text-danger small">{% for error in form.opening_time.errors %}{{ error }}{% endfor %}</div>{% endif %}
             </div>
 
             <div class="col-md-6 mb-3">
-              <label class="form-label">Closing Time</label>
-              <div class="time-select-row">
-                <select class="form-select time-hour" data-target="closing_time_hour">
-                  <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
-                  <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
-                  <option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
-                </select>
-                <select class="form-select time-minute" data-target="closing_time_min"><option value="00">:00</option><option value="30">:30</option></select>
-                <select class="form-select time-ampm" data-target="closing_time_ampm"><option value="AM">AM</option><option value="PM">PM</option></select>
-              </div>
-              <input type="hidden" name="closing_time" id="closing_time_hidden" />
+              <label for="{{ form.closing_time.id_for_label }}" class="form-label">Closing Time</label>
+              {{ form.closing_time }}
+              {% if form.closing_time.errors %}<div class="text-danger small">{% for error in form.closing_time.errors %}{{ error }}{% endfor %}</div>{% endif %}
             </div>
           </div>
         </div>
 
         <div class="panel-soft mb-3">
-          <h6 class="panel-title">Optional Slot Ranges</h6>
-          <p class="text-muted mb-3">Leave defaults if you do not need custom slot ranges.</p>
-
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Slot 1 Start</label>
-              <div class="time-select-row">
-                <select class="form-select" id="slot1_start_hour"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select>
-                <select class="form-select" id="slot1_start_min"><option value="00">:00</option><option value="30">:30</option></select>
-                <select class="form-select" id="slot1_start_ampm"><option>AM</option><option>PM</option></select>
-              </div>
-              <input type="hidden" name="slot_1_start" id="slot_1_start_hidden" />
+          <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <div>
+              <h6 class="panel-title mb-1">Dynamic Rate Blocks</h6>
+              <p class="text-muted mb-0 small">Use 1 to 4 connected rate blocks from opening to closing. One block can cover the full day.</p>
             </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Slot 1 End</label>
-              <div class="time-select-row">
-                <select class="form-select" id="slot1_end_hour"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select>
-                <select class="form-select" id="slot1_end_min"><option value="00">:00</option><option value="30">:30</option></select>
-                <select class="form-select" id="slot1_end_ampm"><option>AM</option><option>PM</option></select>
-              </div>
-              <input type="hidden" name="slot_1_end" id="slot_1_end_hidden" />
-            </div>
-          </div>
-          <div class="row mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Slot 1 Price</label>
-              {{ form.slot_1_price }}
-            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="add-rate-block">Add Rate</button>
           </div>
 
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Slot 2 Start</label>
-              <div class="time-select-row">
-                <select class="form-select" id="slot2_start_hour"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select>
-                <select class="form-select" id="slot2_start_min"><option value="00">:00</option><option value="30">:30</option></select>
-                <select class="form-select" id="slot2_start_ampm"><option>AM</option><option>PM</option></select>
+          <div class="rate-block" data-rate-block="1">
+            <div class="rate-block-head"><strong>Rate 1</strong></div>
+            <div class="row g-2">
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_1_start.id_for_label }}">Start</label>
+                {{ form.slot_1_start }}
+                {% if form.slot_1_start.errors %}<div class="text-danger small">{% for error in form.slot_1_start.errors %}{{ error }}{% endfor %}</div>{% endif %}
               </div>
-              <input type="hidden" name="slot_2_start" id="slot_2_start_hidden" />
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Slot 2 End</label>
-              <div class="time-select-row">
-                <select class="form-select" id="slot2_end_hour"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select>
-                <select class="form-select" id="slot2_end_min"><option value="00">:00</option><option value="30">:30</option></select>
-                <select class="form-select" id="slot2_end_ampm"><option>AM</option><option>PM</option></select>
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_1_end.id_for_label }}">End</label>
+                {{ form.slot_1_end }}
+                {% if form.slot_1_end.errors %}<div class="text-danger small">{% for error in form.slot_1_end.errors %}{{ error }}{% endfor %}</div>{% endif %}
               </div>
-              <input type="hidden" name="slot_2_end" id="slot_2_end_hidden" />
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_1_price.id_for_label }}">Price</label>
+                {{ form.slot_1_price }}
+                {% if form.slot_1_price.errors %}<div class="text-danger small">{% for error in form.slot_1_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              </div>
             </div>
           </div>
-          <div class="row mb-1">
-            <div class="col-md-6">
-              <label class="form-label">Slot 2 Price</label>
-              {{ form.slot_2_price }}
+
+          <div class="rate-block" data-rate-block="2">
+            <div class="rate-block-head">
+              <strong>Rate 2</strong>
+              <button type="button" class="btn btn-sm btn-outline-secondary rate-remove">Remove</button>
+            </div>
+            <div class="row g-2">
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_2_start.id_for_label }}">Start</label>
+                {{ form.slot_2_start }}
+                {% if form.slot_2_start.errors %}<div class="text-danger small">{% for error in form.slot_2_start.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_2_end.id_for_label }}">End</label>
+                {{ form.slot_2_end }}
+                {% if form.slot_2_end.errors %}<div class="text-danger small">{% for error in form.slot_2_end.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_2_price.id_for_label }}">Price</label>
+                {{ form.slot_2_price }}
+                {% if form.slot_2_price.errors %}<div class="text-danger small">{% for error in form.slot_2_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="rate-block" data-rate-block="3">
+            <div class="rate-block-head">
+              <strong>Rate 3</strong>
+              <button type="button" class="btn btn-sm btn-outline-secondary rate-remove">Remove</button>
+            </div>
+            <div class="row g-2">
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_3_start.id_for_label }}">Start</label>
+                {{ form.slot_3_start }}
+                {% if form.slot_3_start.errors %}<div class="text-danger small">{% for error in form.slot_3_start.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_3_end.id_for_label }}">End</label>
+                {{ form.slot_3_end }}
+                {% if form.slot_3_end.errors %}<div class="text-danger small">{% for error in form.slot_3_end.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_3_price.id_for_label }}">Price</label>
+                {{ form.slot_3_price }}
+                {% if form.slot_3_price.errors %}<div class="text-danger small">{% for error in form.slot_3_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="rate-block" data-rate-block="4">
+            <div class="rate-block-head">
+              <strong>Rate 4</strong>
+              <button type="button" class="btn btn-sm btn-outline-secondary rate-remove">Remove</button>
+            </div>
+            <div class="row g-2">
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_4_start.id_for_label }}">Start</label>
+                {{ form.slot_4_start }}
+                {% if form.slot_4_start.errors %}<div class="text-danger small">{% for error in form.slot_4_start.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_4_end.id_for_label }}">End</label>
+                {{ form.slot_4_end }}
+                {% if form.slot_4_end.errors %}<div class="text-danger small">{% for error in form.slot_4_end.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.slot_4_price.id_for_label }}">Price</label>
+                {{ form.slot_4_price }}
+                {% if form.slot_4_price.errors %}<div class="text-danger small">{% for error in form.slot_4_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              </div>
             </div>
           </div>
         </div>
@@ -161,33 +186,69 @@
 </div>
 
 <script>
-function to24(hour, minute, ampm) {
-  hour = parseInt(hour, 10);
-  if (ampm === 'AM') {
-    if (hour === 12) hour = 0;
-  } else if (hour !== 12) {
-    hour += 12;
+const openingInput = document.getElementById('id_opening_time');
+const closingInput = document.getElementById('id_closing_time');
+if (openingInput && !openingInput.value) openingInput.value = '06:00';
+if (closingInput && !closingInput.value) closingInput.value = '02:00';
+
+const firstStart = document.getElementById('id_slot_1_start');
+const firstEnd = document.getElementById('id_slot_1_end');
+if (firstStart && !firstStart.value) firstStart.value = openingInput ? openingInput.value : '06:00';
+if (firstEnd && !firstEnd.value) firstEnd.value = closingInput ? closingInput.value : '02:00';
+
+const rateBlocks = Array.from(document.querySelectorAll('[data-rate-block]'));
+const addRateButton = document.getElementById('add-rate-block');
+
+function hasRateValue(block) {
+  return Array.from(block.querySelectorAll('input')).some((input) => input.value);
+}
+
+function setRateBlockVisible(block, visible) {
+  block.classList.toggle('d-none', !visible);
+  block.querySelectorAll('input').forEach((input) => {
+    if (!visible && block.dataset.rateBlock !== '1') input.value = '';
+  });
+}
+
+function refreshRateButton() {
+  const hiddenCount = rateBlocks.filter((block) => block.classList.contains('d-none')).length;
+  if (addRateButton) addRateButton.disabled = hiddenCount === 0;
+}
+
+rateBlocks.forEach((block) => {
+  if (block.dataset.rateBlock !== '1' && !hasRateValue(block)) setRateBlockVisible(block, false);
+  const removeButton = block.querySelector('.rate-remove');
+  if (removeButton) {
+    removeButton.addEventListener('click', () => {
+      setRateBlockVisible(block, false);
+      refreshRateButton();
+    });
   }
-  return hour.toString().padStart(2, '0') + ':' + minute;
+});
+
+if (addRateButton) {
+  addRateButton.addEventListener('click', () => {
+    const nextBlock = rateBlocks.find((block) => block.classList.contains('d-none'));
+    if (nextBlock) {
+      setRateBlockVisible(nextBlock, true);
+      const firstInput = nextBlock.querySelector('input');
+      if (firstInput) firstInput.focus();
+    }
+    refreshRateButton();
+  });
 }
 
-function fillGroundTimeHiddenFields() {
-  const oh = document.querySelector('select[data-target="opening_time_hour"]').value;
-  const om = document.querySelector('select[data-target="opening_time_min"]').value;
-  const oa = document.querySelector('select[data-target="opening_time_ampm"]').value;
-  document.getElementById('opening_time_hidden').value = to24(oh, om, oa);
-
-  const ch = document.querySelector('select[data-target="closing_time_hour"]').value;
-  const cm = document.querySelector('select[data-target="closing_time_min"]').value;
-  const ca = document.querySelector('select[data-target="closing_time_ampm"]').value;
-  document.getElementById('closing_time_hidden').value = to24(ch, cm, ca);
-
-  document.getElementById('slot_1_start_hidden').value = to24(document.getElementById('slot1_start_hour').value, document.getElementById('slot1_start_min').value, document.getElementById('slot1_start_ampm').value);
-  document.getElementById('slot_1_end_hidden').value = to24(document.getElementById('slot1_end_hour').value, document.getElementById('slot1_end_min').value, document.getElementById('slot1_end_ampm').value);
-  document.getElementById('slot_2_start_hidden').value = to24(document.getElementById('slot2_start_hour').value, document.getElementById('slot2_start_min').value, document.getElementById('slot2_start_ampm').value);
-  document.getElementById('slot_2_end_hidden').value = to24(document.getElementById('slot2_end_hour').value, document.getElementById('slot2_end_min').value, document.getElementById('slot2_end_ampm').value);
+const photoInput = document.getElementById('id_image_upload');
+const photoPreview = document.getElementById('ground-photo-preview');
+if (photoInput && photoPreview) {
+  photoInput.addEventListener('change', () => {
+    const file = photoInput.files && photoInput.files[0];
+    if (!file) return;
+    photoPreview.src = URL.createObjectURL(file);
+    photoPreview.classList.remove('d-none');
+  });
 }
 
-document.getElementById('create-ground-form').addEventListener('submit', fillGroundTimeHiddenFields);
+refreshRateButton();
 </script>
 {% endblock %}

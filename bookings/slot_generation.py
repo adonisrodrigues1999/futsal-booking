@@ -9,16 +9,11 @@ from .models import Slot
 def _build_time_ranges(ground, slot_config=None):
     ranges = []
     if slot_config:
-        slot_1_start = slot_config.get("slot_1_start")
-        slot_1_end = slot_config.get("slot_1_end")
-        slot_2_start = slot_config.get("slot_2_start")
-        slot_2_end = slot_config.get("slot_2_end")
-
-        if slot_1_start and slot_1_end:
-            ranges.append((slot_1_start, slot_1_end))
-        if slot_2_start and slot_2_end:
-            ranges.append((slot_2_start, slot_2_end))
-
+        for index in range(1, 5):
+            start_time = slot_config.get(f"slot_{index}_start")
+            end_time = slot_config.get(f"slot_{index}_end")
+            if start_time and end_time:
+                ranges.append((start_time, end_time))
     if ranges:
         return ranges
 
