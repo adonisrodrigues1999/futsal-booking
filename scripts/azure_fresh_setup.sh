@@ -132,10 +132,15 @@ else
     --output none
 fi
 
-az webapp config set \
+az webapp update \
   --resource-group "$RESOURCE_GROUP" \
   --name "$WEBAPP_NAME" \
   --https-only true \
+  --output none
+
+az webapp config set \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$WEBAPP_NAME" \
   --startup-file "python -m config.startup" \
   --output none
 

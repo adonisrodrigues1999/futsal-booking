@@ -88,10 +88,14 @@ jobs:
 
       - name: Configure startup command
         run: |
+          az webapp update \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_WEBAPP_NAME" \
+            --https-only true
+
           az webapp config set \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --name "$AZURE_WEBAPP_NAME" \
-            --https-only true \
             --startup-file "python -m config.startup"
 
       - name: Build clean deployment package
