@@ -153,6 +153,7 @@
               <th>Name</th>
               <th>Email</th>
               <th>Phone</th>
+              <th>Booking updates</th>
               <th>Grounds</th>
               <th>Actions</th>
             </tr>
@@ -163,6 +164,16 @@
               <td>{{ owner.name }}</td>
               <td>{{ owner.email }}</td>
               <td>{{ owner.phone_number }}</td>
+              <td>
+                <div class="small text-muted mb-1">Email: on</div>
+                <form method="post" action="{% url 'toggle_owner_whatsapp_booking_updates' owner.id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{% url 'admin_dashboard' %}">
+                  <button type="submit" class="btn btn-sm {% if owner.whatsapp_booking_updates_enabled %}btn-outline-success{% else %}btn-outline-secondary{% endif %}">
+                    WhatsApp: {% if owner.whatsapp_booking_updates_enabled %}on{% else %}off{% endif %}
+                  </button>
+                </form>
+              </td>
               <td><span class="badge text-bg-light border">{{ owner.grounds_count }} ground{{ owner.grounds_count|pluralize }}</span></td>
               <td>
                 <div class="btn-group btn-group-sm" role="group" aria-label="Actions for {{ owner.name }}">
@@ -178,7 +189,7 @@
             </tr>
             {% empty %}
             <tr>
-              <td colspan="5" class="text-center">No ground owners yet</td>
+              <td colspan="6" class="text-center">No ground owners yet</td>
             </tr>
             {% endfor %}
           </tbody>

@@ -16,6 +16,7 @@ urlpatterns = [
     path('create-ground-owner/', views.create_ground_owner, name='create_ground_owner'),
     path('ground-owner/<int:owner_id>/edit/', views.edit_ground_owner, name='edit_ground_owner'),
     path('ground-owner/<int:owner_id>/delete/', views.delete_ground_owner, name='delete_ground_owner'),
+    path('ground-owner/<int:owner_id>/whatsapp-booking-updates-toggle/', views.toggle_owner_whatsapp_booking_updates, name='toggle_owner_whatsapp_booking_updates'),
     path('create-ground/<int:owner_id>/', views.create_ground, name='create_ground'),
     path('ground/<int:ground_id>/edit/', views.edit_ground, name='edit_ground'),
     path('ground/<int:ground_id>/delete/', views.delete_ground, name='delete_ground'),

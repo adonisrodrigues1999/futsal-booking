@@ -808,6 +808,20 @@ def toggle_ground_price_drop(request, ground_id):
 
 
 @login_required
+def toggle_owner_whatsapp_booking_updates(request, owner_id):
+    if request.user.role != 'admin' or request.method != 'POST':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+
+    owner = get_object_or_404(User, id=owner_id, role='owner')
+    owner.whatsapp_booking_updates_enabled = not owner.whatsapp_booking_updates_enabled
+    owner.save(update_fields=['whatsapp_booking_updates_enabled'])
+    state = 'enabled' if owner.whatsapp_booking_updates_enabled else 'disabled'
+    messages.success(request, f'WhatsApp booking updates are now {state} for {owner.name}.')
+    return redirect(request.POST.get('next') or 'admin_dashboard')
+
+
+@login_required
 def create_ground(request, owner_id):
     if request.user.role != 'admin':
         messages.error(request, 'Access denied.')

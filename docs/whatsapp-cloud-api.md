@@ -53,6 +53,16 @@ Set its verify token to `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, then subscribe to `mess
 
 See Meta's [Cloud API send-messages guide](https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-messages/) and [webhook guide](https://developers.facebook.com/docs/whatsapp/cloud-api/guides/set-up-webhooks/) for the current permission and dashboard steps.
 
+## Test before enabling booking notifications
+
+In Meta's API Setup screen, add and verify a recipient number under **To**. Then, while `WHATSAPP_ENABLED=false`, send the default Meta test template:
+
+```bash
+./venv/bin/python manage.py test_whatsapp 919876543210
+```
+
+Replace the number with the allow-listed recipient in international digits only. The command sends `hello_world` and does not send a booking notification. Once that works, create and approve `ground_booking_update`, add the App Secret and webhook configuration, enable WhatsApp globally, and turn it on for one owner in Admin Dashboard.
+
 ## Delivery behavior
 
 The booking transaction completes first. Email and WhatsApp work is then submitted to a background executor; failures are logged and do not affect booking creation, payments, or email delivery. This is deliberately lightweight for the current deployment. For durable retries across worker restarts, move `_send_owner_booking_notifications` to Celery/RQ backed by Redis before treating WhatsApp delivery as guaranteed.

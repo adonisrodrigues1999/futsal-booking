@@ -36,6 +36,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     notify_nearby_tournaments = models.BooleanField(default=True)
     email_alerts = models.BooleanField(default=True)
     push_alerts = models.BooleanField(default=False)
+    whatsapp_booking_updates_enabled = models.BooleanField(default=False)
 
     date_joined = models.DateTimeField(default=timezone.now)
 

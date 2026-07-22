@@ -336,6 +336,17 @@ class AdminGroundCrudTests(TestCase):
         self.assertEqual(delete_response.status_code, 302)
         self.assertFalse(User.objects.filter(id=owner.id).exists())
 
+    def test_admin_can_toggle_owner_whatsapp_booking_updates(self):
+        self.assertFalse(self.owner.whatsapp_booking_updates_enabled)
+
+        response = self.client.post(
+            f'/accounts/ground-owner/{self.owner.id}/whatsapp-booking-updates-toggle/'
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.owner.refresh_from_db()
+        self.assertTrue(self.owner.whatsapp_booking_updates_enabled)
+
 
 @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
 class RegistrationResilienceTests(TestCase):
