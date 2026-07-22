@@ -7,7 +7,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from accounts.models import User
-from grounds.models import Ground, Tournament, TournamentRegistration
+from grounds.models import Ground, GroundPricing, Tournament, TournamentRegistration
 from django.utils import timezone
 
 from .models import Slot, Booking, OwnerExpense, BookingAttendance, GroundInvoice, InvoiceLineItem, OnlineSettlement, OnlineSettlementLineItem
@@ -225,6 +225,57 @@ class BookingFlowTests(TestCase):
         self.assertContains(response, 'Day')
         self.assertContains(response, '🌙')
         self.assertContains(response, 'Night')
+
+    def test_customer_slots_include_after_midnight_operating_slots(self):
+        selected_date = timezone.localdate() + timedelta(days=1)
+        overnight_ground = Ground.objects.create(
+            name='Overnight Arena',
+            location='City',
+            owner=self.owner,
+            day_price=500,
+            night_price=700,
+            opening_time=time(6, 0),
+            closing_time=time(2, 0),
+        )
+        GroundPricing.objects.bulk_create([
+            GroundPricing(ground=overnight_ground, start_time=time(6, 0), end_time=time(12, 0), price_per_hour=400),
+            GroundPricing(ground=overnight_ground, start_time=time(12, 0), end_time=time(15, 0), price_per_hour=800),
+            GroundPricing(ground=overnight_ground, start_time=time(15, 0), end_time=time(22, 0), price_per_hour=1000),
+            GroundPricing(ground=overnight_ground, start_time=time(22, 0), end_time=time(2, 0), price_per_hour=700),
+        ])
+        ensure_slots_for_ground_date(overnight_ground, selected_date)
+
+        self.client.force_login(self.customer)
+        response = self.client.get(f'/grounds/{overnight_ground.id}/?date={selected_date:%Y-%m-%d}')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '1:00 AM to 2:00 AM')
+        self.assertContains(response, '₹700')
+
+    def test_manual_booking_includes_after_midnight_operating_slots(self):
+        selected_date = timezone.localdate() + timedelta(days=1)
+        overnight_ground = Ground.objects.create(
+            name='Owner Overnight Arena',
+            location='City',
+            owner=self.owner,
+            day_price=500,
+            night_price=700,
+            opening_time=time(6, 0),
+            closing_time=time(2, 0),
+        )
+        GroundPricing.objects.create(
+            ground=overnight_ground,
+            start_time=time(6, 0),
+            end_time=time(2, 0),
+            price_per_hour=700,
+        )
+        ensure_slots_for_ground_date(overnight_ground, selected_date)
+
+        self.client.force_login(self.owner)
+        response = self.client.get(f'/owner/manual-booking/?ground={overnight_ground.id}&date={selected_date:%Y-%m-%d}')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '1:00 AM')
 
     def test_customer_reschedule_blocked_within_four_hours(self):
         near_start = timezone.localtime(timezone.now()) + timedelta(hours=2)
@@ -607,6 +658,20 @@ class BookingFlowTests(TestCase):
 
         with patch('bookings.views.timezone.now', return_value=fixed_now):
             self.assertEqual(_slot_price_for_slot(slot), self.ground.night_price - 101)
+
+    def test_last_minute_discount_can_be_disabled_per_ground(self):
+        fixed_now = timezone.make_aware(datetime(2026, 6, 25, 20, 55), timezone.get_current_timezone())
+        self.ground.last_minute_price_drop_enabled = False
+        self.ground.save(update_fields=['last_minute_price_drop_enabled'])
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=fixed_now.date(),
+            start_time=time(21, 0),
+            end_time=time(22, 0),
+        )
+
+        with patch('bookings.views.timezone.now', return_value=fixed_now):
+            self.assertEqual(_slot_price_for_slot(slot), self.ground.night_price)
 
     def test_last_minute_discount_uses_lower_amount_for_sub_700_bookings(self):
         fixed_now = timezone.make_aware(datetime(2026, 6, 25, 20, 55), timezone.get_current_timezone())

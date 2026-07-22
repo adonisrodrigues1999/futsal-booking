@@ -223,6 +223,17 @@ EMAIL_BACKEND = os.getenv(
         else "django.core.mail.backends.smtp.EmailBackend"
     ),
 )
+
+# Meta WhatsApp Cloud API. Leave WHATSAPP_ENABLED off until the Meta app, phone
+# number, approved template, and webhook are configured in the environment.
+WHATSAPP_ENABLED = env_bool('WHATSAPP_ENABLED', default=False)
+WHATSAPP_GRAPH_API_VERSION = env_text('WHATSAPP_GRAPH_API_VERSION', 'v25.0')
+WHATSAPP_ACCESS_TOKEN = env_text('WHATSAPP_ACCESS_TOKEN', '')
+WHATSAPP_PHONE_NUMBER_ID = env_text('WHATSAPP_PHONE_NUMBER_ID', '')
+WHATSAPP_BOOKING_TEMPLATE_NAME = env_text('WHATSAPP_BOOKING_TEMPLATE_NAME', '')
+WHATSAPP_TEMPLATE_LANGUAGE = env_text('WHATSAPP_TEMPLATE_LANGUAGE', 'en')
+WHATSAPP_WEBHOOK_VERIFY_TOKEN = env_text('WHATSAPP_WEBHOOK_VERIFY_TOKEN', '')
+WHATSAPP_APP_SECRET = env_text('WHATSAPP_APP_SECRET', '')
 STATICFILES_STORAGE = (
     "django.contrib.staticfiles.storage.StaticFilesStorage"
     if DEBUG

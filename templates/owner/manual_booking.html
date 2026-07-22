@@ -30,6 +30,7 @@
           <span class="badge text-bg-light border">{{ selected_ground.name }} · {{ selected_date|format_date_with_day }}</span>
         {% endif %}
       </div>
+      {% now "Y-m-d" as today_value %}
       <form method="get" id="manual-filter-form" class="row g-2 align-items-end">
         <div class="col-md-6">
           <label class="form-label" for="ground">Ground</label>
@@ -49,6 +50,11 @@
           <label class="form-label" for="date">Date</label>
           <input type="date" name="date" id="date" class="form-control" value="{% if selected_date %}{{ selected_date|date:'Y-m-d' }}{% endif %}" required>
         </div>
+        {% if selected_ground and selected_date|date:"Y-m-d" != today_value %}
+          <div class="col-md-2">
+            <a href="?ground={{ selected_ground.id }}&date={{ today_value }}" class="btn btn-outline-primary w-100">Go to today</a>
+          </div>
+        {% endif %}
       </form>
       <div class="small text-muted mt-2">Default is today once a ground is selected.</div>
     </div>

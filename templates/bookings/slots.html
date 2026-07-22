@@ -20,6 +20,7 @@
         <img src="{% url 'ground_image' ground.id %}" alt="{{ ground.name }}" onerror="this.onerror=null;this.src='/static/images/ground_placeholder.svg'">
       {% endif %}
     </div>
+    {% now "Y-m-d" as today_value %}
     <form class="d-flex align-items-center gap-2 flex-wrap" method="get" id="slot-date-form">
       <label class="small text-muted mb-0" for="slot-date-picker">Pick date</label>
       <input
@@ -32,6 +33,9 @@
         onchange="document.getElementById('slot-date-form').submit();"
       >
       <span class="fw-semibold">{{ selected_date|format_date_with_day }}</span>
+      {% if selected_date|date:"Y-m-d" != today_value %}
+        <a href="?date={{ today_value }}" class="btn btn-sm btn-outline-primary">Go to today</a>
+      {% endif %}
     </form>
   </div>
 
@@ -236,7 +240,7 @@
 </div>
 
 <script>
-  window.currentGroundName = {{ ground.name|escapejs|default:'""' }};
+  window.currentGroundName = "{{ ground.name|escapejs }}";
   window.slotStatusUrl = "{% url 'ground_slots_status' ground.id %}?date={{ selected_date|date:'Y-m-d' }}";
 </script>
 

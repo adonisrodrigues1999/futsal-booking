@@ -74,9 +74,13 @@
     <div class="card p-3 shadow-sm">
       <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <h6 class="mb-0">{{ bookings_title }}</h6>
+        {% now "Y-m-d" as today_value %}
         <form method="get" class="d-flex align-items-center gap-2 booking-date-form">
           <label class="small text-muted mb-0" for="owner-booking-date">Date</label>
           <input id="owner-booking-date" type="date" name="date" class="form-control form-control-sm" value="{{ selected_date|date:'Y-m-d' }}" onchange="this.form.requestSubmit();">
+          {% if selected_date|date:"Y-m-d" != today_value %}
+            <a href="?date={{ today_value }}" class="btn btn-sm btn-outline-primary">Go to today</a>
+          {% endif %}
         </form>
       </div>
 

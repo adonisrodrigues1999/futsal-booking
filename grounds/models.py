@@ -33,6 +33,7 @@ class Ground(models.Model):
     closing_time = models.TimeField()
 
     is_active = models.BooleanField(default=True)
+    last_minute_price_drop_enabled = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -18,6 +18,7 @@
 
   <div class="panel-soft mb-3">
     <h6 class="panel-title">Find New Slot</h6>
+    {% now "Y-m-d" as today_value %}
     <form method="get">
       <div class="row g-2 align-items-end">
         <div class="col-md-4">
@@ -27,6 +28,11 @@
         <div class="col-md-2">
           <button class="btn btn-outline-primary w-100">Load Slots</button>
         </div>
+        {% if selected_date|date:"Y-m-d" != today_value %}
+          <div class="col-md-2">
+            <a href="?date={{ today_value }}" class="btn btn-outline-secondary w-100">Go to today</a>
+          </div>
+        {% endif %}
       </div>
     </form>
   </div>

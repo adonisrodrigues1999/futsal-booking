@@ -1,7 +1,7 @@
 import logging
 from urllib.parse import quote
 
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -23,7 +23,7 @@ from bookings.models import EmailVerification
 from bookings.models import Booking
 from bookings.money import ground_collected_amount_expression, online_collected_amount_expression
 from bookings.slot_generation import create_initial_slots_for_ground
-from .forms import UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm, GroundCreationForm, CustomerProfileForm
+from .forms import UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm, GroundOwnerEditForm, GroundCreationForm, CustomerProfileForm
 from grounds.models import Ground, Tournament, TournamentRegistration
 
 
@@ -591,7 +591,7 @@ def admin_dashboard(request):
 
     ground_owners = User.objects.filter(role='owner').annotate(
         grounds_count=Count('ground', distinct=True),
-    )
+    ).order_by('name', 'id')
     owner_filter = request.GET.get('owner')
     selected_owner = None
     grounds = Ground.objects.select_related('owner').prefetch_related('groundpricing_set').all()
@@ -750,6 +750,64 @@ def create_ground_owner(request):
 
 
 @login_required
+def edit_ground_owner(request, owner_id):
+    if request.user.role != 'admin':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+
+    owner = get_object_or_404(User, id=owner_id, role='owner')
+    if request.method == 'POST':
+        form = GroundOwnerEditForm(request.POST, instance=owner)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Ground owner {owner.name} updated successfully.')
+            return redirect('admin_dashboard')
+    else:
+        form = GroundOwnerEditForm(instance=owner)
+
+    return render(request, 'accounts/create_ground_owner.html', {
+        'form': form,
+        'page_title': f'Edit Ground Owner: {owner.name}',
+        'page_subtitle': 'Update owner contact details.',
+        'submit_label': 'Update Ground Owner',
+        'is_edit': True,
+    })
+
+
+@login_required
+def delete_ground_owner(request, owner_id):
+    if request.user.role != 'admin':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+    if request.method != 'POST':
+        return redirect('admin_dashboard')
+
+    owner = get_object_or_404(User, id=owner_id, role='owner')
+    if Ground.objects.filter(owner=owner).exists():
+        messages.error(request, 'Delete this owner only after deleting or reassigning their grounds.')
+        return redirect('admin_dashboard')
+
+    owner_name = owner.name
+    owner.delete()
+    messages.success(request, f'Ground owner {owner_name} deleted successfully.')
+    return redirect('admin_dashboard')
+
+
+@login_required
+def toggle_ground_price_drop(request, ground_id):
+    if request.user.role != 'admin' or request.method != 'POST':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+
+    ground = get_object_or_404(Ground, id=ground_id)
+    ground.last_minute_price_drop_enabled = not ground.last_minute_price_drop_enabled
+    ground.save(update_fields=['last_minute_price_drop_enabled'])
+    state = 'enabled' if ground.last_minute_price_drop_enabled else 'disabled'
+    messages.success(request, f'10-minute non-peak price drops are now {state} for {ground.name}.')
+    return redirect(request.POST.get('next') or 'admin_dashboard')
+
+
+@login_required
 def create_ground(request, owner_id):
     if request.user.role != 'admin':
         messages.error(request, 'Access denied.')
@@ -778,8 +836,61 @@ def create_ground(request, owner_id):
 
     return render(request, 'accounts/create_ground.html', {
         'form': form,
-        'owner': owner
+        'owner': owner,
+        'page_title': f'Create Ground for {owner.name}',
+        'submit_label': 'Create Ground',
     })
+
+
+@login_required
+def edit_ground(request, ground_id):
+    if request.user.role != 'admin':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+
+    ground = get_object_or_404(Ground.objects.select_related('owner').prefetch_related('groundpricing_set'), id=ground_id)
+    if request.method == 'POST':
+        form = GroundCreationForm(request.POST, request.FILES, instance=ground, owner=ground.owner)
+        if form.is_valid():
+            ground = form.save()
+            create_initial_slots_for_ground(
+                ground=ground,
+                days=14,
+                start_date=timezone.localdate(),
+            )
+            messages.success(request, f'Ground "{ground.name}" updated successfully.')
+            return redirect(f'{reverse("admin_dashboard")}?owner={ground.owner_id}#all-grounds')
+    else:
+        form = GroundCreationForm(instance=ground, owner=ground.owner)
+
+    return render(request, 'accounts/create_ground.html', {
+        'form': form,
+        'owner': ground.owner,
+        'ground': ground,
+        'page_title': f'Edit Ground: {ground.name}',
+        'submit_label': 'Update Ground',
+        'is_edit': True,
+    })
+
+
+@login_required
+def delete_ground(request, ground_id):
+    if request.user.role != 'admin':
+        messages.error(request, 'Access denied.')
+        return redirect('home')
+    if request.method != 'POST':
+        return redirect('admin_dashboard')
+
+    ground = get_object_or_404(Ground.objects.select_related('owner'), id=ground_id)
+    owner_id = ground.owner_id
+    if Booking.objects.filter(slot__ground=ground).exists():
+        messages.error(request, 'This ground has booking history, so it cannot be deleted. Disable it instead.')
+        return redirect(f'{reverse("admin_dashboard")}?owner={owner_id}#all-grounds')
+
+    ground_name = ground.name
+    ground.delete()
+    messages.success(request, f'Ground "{ground_name}" deleted successfully.')
+    return redirect(f'{reverse("admin_dashboard")}?owner={owner_id}#all-grounds')
 
 
 @login_required

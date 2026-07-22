@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.conf import settings
@@ -90,6 +92,16 @@ class GroundOwnerCreationForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ['email', 'phone_number', 'name']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'phone_number': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['password'].widget.attrs.update({'class': 'form-control'})
+        self.fields['password_confirm'].widget.attrs.update({'class': 'form-control'})
 
     def clean(self):
         cleaned_data = super().clean()
@@ -117,8 +129,20 @@ class GroundOwnerCreationForm(forms.ModelForm):
         return user
 
 
+class GroundOwnerEditForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ['name', 'email', 'phone_number']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'phone_number': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+
 class GroundCreationForm(forms.ModelForm):
     image_upload = forms.ImageField(label="Ground Photo", required=False)
+    rate_blocks = forms.JSONField(required=False, widget=forms.HiddenInput())
 
     for index in range(1, 5):
         locals()[f"slot_{index}_start"] = forms.TimeField(
@@ -153,11 +177,41 @@ class GroundCreationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         self.owner = kwargs.pop('owner', None)
         super().__init__(*args, **kwargs)
-        self.fields['opening_time'].initial = '06:00'
-        self.fields['closing_time'].initial = '02:00'
-        self.fields['slot_1_start'].initial = '06:00'
-        self.fields['slot_1_end'].initial = '02:00'
-        self.fields['slot_1_price'].initial = 1000
+        if self.instance and self.instance.pk:
+            pricing_blocks = list(self.instance.groundpricing_set.all())
+            if pricing_blocks:
+                self.fields['rate_blocks'].initial = [
+                    {
+                        'start': pricing.start_time.strftime('%H:%M'),
+                        'end': pricing.end_time.strftime('%H:%M'),
+                        'price': pricing.price_per_hour,
+                    }
+                    for pricing in pricing_blocks
+                ]
+                for index, pricing in enumerate(pricing_blocks, start=1):
+                    if index > 4:
+                        break
+                    self.fields[f'slot_{index}_start'].initial = pricing.start_time
+                    self.fields[f'slot_{index}_end'].initial = pricing.end_time
+                    self.fields[f'slot_{index}_price'].initial = pricing.price_per_hour
+            else:
+                self.fields['slot_1_start'].initial = self.instance.opening_time
+                self.fields['slot_1_end'].initial = self.instance.closing_time
+                self.fields['slot_1_price'].initial = self.instance.day_price
+                self.fields['rate_blocks'].initial = [{
+                    'start': self.instance.opening_time.strftime('%H:%M'),
+                    'end': self.instance.closing_time.strftime('%H:%M'),
+                    'price': self.instance.day_price,
+                }]
+        else:
+            self.fields['opening_time'].initial = '06:00'
+            self.fields['closing_time'].initial = '02:00'
+            self.fields['slot_1_start'].initial = '06:00'
+            self.fields['slot_1_end'].initial = '02:00'
+            self.fields['slot_1_price'].initial = 1000
+            self.fields['rate_blocks'].initial = [{
+                'start': '06:00', 'end': '02:00', 'price': 1000,
+            }]
         self.fields['image_upload'].widget.attrs.update({'class': 'form-control', 'accept': 'image/*'})
         for index in range(1, 5):
             self.fields[f'slot_{index}_price'].widget.attrs.update({
@@ -186,15 +240,36 @@ class GroundCreationForm(forms.ModelForm):
         if close_minute <= open_minute:
             close_minute += 24 * 60
 
-        for index in range(1, 5):
-            start = self.cleaned_data.get(f'slot_{index}_start')
-            end = self.cleaned_data.get(f'slot_{index}_end')
-            price = self.cleaned_data.get(f'slot_{index}_price')
-            provided = [start is not None, end is not None, price is not None]
-            if any(provided) and not all(provided):
-                raise forms.ValidationError(f'Complete start, end, and price for rate {index}, or leave it blank.')
-            if not all(provided):
-                continue
+        raw_blocks = self.cleaned_data.get('rate_blocks') or []
+        if not raw_blocks:
+            # Keep accepting the original four server fields for older clients and
+            # bookmarked admin forms. New submissions use the dynamic JSON field.
+            raw_blocks = []
+            for index in range(1, 5):
+                start = self.cleaned_data.get(f'slot_{index}_start')
+                end = self.cleaned_data.get(f'slot_{index}_end')
+                price = self.cleaned_data.get(f'slot_{index}_price')
+                if any(value is not None for value in (start, end, price)):
+                    raw_blocks.append({'start': start, 'end': end, 'price': price})
+
+        if not isinstance(raw_blocks, list):
+            raise forms.ValidationError('Rate blocks must be a list.')
+
+        time_field = forms.TimeField()
+        for index, raw_block in enumerate(raw_blocks, start=1):
+            if not isinstance(raw_block, dict):
+                raise forms.ValidationError(f'Rate {index} is invalid.')
+            try:
+                start = time_field.clean(raw_block.get('start'))
+                end = time_field.clean(raw_block.get('end'))
+            except forms.ValidationError:
+                raise forms.ValidationError(f'Choose a valid start and end time for rate {index}.')
+            try:
+                price = Decimal(str(raw_block.get('price')))
+            except (InvalidOperation, TypeError, ValueError):
+                raise forms.ValidationError(f'Enter a valid price for rate {index}.')
+            if not price.is_finite() or price <= 0 or price != price.to_integral_value():
+                raise forms.ValidationError(f'Rate {index} price must be a whole number greater than zero.')
 
             start_minute = self._minutes_from_opening(start, opening_time)
             end_minute = self._minutes_from_opening(end, opening_time)

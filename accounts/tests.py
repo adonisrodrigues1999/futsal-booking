@@ -1,3 +1,4 @@
+import json
 from datetime import time, timedelta
 
 from unittest.mock import patch
@@ -195,6 +196,145 @@ class AdminDashboardSettlementSplitTests(TestCase):
         ranking = list(response.context['ground_income_ranking'])
         self.assertEqual(ranking[0]['slot__ground__name'], 'Admin Test Ground 2')
         self.assertEqual(ranking[0]['revenue'], 900)
+
+
+class AdminGroundCrudTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email='admin-crud@example.com',
+            phone_number='9999990101',
+            name='Admin',
+            password='password123',
+            role='admin',
+            email_verified=True,
+        )
+        self.owner = User.objects.create_user(
+            email='owner-crud@example.com',
+            phone_number='8888880101',
+            name='Owner',
+            password='password123',
+            role='owner',
+            email_verified=True,
+        )
+        self.ground = Ground.objects.create(
+            name='CRUD Ground',
+            location='City',
+            owner=self.owner,
+            day_price=500,
+            night_price=700,
+            opening_time=time(6, 0),
+            closing_time=time(23, 0),
+        )
+        self.client.force_login(self.admin)
+
+    def test_admin_can_edit_ground_rates(self):
+        response = self.client.post(f'/accounts/ground/{self.ground.id}/edit/', {
+            'name': 'Edited Ground',
+            'location': 'Margao',
+            'opening_time': '06:00',
+            'closing_time': '02:00',
+            'slot_1_start': '06:00',
+            'slot_1_end': '12:00',
+            'slot_1_price': '400',
+            'slot_2_start': '12:00',
+            'slot_2_end': '15:00',
+            'slot_2_price': '800',
+            'slot_3_start': '15:00',
+            'slot_3_end': '22:00',
+            'slot_3_price': '1000',
+            'slot_4_start': '22:00',
+            'slot_4_end': '02:00',
+            'slot_4_price': '700',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.ground.refresh_from_db()
+        self.assertEqual(self.ground.name, 'Edited Ground')
+        self.assertEqual(self.ground.groundpricing_set.count(), 4)
+        self.assertTrue(
+            self.ground.groundpricing_set.filter(
+                start_time=time(22, 0),
+                end_time=time(2, 0),
+                price_per_hour=700,
+            ).exists()
+        )
+
+    def test_admin_can_save_any_number_of_connected_rate_blocks(self):
+        response = self.client.post(f'/accounts/ground/{self.ground.id}/edit/', {
+            'name': 'Five Rate Ground',
+            'location': 'Margao',
+            'opening_time': '06:00',
+            'closing_time': '02:00',
+            'rate_blocks': json.dumps([
+                {'start': '06:00', 'end': '09:00', 'price': 400},
+                {'start': '09:00', 'end': '12:00', 'price': 500},
+                {'start': '12:00', 'end': '16:00', 'price': 600},
+                {'start': '16:00', 'end': '22:00', 'price': 900},
+                {'start': '22:00', 'end': '02:00', 'price': 700},
+            ]),
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.ground.groundpricing_set.count(), 5)
+        self.assertTrue(self.ground.groundpricing_set.filter(
+            start_time=time(22, 0), end_time=time(2, 0), price_per_hour=700,
+        ).exists())
+
+    def test_admin_can_delete_ground_without_booking_history(self):
+        response = self.client.post(f'/accounts/ground/{self.ground.id}/delete/')
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Ground.objects.filter(id=self.ground.id).exists())
+
+    def test_admin_cannot_delete_ground_with_booking_history(self):
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate(),
+            start_time=time(8, 0),
+            end_time=time(9, 0),
+            is_booked=True,
+        )
+        Booking.objects.create(
+            slot=slot,
+            customer_name='Booked User',
+            customer_phone='7000000000',
+            total_amount=500,
+            owner_payout=500,
+            booking_source='MANUAL',
+            payment_mode='FULL',
+            payment_status='PENDING',
+            paid_amount=0,
+            due_amount=500,
+            status='BOOKED',
+        )
+
+        response = self.client.post(f'/accounts/ground/{self.ground.id}/delete/')
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Ground.objects.filter(id=self.ground.id).exists())
+
+    def test_admin_can_edit_and_delete_owner_without_grounds(self):
+        owner = User.objects.create_user(
+            email='empty-owner@example.com',
+            phone_number='8888880202',
+            name='Empty Owner',
+            password='password123',
+            role='owner',
+            email_verified=True,
+        )
+
+        edit_response = self.client.post(f'/accounts/ground-owner/{owner.id}/edit/', {
+            'name': 'Updated Owner',
+            'email': 'updated-owner@example.com',
+            'phone_number': '8888880303',
+        })
+        self.assertEqual(edit_response.status_code, 302)
+        owner.refresh_from_db()
+        self.assertEqual(owner.name, 'Updated Owner')
+
+        delete_response = self.client.post(f'/accounts/ground-owner/{owner.id}/delete/')
+        self.assertEqual(delete_response.status_code, 302)
+        self.assertFalse(User.objects.filter(id=owner.id).exists())
 
 
 @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')

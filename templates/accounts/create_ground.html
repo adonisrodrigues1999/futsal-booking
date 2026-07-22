@@ -1,254 +1,155 @@
 {% extends 'base/base.html' %}
-{% block title %}Create Ground{% endblock %}
+{% block title %}{{ page_title|default:"Create Ground" }}{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-xl-10">
+  <div class="col-xl-9">
     <div class="page-shell">
-      <div class="page-header mb-2">
+      <div class="page-header mb-3">
         <div>
-          <h4>Create Ground for {{ owner.name }}</h4>
-          <p class="page-subtitle">Set base schedule and optional custom slot pricing blocks.</p>
+          <h4>{{ page_title|default:"Create Ground" }}</h4>
+          <p class="page-subtitle">Add the venue details, photo, operating hours, and the rates customers will see.</p>
         </div>
       </div>
 
-      {% if messages %}
-        {% for message in messages %}
-          <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-          </div>
-        {% endfor %}
-      {% endif %}
-
       <form method="post" enctype="multipart/form-data" id="create-ground-form">
         {% csrf_token %}
+        {{ form.rate_blocks }}
 
         <div class="panel-soft mb-3">
-          <h6 class="panel-title">Ground Details</h6>
+          <h6 class="panel-title">1. Ground details</h6>
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label for="{{ form.name.id_for_label }}" class="form-label">Ground Name</label>
+              <label for="{{ form.name.id_for_label }}" class="form-label">Ground name</label>
               {{ form.name }}
-              {% if form.name.errors %}<div class="text-danger small">{% for error in form.name.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              {% for error in form.name.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
             </div>
             <div class="col-md-6 mb-3">
               <label for="{{ form.location.id_for_label }}" class="form-label">Location</label>
               {{ form.location }}
-              {% if form.location.errors %}<div class="text-danger small">{% for error in form.location.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              {% for error in form.location.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
             </div>
           </div>
+        </div>
 
-          <div class="row">
-            <div class="col-md-7 mb-3">
-              <label for="{{ form.image_upload.id_for_label }}" class="form-label">Ground Photo</label>
+        <div class="panel-soft mb-3">
+          <h6 class="panel-title">2. Ground photo</h6>
+          <div class="row align-items-center">
+            <div class="col-md-7 mb-3 mb-md-0">
+              <label for="{{ form.image_upload.id_for_label }}" class="form-label">Ground photo</label>
               {{ form.image_upload }}
-              {% if form.image_upload.errors %}<div class="text-danger small">{% for error in form.image_upload.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              <div class="form-text">Shown on ground cards and slot pages.</div>
+              <div class="form-text">Use a clear landscape image. It appears on the public ground card and booking page.</div>
+              {% for error in form.image_upload.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
             </div>
-            <div class="col-md-5 mb-3">
-              <img id="ground-photo-preview" class="ground-photo-preview d-none" alt="Ground photo preview">
+            <div class="col-md-5">
+              <img id="ground-photo-preview" class="ground-photo-preview {% if not form.instance.image %}d-none{% endif %}" {% if form.instance.image %}src="{{ form.instance.image }}"{% endif %} alt="Ground photo preview">
             </div>
           </div>
         </div>
 
         <div class="panel-soft mb-3">
-          <h6 class="panel-title">Operating Hours</h6>
+          <h6 class="panel-title">3. Operating hours</h6>
+          <p class="text-muted small">Overnight venues are supported. For example, opening at 6:00 AM and closing at 2:00 AM means the venue closes the following day.</p>
           <div class="row">
-            <div class="col-md-6 mb-3">
-              <label for="{{ form.opening_time.id_for_label }}" class="form-label">Opening Time</label>
+            <div class="col-md-6 mb-2">
+              <label for="{{ form.opening_time.id_for_label }}" class="form-label">Opening time</label>
               {{ form.opening_time }}
-              {% if form.opening_time.errors %}<div class="text-danger small">{% for error in form.opening_time.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              {% for error in form.opening_time.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
             </div>
-
-            <div class="col-md-6 mb-3">
-              <label for="{{ form.closing_time.id_for_label }}" class="form-label">Closing Time</label>
+            <div class="col-md-6 mb-2">
+              <label for="{{ form.closing_time.id_for_label }}" class="form-label">Closing time</label>
               {{ form.closing_time }}
-              {% if form.closing_time.errors %}<div class="text-danger small">{% for error in form.closing_time.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              {% for error in form.closing_time.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
             </div>
           </div>
         </div>
 
         <div class="panel-soft mb-3">
-          <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+          <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
             <div>
-              <h6 class="panel-title mb-1">Dynamic Rate Blocks</h6>
-              <p class="text-muted mb-0 small">Use 1 to 4 connected rate blocks from opening to closing. One block can cover the full day.</p>
+              <h6 class="panel-title mb-1">4. Hourly rate schedule</h6>
+              <p class="text-muted small mb-0">Start with one rate for the full operating day, or add as many connected rate periods as you need. There can be no gaps or overlaps.</p>
             </div>
-            <button type="button" class="btn btn-sm btn-outline-primary" id="add-rate-block">Add Rate</button>
+            <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0" id="add-rate-block">Add rate</button>
           </div>
-
-          <div class="rate-block" data-rate-block="1">
-            <div class="rate-block-head"><strong>Rate 1</strong></div>
-            <div class="row g-2">
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_1_start.id_for_label }}">Start</label>
-                {{ form.slot_1_start }}
-                {% if form.slot_1_start.errors %}<div class="text-danger small">{% for error in form.slot_1_start.errors %}{{ error }}{% endfor %}</div>{% endif %}
+          <div id="rate-blocks" class="vstack gap-2"></div>
+          <template id="rate-block-template">
+            <div class="rate-block border rounded p-3" data-rate-block>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong class="rate-title">Rate</strong>
+                <button type="button" class="btn btn-sm btn-outline-secondary rate-remove">Remove</button>
               </div>
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_1_end.id_for_label }}">End</label>
-                {{ form.slot_1_end }}
-                {% if form.slot_1_end.errors %}<div class="text-danger small">{% for error in form.slot_1_end.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              </div>
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_1_price.id_for_label }}">Price</label>
-                {{ form.slot_1_price }}
-                {% if form.slot_1_price.errors %}<div class="text-danger small">{% for error in form.slot_1_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
+              <div class="row g-2">
+                <div class="col-md-4"><label class="form-label">Start</label><input class="form-control rate-start" type="time" required></div>
+                <div class="col-md-4"><label class="form-label">End</label><input class="form-control rate-end" type="time" required></div>
+                <div class="col-md-4"><label class="form-label">Hourly price (₹)</label><input class="form-control rate-price" type="number" min="1" step="1" placeholder="1000" required></div>
               </div>
             </div>
-          </div>
-
-          <div class="rate-block" data-rate-block="2">
-            <div class="rate-block-head">
-              <strong>Rate 2</strong>
-              <button type="button" class="btn btn-sm btn-outline-secondary rate-remove">Remove</button>
-            </div>
-            <div class="row g-2">
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_2_start.id_for_label }}">Start</label>
-                {{ form.slot_2_start }}
-                {% if form.slot_2_start.errors %}<div class="text-danger small">{% for error in form.slot_2_start.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              </div>
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_2_end.id_for_label }}">End</label>
-                {{ form.slot_2_end }}
-                {% if form.slot_2_end.errors %}<div class="text-danger small">{% for error in form.slot_2_end.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              </div>
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_2_price.id_for_label }}">Price</label>
-                {{ form.slot_2_price }}
-                {% if form.slot_2_price.errors %}<div class="text-danger small">{% for error in form.slot_2_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              </div>
-            </div>
-          </div>
-
-          <div class="rate-block" data-rate-block="3">
-            <div class="rate-block-head">
-              <strong>Rate 3</strong>
-              <button type="button" class="btn btn-sm btn-outline-secondary rate-remove">Remove</button>
-            </div>
-            <div class="row g-2">
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_3_start.id_for_label }}">Start</label>
-                {{ form.slot_3_start }}
-                {% if form.slot_3_start.errors %}<div class="text-danger small">{% for error in form.slot_3_start.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              </div>
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_3_end.id_for_label }}">End</label>
-                {{ form.slot_3_end }}
-                {% if form.slot_3_end.errors %}<div class="text-danger small">{% for error in form.slot_3_end.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              </div>
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_3_price.id_for_label }}">Price</label>
-                {{ form.slot_3_price }}
-                {% if form.slot_3_price.errors %}<div class="text-danger small">{% for error in form.slot_3_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              </div>
-            </div>
-          </div>
-
-          <div class="rate-block" data-rate-block="4">
-            <div class="rate-block-head">
-              <strong>Rate 4</strong>
-              <button type="button" class="btn btn-sm btn-outline-secondary rate-remove">Remove</button>
-            </div>
-            <div class="row g-2">
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_4_start.id_for_label }}">Start</label>
-                {{ form.slot_4_start }}
-                {% if form.slot_4_start.errors %}<div class="text-danger small">{% for error in form.slot_4_start.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              </div>
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_4_end.id_for_label }}">End</label>
-                {{ form.slot_4_end }}
-                {% if form.slot_4_end.errors %}<div class="text-danger small">{% for error in form.slot_4_end.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              </div>
-              <div class="col-md-4">
-                <label class="form-label" for="{{ form.slot_4_price.id_for_label }}">Price</label>
-                {{ form.slot_4_price }}
-                {% if form.slot_4_price.errors %}<div class="text-danger small">{% for error in form.slot_4_price.errors %}{{ error }}{% endfor %}</div>{% endif %}
-              </div>
-            </div>
-          </div>
+          </template>
+          {% for error in form.rate_blocks.errors %}<div class="text-danger small mt-2">{{ error }}</div>{% endfor %}
         </div>
 
-        {% if form.non_field_errors %}
-          <div class="alert alert-danger">{% for error in form.non_field_errors %}{{ error }}{% endfor %}</div>
-        {% endif %}
-
+        {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
         <div class="d-flex flex-wrap gap-2 justify-content-between">
-          <a href="{% url 'admin_dashboard' %}" class="btn btn-outline-secondary">Back to Dashboard</a>
-          <button type="submit" class="btn btn-success">Create Ground</button>
+          <a href="{% url 'admin_dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+          <button type="submit" class="btn btn-success">{{ submit_label|default:"Create Ground" }}</button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
+{{ form.rate_blocks.value|json_script:"initial-rate-blocks" }}
 <script>
-const openingInput = document.getElementById('id_opening_time');
-const closingInput = document.getElementById('id_closing_time');
-if (openingInput && !openingInput.value) openingInput.value = '06:00';
-if (closingInput && !closingInput.value) closingInput.value = '02:00';
-
-const firstStart = document.getElementById('id_slot_1_start');
-const firstEnd = document.getElementById('id_slot_1_end');
-if (firstStart && !firstStart.value) firstStart.value = openingInput ? openingInput.value : '06:00';
-if (firstEnd && !firstEnd.value) firstEnd.value = closingInput ? closingInput.value : '02:00';
-
-const rateBlocks = Array.from(document.querySelectorAll('[data-rate-block]'));
-const addRateButton = document.getElementById('add-rate-block');
-
-function hasRateValue(block) {
-  return Array.from(block.querySelectorAll('input')).some((input) => input.value);
-}
-
-function setRateBlockVisible(block, visible) {
-  block.classList.toggle('d-none', !visible);
-  block.querySelectorAll('input').forEach((input) => {
-    if (!visible && block.dataset.rateBlock !== '1') input.value = '';
-  });
-}
-
-function refreshRateButton() {
-  const hiddenCount = rateBlocks.filter((block) => block.classList.contains('d-none')).length;
-  if (addRateButton) addRateButton.disabled = hiddenCount === 0;
-}
-
-rateBlocks.forEach((block) => {
-  if (block.dataset.rateBlock !== '1' && !hasRateValue(block)) setRateBlockVisible(block, false);
-  const removeButton = block.querySelector('.rate-remove');
-  if (removeButton) {
-    removeButton.addEventListener('click', () => {
-      setRateBlockVisible(block, false);
-      refreshRateButton();
-    });
+(() => {
+  const form = document.getElementById('create-ground-form');
+  const container = document.getElementById('rate-blocks');
+  const template = document.getElementById('rate-block-template');
+  const payload = document.getElementById('id_rate_blocks');
+  const opening = document.getElementById('id_opening_time');
+  const closing = document.getElementById('id_closing_time');
+  let initial = JSON.parse(document.getElementById('initial-rate-blocks').textContent || '[]');
+  if (typeof initial === 'string') {
+    try { initial = JSON.parse(initial); } catch (error) { initial = []; }
   }
-});
 
-if (addRateButton) {
-  addRateButton.addEventListener('click', () => {
-    const nextBlock = rateBlocks.find((block) => block.classList.contains('d-none'));
-    if (nextBlock) {
-      setRateBlockVisible(nextBlock, true);
-      const firstInput = nextBlock.querySelector('input');
-      if (firstInput) firstInput.focus();
-    }
-    refreshRateButton();
-  });
-}
+  if (opening && !opening.value) opening.value = '06:00';
+  if (closing && !closing.value) closing.value = '02:00';
 
-const photoInput = document.getElementById('id_image_upload');
-const photoPreview = document.getElementById('ground-photo-preview');
-if (photoInput && photoPreview) {
+  function sync() {
+    const blocks = Array.from(container.querySelectorAll('[data-rate-block]'));
+    blocks.forEach((block, index) => {
+      block.querySelector('.rate-title').textContent = `Rate ${index + 1}`;
+      block.querySelector('.rate-remove').disabled = blocks.length === 1;
+    });
+    payload.value = JSON.stringify(blocks.map(block => ({
+      start: block.querySelector('.rate-start').value,
+      end: block.querySelector('.rate-end').value,
+      price: block.querySelector('.rate-price').value,
+    })));
+  }
+
+  function addBlock(values = {}) {
+    const block = template.content.firstElementChild.cloneNode(true);
+    block.querySelector('.rate-start').value = values.start || '';
+    block.querySelector('.rate-end').value = values.end || '';
+    block.querySelector('.rate-price').value = values.price || '';
+    block.querySelector('.rate-remove').addEventListener('click', () => { block.remove(); sync(); });
+    block.querySelectorAll('input').forEach(input => input.addEventListener('input', sync));
+    container.appendChild(block);
+    sync();
+  }
+
+  (Array.isArray(initial) && initial.length ? initial : [{ start: opening.value, end: closing.value, price: 1000 }]).forEach(addBlock);
+  document.getElementById('add-rate-block').addEventListener('click', () => addBlock());
+  form.addEventListener('submit', sync);
+
+  const photoInput = document.getElementById('id_image_upload');
+  const preview = document.getElementById('ground-photo-preview');
   photoInput.addEventListener('change', () => {
-    const file = photoInput.files && photoInput.files[0];
-    if (!file) return;
-    photoPreview.src = URL.createObjectURL(file);
-    photoPreview.classList.remove('d-none');
+    const file = photoInput.files[0];
+    if (file) { preview.src = URL.createObjectURL(file); preview.classList.remove('d-none'); }
   });
-}
-
-refreshRateButton();
+})();
 </script>
 {% endblock %}

@@ -43,10 +43,11 @@ class GroundAdmin(admin.ModelAdmin):
         'day_price',
         'night_price',
         'is_active',
+        'last_minute_price_drop_enabled',
         'created_at',
     )
     search_fields = ('name', 'location')
-    list_filter = ('is_active',)
+    list_filter = ('is_active', 'last_minute_price_drop_enabled')
     actions = (mark_ground_available, mark_ground_unavailable, generate_slots_for_3_months)
     autocomplete_fields = ('owner',)
 

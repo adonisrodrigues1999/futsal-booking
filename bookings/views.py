@@ -1,4 +1,7 @@
 import logging
+import hashlib
+import hmac
+from concurrent.futures import ThreadPoolExecutor
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -39,11 +42,13 @@ from grounds.forms import TournamentForm, TournamentRegistrationForm, GroundRevi
 from grounds.models import Tournament, TournamentRegistration, GroundReview
 from .slot_generation import ensure_slots_for_ground_date, ensure_next_month_slots_for_ground
 from .rewards import award_booking_rewards, award_tournament_registration_rewards, redeem_free_booking_credit
+from .whatsapp import send_owner_booking_update
 import os
 from django.http import FileResponse, Http404
 from django.conf import settings as djsettings
 
 logger = logging.getLogger(__name__)
+_notification_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix='footbook-notify')
 
 
 def _slot_start_datetime(slot):
@@ -86,6 +91,8 @@ def _is_peak_discount_blocked(slot_time):
 
 def _slot_discount(slot):
     if slot.is_booked:
+        return 0
+    if not slot.ground.last_minute_price_drop_enabled:
         return 0
     minutes_to_start = (_slot_start_datetime(slot) - timezone.localtime(timezone.now())).total_seconds() / 60
     if 0 < minutes_to_start <= 10 and not _is_peak_discount_blocked(slot.start_time):
@@ -192,11 +199,7 @@ def _available_reschedule_slots(booking, selected_date):
     now_dt = timezone.localtime(timezone.now())
 
     slots = []
-    slots_qs = Slot.objects.filter(
-        ground=ground,
-        date=selected_date,
-        is_booked=False,
-    ).order_by('start_time')
+    slots_qs = _slots_for_operating_date(ground, selected_date, only_available=True)
     for slot in slots_qs:
         if slot.id == booking.slot_id:
             continue
@@ -219,7 +222,7 @@ def _promo_email_allowed_now():
     return 10 <= current_hour < 24
 
 
-def _owner_booking_email(booking):
+def _owner_booking_email(booking, *, event='BOOKING_CREATED'):
     owner = booking.slot.ground.owner if booking.slot and booking.slot.ground else None
     if not owner or not owner.email:
         return
@@ -235,14 +238,18 @@ def _owner_booking_email(booking):
         .select_related('slot')
         .order_by('slot__start_time', 'created_at')
     )
-    subject = f"New booking: {booking.slot.ground.name} on {booking.slot.date}"
+    is_payment_update = event == 'PAYMENT_UPDATED'
+    subject = (
+        f"Payment update: {booking.slot.ground.name} on {booking.slot.date}"
+        if is_payment_update else f"New booking: {booking.slot.ground.name} on {booking.slot.date}"
+    )
     today_lines = [
         f"- {item.slot.start_time.strftime('%I:%M %p')} - {item.slot.end_time.strftime('%I:%M %p')} | {item.customer_name} | {item.customer_phone} | {item.get_status_display()}"
         for item in todays_bookings
     ]
     body = (
         f"Hello {owner.name},\n\n"
-        f"A new booking was confirmed for your ground {booking.slot.ground.name}.\n"
+        f"{'Payment was updated for' if is_payment_update else 'A new booking was confirmed for'} your ground {booking.slot.ground.name}.\n"
         f"Date: {booking.slot.date}\n"
         f"Time: {booking.slot.start_time.strftime('%I:%M %p')} - {booking.slot.end_time.strftime('%I:%M %p')}\n"
         f"Customer: {booking.customer_name} ({booking.customer_phone})\n\n"
@@ -263,6 +270,49 @@ def _owner_booking_email(booking):
         send_mail(subject, body, from_email, [owner.email], fail_silently=False)
     except Exception:
         logger.exception("Failed to send owner booking email for booking %s", booking.id)
+
+
+def _send_owner_booking_notifications(booking_id, event='BOOKING_CREATED'):
+    """Runs outside the request after commit; one channel failing does not stop the other."""
+    from django.db import close_old_connections
+
+    close_old_connections()
+    try:
+        booking = Booking.objects.select_related('slot__ground__owner').get(id=booking_id)
+        _owner_booking_email(booking, event=event)
+        send_owner_booking_update(booking)
+    except Booking.DoesNotExist:
+        logger.warning('Booking notification skipped: booking no longer exists id=%s', booking_id)
+    except Exception:
+        logger.exception('Unexpected owner notification failure booking=%s', booking_id)
+    finally:
+        close_old_connections()
+
+
+def _queue_owner_booking_notifications(booking_id, event='BOOKING_CREATED'):
+    """Queue email and WhatsApp without adding network latency to the response."""
+    try:
+        _notification_executor.submit(_send_owner_booking_notifications, booking_id, event)
+    except RuntimeError:
+        logger.exception('Could not queue owner notification booking=%s', booking_id)
+
+
+def _send_booking_cancellation_notifications(booking_id, cancelled_count):
+    try:
+        booking = Booking.objects.select_related('slot__ground__owner', 'user').get(id=booking_id)
+        _send_booking_cancelled_email(booking, cancelled_count=cancelled_count)
+        send_owner_booking_update(booking)
+    except Booking.DoesNotExist:
+        logger.warning('Cancellation notification skipped: booking no longer exists id=%s', booking_id)
+    except Exception:
+        logger.exception('Unexpected cancellation notification failure booking=%s', booking_id)
+
+
+def _queue_booking_cancellation_notifications(booking_id, cancelled_count):
+    try:
+        _notification_executor.submit(_send_booking_cancellation_notifications, booking_id, cancelled_count)
+    except RuntimeError:
+        logger.exception('Could not queue cancellation notification booking=%s', booking_id)
 
 
 def _booking_notification_recipients(booking):
@@ -388,6 +438,30 @@ def _operating_window_for_date(ground, target_date):
     return window_start, window_end
 
 
+def _slot_dates_for_operating_date(ground, target_date):
+    dates = [target_date]
+    if ground.closing_time <= ground.opening_time:
+        dates.append(target_date + timedelta(days=1))
+    return dates
+
+
+def _slots_for_operating_date(ground, target_date, *, only_available=False):
+    window_start, window_end = _operating_window_for_date(ground, target_date)
+    slots_qs = Slot.objects.filter(
+        ground=ground,
+        date__in=_slot_dates_for_operating_date(ground, target_date),
+    )
+    if only_available:
+        slots_qs = slots_qs.filter(is_booked=False)
+
+    slots = []
+    for slot in slots_qs:
+        slot_dt = _slot_start_datetime(slot)
+        if window_start <= slot_dt < window_end:
+            slots.append(slot)
+    return sorted(slots, key=_slot_start_datetime)
+
+
 def _send_email(subject, body, recipients):
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
     try:
@@ -404,10 +478,12 @@ def _dispatch_ground_alerts(ground, slot=None, reason='PRICE_DROP'):
         return
     if slot and not _is_evening_alert_slot(slot):
         return
-    subscribers = AlertSubscription.objects.filter(
-        ground=ground,
-        email_enabled=True,
-    ).select_related('user')
+    subscribers = AlertSubscription.objects.filter(ground=ground, email_enabled=True)
+    if reason == 'PRICE_DROP':
+        subscribers = subscribers.filter(notify_price_drops=True)
+    else:
+        subscribers = subscribers.filter(notify_last_minute=True)
+    subscribers = subscribers.select_related('user')
     if not subscribers.exists():
         return
 
@@ -666,12 +742,12 @@ def ground_slots(request, ground_id):
         ensure_next_month_slots_for_ground(ground=ground)
 
     # fetch slots for that date
-    slots_qs = Slot.objects.filter(ground=ground, date=selected_date).order_by('start_time')
+    slots_qs = _slots_for_operating_date(ground, selected_date)
     booked_by_slot_id = {
         booking.slot_id: booking
         for booking in Booking.objects.filter(
             slot__ground=ground,
-            slot__date=selected_date,
+            slot__date__in=_slot_dates_for_operating_date(ground, selected_date),
             status='BOOKED',
         ).select_related('user', 'slot')
     }
@@ -767,10 +843,18 @@ def ground_slots_status(request, ground_id):
         except Exception:
             continue
 
-    slots_qs = Slot.objects.filter(ground=ground, date=selected_date)
+    slots_qs = Slot.objects.filter(
+        ground=ground,
+        date__in=_slot_dates_for_operating_date(ground, selected_date),
+    )
     if slot_ids:
         slots_qs = slots_qs.filter(id__in=slot_ids)
-    slots = list(slots_qs.values('id', 'is_booked'))
+    window_start, window_end = _operating_window_for_date(ground, selected_date)
+    slots = [
+        {'id': slot.id, 'is_booked': slot.is_booked}
+        for slot in slots_qs
+        if window_start <= _slot_start_datetime(slot) < window_end
+    ]
 
     booked_slot_ids = set(
         Booking.objects.filter(
@@ -855,17 +939,13 @@ def search_public_slots(request):
         ensure_slots_for_ground_date(ground=ground, slot_date=search_date)
         
         # Get available slots for this ground and date
-        slots_qs = Slot.objects.filter(
-            ground=ground,
-            date=search_date,
-            is_booked=False
-        ).select_related('ground').order_by('start_time')
+        slots_qs = _slots_for_operating_date(ground, search_date, only_available=True)
         
         # Filter out booked slots
         booked_slot_ids = set(
             Booking.objects.filter(
                 slot__ground=ground,
-                slot__date=search_date,
+                slot__date__in=_slot_dates_for_operating_date(ground, search_date),
                 status='BOOKED'
             ).values_list('slot_id', flat=True)
         )
@@ -976,7 +1056,7 @@ def create_razorpay_order(request):
             redeem_free_booking_credit(user, booking)
             award_booking_rewards(booking)
             ActivityLog.objects.create(user=user, action='BOOKED', booking=booking, slot=slot, meta={'reward': 'FREE_REWARD'})
-            transaction.on_commit(lambda booking=booking: _owner_booking_email(booking))
+            transaction.on_commit(lambda booking_id=booking.id: _queue_owner_booking_notifications(booking_id))
             return JsonResponse({
                 'success': True,
                 'free_booking': True,
@@ -1022,7 +1102,7 @@ def create_razorpay_order(request):
             )
 
             award_booking_rewards(booking)
-            transaction.on_commit(lambda booking=booking: _owner_booking_email(booking))
+            transaction.on_commit(lambda booking_id=booking.id: _queue_owner_booking_notifications(booking_id))
 
             return JsonResponse({
                 'success': True,
@@ -1183,7 +1263,7 @@ def verify_razorpay_payment_and_book(request):
                 )
 
                 award_booking_rewards(booking)
-                transaction.on_commit(lambda booking=booking: _owner_booking_email(booking))
+                transaction.on_commit(lambda booking_id=booking.id: _queue_owner_booking_notifications(booking_id))
 
                 return JsonResponse({
                     'success': True,
@@ -1280,7 +1360,16 @@ def owner_dashboard(request):
             selected_date = datetime.strptime(selected_date_raw, '%Y-%m-%d').date()
         except Exception:
             selected_date = today
-    filtered_bookings = bookings.filter(slot__date=selected_date).order_by('slot__start_time')
+    candidate_bookings = bookings.filter(
+        slot__date__in=[selected_date, selected_date + timedelta(days=1)]
+    ).order_by('slot__date', 'slot__start_time')
+    filtered_bookings = [
+        booking for booking in candidate_bookings
+        if _operating_window_for_date(booking.slot.ground, selected_date)[0]
+        <= _slot_start_datetime(booking.slot)
+        < _operating_window_for_date(booking.slot.ground, selected_date)[1]
+    ]
+    filtered_bookings.sort(key=lambda booking: _slot_start_datetime(booking.slot))
     bookings_title = f"Bookings for {selected_date.strftime('%a, %b %d, %Y')}"
 
     for booking in filtered_bookings:
@@ -1924,6 +2013,51 @@ def razorpay_webhook(request):
                 booking.payment_paid_at = timezone.now()
             booking.save(update_fields=['payment_status', 'payment_paid_at'])
 
+    return HttpResponse(status=200)
+
+
+@csrf_exempt
+def whatsapp_webhook(request):
+    """Meta verification and delivery-status endpoint; no booking action depends on it."""
+    verify_token = getattr(settings, 'WHATSAPP_WEBHOOK_VERIFY_TOKEN', '')
+    if request.method == 'GET':
+        if (
+            verify_token
+            and request.GET.get('hub.mode') == 'subscribe'
+            and hmac.compare_digest(request.GET.get('hub.verify_token', ''), verify_token)
+        ):
+            return HttpResponse(request.GET.get('hub.challenge', ''), content_type='text/plain')
+        return HttpResponse(status=403)
+
+    if request.method != 'POST':
+        return HttpResponse(status=405)
+
+    app_secret = getattr(settings, 'WHATSAPP_APP_SECRET', '')
+    signature = request.headers.get('X-Hub-Signature-256', '')
+    if not app_secret or not signature.startswith('sha256='):
+        return HttpResponse(status=403)
+    expected = 'sha256=' + hmac.new(
+        app_secret.encode('utf-8'), request.body, hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        logger.warning('Rejected WhatsApp webhook with invalid signature')
+        return HttpResponse(status=403)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        statuses = [
+            status.get('status')
+            for entry in payload.get('entry', [])
+            for change in entry.get('changes', [])
+            for value in [change.get('value', {})]
+            for status in value.get('statuses', [])
+            if status.get('status')
+        ]
+        if statuses:
+            logger.info('WhatsApp delivery statuses received: %s', ', '.join(statuses))
+    except (UnicodeDecodeError, json.JSONDecodeError, AttributeError, TypeError):
+        logger.warning('Received malformed WhatsApp webhook payload')
+        return HttpResponse(status=400)
     return HttpResponse(status=200)
 
 
@@ -2586,7 +2720,7 @@ def owner_manual_booking(request):
                         created_bookings.append(booking)
 
                     for booking in created_bookings:
-                        transaction.on_commit(lambda booking=booking: _owner_booking_email(booking))
+                        transaction.on_commit(lambda booking_id=booking.id: _queue_owner_booking_notifications(booking_id))
         except Slot.DoesNotExist:
             messages.error(request, 'Invalid slot selected.')
             return redirect('/owner/manual-booking/')
@@ -2637,7 +2771,7 @@ def owner_manual_booking(request):
     if selected_ground and selected_date:
         # Ensure slots exist for the selected date
         ensure_slots_for_ground_date(ground=selected_ground, slot_date=selected_date)
-        slots_qs = Slot.objects.filter(ground=selected_ground, date=selected_date, is_booked=False).order_by('start_time')
+        slots_qs = _slots_for_operating_date(selected_ground, selected_date, only_available=True)
         for s in slots_qs:
             if _slot_start_datetime(s) <= now_dt:
                 continue
@@ -2898,6 +3032,7 @@ def owner_mark_paid_at_ground(request, booking_id):
         slot=booking.slot,
         meta={'marked_at_ground': True},
     )
+    transaction.on_commit(lambda booking_id=booking.id: _queue_owner_booking_notifications(booking_id, event='PAYMENT_UPDATED'))
     messages.success(request, f'Payment marked as paid at ground for {booking.customer_name}.')
     return redirect('/dashboard/owner/')
 
@@ -2979,7 +3114,7 @@ def cancel_booking(request, booking_id):
         )
 
     _dispatch_ground_alerts(slot.ground, slot=slot, reason='LAST_MINUTE_OPENING')
-    transaction.on_commit(lambda booking=booking, cancelled_count=len(cancelled_bookings): _send_booking_cancelled_email(booking, cancelled_count=cancelled_count))
+    transaction.on_commit(lambda booking_id=booking.id, cancelled_count=len(cancelled_bookings): _queue_booking_cancellation_notifications(booking_id, cancelled_count))
 
     if no_refund:
         messages.warning(request, 'Booking cancelled.  the amount will not be refunded.')
@@ -3019,7 +3154,7 @@ def owner_cancel_booking(request, booking_id):
         )
 
     _dispatch_ground_alerts(slot.ground, slot=slot, reason='LAST_MINUTE_OPENING')
-    transaction.on_commit(lambda booking=booking, cancelled_count=len(cancelled_bookings): _send_booking_cancelled_email(booking, cancelled_count=cancelled_count))
+    transaction.on_commit(lambda booking_id=booking.id, cancelled_count=len(cancelled_bookings): _queue_booking_cancellation_notifications(booking_id, cancelled_count))
 
     messages.success(
         request,
