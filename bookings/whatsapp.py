@@ -11,6 +11,7 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 MAX_SAME_DAY_BOOKINGS_IN_MESSAGE = 8
+MAX_TEMPLATE_PARAMETER_LENGTH = 900
 
 
 def _normalise_phone(phone):
@@ -18,6 +19,12 @@ def _normalise_phone(phone):
     if len(digits) == 10:
         return f'91{digits}'
     return digits
+
+
+def _template_text(value):
+    """Make dynamic template values safe for Meta's text parameter rules."""
+    text = re.sub(r'\s+', ' ', str(value or '')).strip()
+    return (text or '-').replace('\x00', '')[:MAX_TEMPLATE_PARAMETER_LENGTH]
 
 
 def _send_template(*, recipient, template_name, language, parameters=None):
@@ -32,9 +39,10 @@ def _send_template(*, recipient, template_name, language, parameters=None):
         return False
     template = {'name': template_name, 'language': {'code': language}}
     if parameters:
+        safe_parameters = [_template_text(value) for value in parameters]
         template['components'] = [{
             'type': 'body',
-            'parameters': [{'type': 'text', 'text': str(value)} for value in parameters],
+            'parameters': [{'type': 'text', 'text': value} for value in safe_parameters],
         }]
     payload = {
         'messaging_product': 'whatsapp',
@@ -70,7 +78,11 @@ def _send_template(*, recipient, template_name, language, parameters=None):
             )
         except Exception:
             detail = 'Meta returned an unreadable error response.'
-        logger.error('WhatsApp API HTTP error template=%s status=%s %s', template_name, exc.code, detail)
+        logger.error(
+            'WhatsApp API HTTP error template=%s status=%s parameters=%s lengths=%s %s',
+            template_name, exc.code, len(parameters or []),
+            [len(value) for value in (safe_parameters if parameters else [])], detail,
+        )
         return False
     except (URLError, TimeoutError, OSError):
         logger.exception('WhatsApp API request failed template=%s', template_name)
@@ -107,7 +119,9 @@ def _other_bookings_for_day(booking):
     remaining = len(other_bookings) - len(displayed)
     if remaining:
         lines.append(f'Plus {remaining} more confirmed booking(s).')
-    return '\n'.join(lines)
+    # Meta template parameters are more reliable as a single line than as a
+    # newline-delimited schedule, especially when customer names are variable.
+    return ' | '.join(lines)
 
 
 def send_owner_booking_update(booking):
