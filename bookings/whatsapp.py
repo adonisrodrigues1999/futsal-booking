@@ -25,6 +25,10 @@ def _send_template(*, recipient, template_name, language, parameters=None):
     token = getattr(settings, 'WHATSAPP_ACCESS_TOKEN', '')
     phone_number_id = getattr(settings, 'WHATSAPP_PHONE_NUMBER_ID', '')
     if not all((token, phone_number_id, template_name, recipient)):
+        logger.warning(
+            'WhatsApp send skipped: incomplete configuration template=%s recipient_ending=%s',
+            template_name or '-', recipient[-4:] if recipient else '-',
+        )
         return False
     template = {'name': template_name, 'language': {'code': language}}
     if parameters:
@@ -53,6 +57,10 @@ def _send_template(*, recipient, template_name, language, parameters=None):
             if not 200 <= response.status < 300:
                 logger.error('WhatsApp API rejected template=%s status=%s', template_name, response.status)
                 return False
+            logger.info(
+                'WhatsApp template accepted by Meta template=%s recipient_ending=%s',
+                template_name, recipient[-4:],
+            )
     except HTTPError as exc:
         logger.error('WhatsApp API HTTP error template=%s status=%s', template_name, exc.code)
         return False
@@ -97,9 +105,11 @@ def _other_bookings_for_day(booking):
 def send_owner_booking_update(booking):
     """Send a pre-approved template; failures must never affect a booking."""
     if not getattr(settings, 'WHATSAPP_ENABLED', False):
+        logger.info('WhatsApp booking update skipped: globally disabled booking=%s', booking.id)
         return False
     owner = booking.slot.ground.owner
     if not getattr(owner, 'whatsapp_booking_updates_enabled', False):
+        logger.info('WhatsApp booking update skipped: owner disabled booking=%s owner=%s', booking.id, owner.id)
         return False
     recipient = _normalise_phone(getattr(owner, 'phone_number', ''))
     if not recipient:

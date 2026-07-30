@@ -282,5 +282,10 @@ LOGGING = {
             "level": os.getenv("FOOTBOOK_LOG_LEVEL", "INFO"),
             "propagate": False,
         },
+        "bookings.whatsapp": {
+            "handlers": ["console"],
+            "level": os.getenv("FOOTBOOK_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
     },
 }
