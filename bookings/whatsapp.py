@@ -62,7 +62,15 @@ def _send_template(*, recipient, template_name, language, parameters=None):
                 template_name, recipient[-4:],
             )
     except HTTPError as exc:
-        logger.error('WhatsApp API HTTP error template=%s status=%s', template_name, exc.code)
+        try:
+            error_payload = json.loads(exc.read().decode('utf-8'))
+            error = error_payload.get('error', {})
+            detail = 'code=%s subcode=%s message=%s' % (
+                error.get('code', '-'), error.get('error_subcode', '-'), error.get('message', '-'),
+            )
+        except Exception:
+            detail = 'Meta returned an unreadable error response.'
+        logger.error('WhatsApp API HTTP error template=%s status=%s %s', template_name, exc.code, detail)
         return False
     except (URLError, TimeoutError, OSError):
         logger.exception('WhatsApp API request failed template=%s', template_name)
