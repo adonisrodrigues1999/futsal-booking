@@ -227,6 +227,7 @@ EMAIL_BACKEND = os.getenv(
 # Meta WhatsApp Cloud API. Leave WHATSAPP_ENABLED off until the Meta app, phone
 # number, approved template, and webhook are configured in the environment.
 WHATSAPP_ENABLED = env_bool('WHATSAPP_ENABLED', default=False)
+WHATSAPP_ENABLED = env_bool('WHATSAPP_ENABLED', default=False)
 WHATSAPP_GRAPH_API_VERSION = env_text('WHATSAPP_GRAPH_API_VERSION', 'v25.0')
 WHATSAPP_ACCESS_TOKEN = env_text('WHATSAPP_ACCESS_TOKEN', '')
 WHATSAPP_PHONE_NUMBER_ID = env_text('WHATSAPP_PHONE_NUMBER_ID', '')
@@ -257,6 +258,7 @@ CSRF_FAILURE_VIEW = "accounts.views.csrf_failure"
 RAZORPAY_KEY_ID = env_secret("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = env_secret("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = env_secret("RAZORPAY_WEBHOOK_SECRET", "")
+BOOKING_SUPPORT_PHONE = env_secret("BOOKING_SUPPORT_PHONE", "8625877270")
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_PUBLIC_KEY = os.getenv("STRIPE_PUBLIC_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")

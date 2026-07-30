@@ -10,9 +10,10 @@ from accounts.models import User
 from grounds.models import Ground, GroundPricing, Tournament, TournamentRegistration
 from django.utils import timezone
 
-from .models import Slot, Booking, OwnerExpense, BookingAttendance, GroundInvoice, InvoiceLineItem, OnlineSettlement, OnlineSettlementLineItem
+from .models import Slot, Booking, PaymentAttempt, OwnerExpense, BookingAttendance, GroundInvoice, InvoiceLineItem, OnlineSettlement, OnlineSettlementLineItem
 from .slot_generation import create_initial_slots_for_ground, ensure_slots_for_ground_date
-from .views import _slot_price_for_slot
+from .views import _slot_price_for_slot, _finalize_payment_attempt
+from .whatsapp import _other_bookings_for_day
 
 
 class SlotGenerationTests(TestCase):
@@ -1386,3 +1387,65 @@ class BookingFraudDetectionTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('Paid amount mismatch', response.json().get('error', ''))
         self.assertFalse(Booking.objects.filter(slot=self.slot, status='BOOKED').exists())
+
+    def test_captured_attempt_is_booked_idempotently(self):
+        attempt = PaymentAttempt.objects.create(
+            user=self.customer, slot=self.slot, payment_mode='FULL',
+            total_amount=500, pay_now_amount=500, due_amount=0,
+            razorpay_order_id='order_recovery_1',
+        )
+        with patch('bookings.views._queue_owner_booking_notifications'):
+            booking, issue = _finalize_payment_attempt(
+                attempt.id, payment_id='pay_recovery_1', payment_amount=50000,
+            )
+            repeated_booking, repeated_issue = _finalize_payment_attempt(
+                attempt.id, payment_id='pay_recovery_1', payment_amount=50000,
+            )
+
+        attempt.refresh_from_db()
+        self.slot.refresh_from_db()
+        self.assertIsNone(issue)
+        self.assertIsNone(repeated_issue)
+        self.assertEqual(booking.id, repeated_booking.id)
+        self.assertEqual(attempt.status, 'BOOKED')
+        self.assertTrue(self.slot.is_booked)
+        self.assertEqual(Booking.objects.filter(slot=self.slot, status='BOOKED').count(), 1)
+
+    def test_captured_attempt_that_loses_slot_is_visible_for_support(self):
+        self.slot.is_booked = True
+        self.slot.save(update_fields=['is_booked'])
+        attempt = PaymentAttempt.objects.create(
+            user=self.customer, slot=self.slot, payment_mode='FULL',
+            total_amount=500, pay_now_amount=500, due_amount=0,
+            razorpay_order_id='order_conflict_1',
+        )
+        booking, issue = _finalize_payment_attempt(
+            attempt.id, payment_id='pay_conflict_1', payment_amount=50000,
+        )
+
+        attempt.refresh_from_db()
+        self.assertIsNone(booking)
+        self.assertIn('unavailable', issue)
+        self.assertEqual(attempt.status, 'ACTION_REQUIRED')
+        self.assertEqual(attempt.razorpay_payment_id, 'pay_conflict_1')
+
+    def test_whatsapp_same_day_summary_excludes_new_booking(self):
+        other_slot = Slot.objects.create(
+            ground=self.ground, date=self.slot.date,
+            start_time=time(9, 0), end_time=time(10, 0), is_booked=True,
+        )
+        Booking.objects.create(
+            user=self.customer, slot=other_slot, customer_name='Earlier Player',
+            customer_phone='6333333333', total_amount=500, owner_payout=500,
+            payment_status='PAID', paid_amount=500,
+        )
+        current_booking = Booking.objects.create(
+            user=self.customer, slot=self.slot, customer_name='New Player',
+            customer_phone='6444444444', total_amount=500, owner_payout=500,
+            payment_status='PAID', paid_amount=500,
+        )
+
+        summary = _other_bookings_for_day(current_booking)
+
+        self.assertIn('09:00 AM–10:00 AM — Earlier Player — Paid', summary)
+        self.assertNotIn('New Player', summary)

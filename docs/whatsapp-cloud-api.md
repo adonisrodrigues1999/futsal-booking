@@ -1,6 +1,6 @@
 # WhatsApp Cloud API setup
 
-FootBook sends a template message only to the ground owner. The body template must have these seven variables, in this exact order:
+FootBook sends a template message only to the ground owner. The body template must have these eight variables, in this exact order:
 
 1. Booking date
 2. Ground name
@@ -9,6 +9,7 @@ FootBook sends a template message only to the ground owner. The body template mu
 5. Customer phone number
 6. Booking status
 7. Payment status
+8. Other confirmed bookings at the same ground on the same date (up to eight, excluding the newly-created booking)
 
 Create an approved **Utility** template in Meta WhatsApp Manager, for example `ground_booking_update`, with a body similar to:
 
@@ -20,6 +21,7 @@ Slot: {{3}}
 Customer: {{4}} ({{5}})
 Booking: {{6}}
 Payment: {{7}}
+Other bookings today: {{8}}.
 ```
 
 ## Meta configuration

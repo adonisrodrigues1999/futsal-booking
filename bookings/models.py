@@ -84,6 +84,42 @@ class Booking(models.Model):
         return f"Booking {self.id} - {self.customer_name}"
 
 
+class PaymentAttempt(models.Model):
+    """A durable record linking a gateway payment to its intended slot.
+
+    This is deliberately created before the customer reaches Razorpay.  It lets
+    the webhook finish a booking if the browser loses its final callback.
+    """
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending payment'),
+        ('CAPTURED', 'Payment received'),
+        ('BOOKED', 'Booking confirmed'),
+        ('ACTION_REQUIRED', 'Needs support'),
+        ('FAILED', 'Failed'),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    slot = models.ForeignKey(Slot, on_delete=models.CASCADE)
+    payment_mode = models.CharField(max_length=12, choices=Booking.PAYMENT_MODE)
+    total_amount = models.PositiveIntegerField()
+    pay_now_amount = models.PositiveIntegerField()
+    due_amount = models.PositiveIntegerField()
+    razorpay_order_id = models.CharField(max_length=100, blank=True, null=True, unique=True)
+    razorpay_payment_id = models.CharField(max_length=100, blank=True, null=True, unique=True)
+    booking = models.OneToOneField(Booking, null=True, blank=True, on_delete=models.SET_NULL, related_name='payment_attempt')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    failure_reason = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'status', 'created_at'], name='bookings_pa_user_id_1caae4_idx'),
+            models.Index(fields=['status', 'created_at'], name='bookings_pa_status_d31d06_idx'),
+        ]
+
+
 class BookingActivityLog(models.Model):
     ACTIONS = (('CREATED','Created'), ('CANCELLED','Cancelled'))
 

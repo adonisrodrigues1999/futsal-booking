@@ -20,6 +20,13 @@
     {% endfor %}
   {% endif %}
 
+  {% for attempt in payment_issues %}
+    <div class="alert alert-warning" role="alert">
+      <strong>Payment needs attention.</strong> We received payment for {{ attempt.slot.ground.name }} on {{ attempt.slot.date|date:"M d, Y" }} at {{ attempt.slot.start_time|time:"g:i A" }}, but the booking is still being checked.
+      Call <a href="tel:{{ booking_support_phone }}">{{ booking_support_phone }}</a> and share payment ID {{ attempt.razorpay_payment_id|default:attempt.razorpay_order_id }}.
+    </div>
+  {% endfor %}
+
   {% if bookings_by_date %}
     {% for date, bookings in bookings_by_date.items %}
       <h5 class="mt-4 mb-3">{{ date|format_date_with_day }}</h5>

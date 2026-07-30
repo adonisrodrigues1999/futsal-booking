@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from django.db import transaction, OperationalError, IntegrityError
 from django.db.models import Count, Sum, Q, Prefetch
 from django.db.models.functions import Coalesce
-import time
 from django.core.mail import send_mail
 from django.conf import settings
 import csv
@@ -36,7 +35,7 @@ try:
 except Exception:
     razorpay = None
 
-from .models import Ground, Slot, Booking, ActivityLog, OwnerExpense, BookingAttendance, AlertSubscription, RewardTransaction, AlertDispatchLog, SettlementRefund, InvoiceLineItem, GroundInvoice, OnlineSettlement, OnlineSettlementLineItem
+from .models import Ground, Slot, Booking, PaymentAttempt, ActivityLog, OwnerExpense, BookingAttendance, AlertSubscription, RewardTransaction, AlertDispatchLog, SettlementRefund, InvoiceLineItem, GroundInvoice, OnlineSettlement, OnlineSettlementLineItem
 from .money import ground_collected_amount_expression, online_collected_amount_expression
 from grounds.forms import TournamentForm, TournamentRegistrationForm, GroundReviewForm
 from grounds.models import Tournament, TournamentRegistration, GroundReview
@@ -114,6 +113,79 @@ def _payment_amounts(total_amount, payment_mode):
             return total_amount, 0, 'FULL'
         return paid, due, 'PARTIAL_99'
     return total_amount, 0, 'FULL'
+
+
+def _payment_support_message():
+    return f'Your payment is safe and is being checked. Contact {settings.BOOKING_SUPPORT_PHONE} with your payment ID if it is not confirmed shortly.'
+
+
+def _finalize_payment_attempt(attempt_id, *, payment_id, payment_amount=None):
+    """Idempotently turn a captured payment attempt into a booking.
+
+    Both the browser callback and the signed Razorpay webhook call this, so a
+    lost connection after payment cannot leave a customer with no recovery path.
+    """
+    # This update is intentionally outside the booking transaction.  If a
+    # later operation rolls back, the paid attempt still remains visible and
+    # eligible for a webhook retry instead of disappearing with the rollback.
+    PaymentAttempt.objects.filter(id=attempt_id, booking__isnull=True).update(
+        status='CAPTURED', razorpay_payment_id=payment_id,
+    )
+    with transaction.atomic():
+        attempt = PaymentAttempt.objects.select_for_update().select_related('user').get(id=attempt_id)
+        if attempt.booking_id:
+            return attempt.booking, None
+        if payment_amount is not None and int(payment_amount) != attempt.pay_now_amount * 100:
+            attempt.status = 'ACTION_REQUIRED'
+            attempt.failure_reason = 'Gateway amount did not match the expected payment.'
+            attempt.save(update_fields=['status', 'failure_reason', 'updated_at'])
+            return None, attempt.failure_reason
+
+        slot = Slot.objects.select_for_update().select_related('ground').get(id=attempt.slot_id, ground__is_active=True)
+        if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
+            attempt.status = 'ACTION_REQUIRED'
+            attempt.failure_reason = 'The slot became unavailable after payment.'
+            attempt.razorpay_payment_id = payment_id
+            attempt.save(update_fields=['status', 'failure_reason', 'razorpay_payment_id', 'updated_at'])
+            return None, attempt.failure_reason
+        if _slot_start_datetime(slot) <= timezone.localtime(timezone.now()):
+            attempt.status = 'ACTION_REQUIRED'
+            attempt.failure_reason = 'The slot started before payment confirmation completed.'
+            attempt.razorpay_payment_id = payment_id
+            attempt.save(update_fields=['status', 'failure_reason', 'razorpay_payment_id', 'updated_at'])
+            return None, attempt.failure_reason
+
+        existing_bookings = Booking.objects.filter(
+            user=attempt.user, slot__ground=slot.ground, slot__date=slot.date, status='BOOKED'
+        ).count()
+        if existing_bookings >= 5:
+            attempt.status = 'ACTION_REQUIRED'
+            attempt.failure_reason = 'Daily booking limit was reached before payment confirmation.'
+            attempt.razorpay_payment_id = payment_id
+            attempt.save(update_fields=['status', 'failure_reason', 'razorpay_payment_id', 'updated_at'])
+            return None, attempt.failure_reason
+
+        payment_status = 'PAID' if attempt.due_amount == 0 else 'PARTIALLY_PAID'
+        booking = Booking.objects.create(
+            user=attempt.user, slot=slot, customer_name=attempt.user.name,
+            customer_phone=attempt.user.phone_number, total_amount=attempt.total_amount,
+            owner_payout=attempt.total_amount, booking_source='ONLINE',
+            payment_mode=attempt.payment_mode, payment_status=payment_status,
+            paid_amount=attempt.pay_now_amount, due_amount=attempt.due_amount,
+            payment_paid_at=timezone.now(), razorpay_order_id=attempt.razorpay_order_id,
+            razorpay_payment_id=payment_id,
+        )
+        slot.is_booked = True
+        slot.save(update_fields=['is_booked'])
+        ActivityLog.objects.create(user=attempt.user, action='BOOKED', booking=booking, slot=slot)
+        award_booking_rewards(booking)
+        attempt.booking = booking
+        attempt.status = 'BOOKED'
+        attempt.failure_reason = ''
+        attempt.razorpay_payment_id = payment_id
+        attempt.save(update_fields=['booking', 'status', 'failure_reason', 'razorpay_payment_id', 'updated_at'])
+        transaction.on_commit(lambda booking_id=booking.id: _queue_owner_booking_notifications(booking_id))
+        return booking, None
 
 
 def _online_collected_amount_for_booking(booking):
@@ -1116,6 +1188,16 @@ def create_razorpay_order(request):
     if not client or not key_id:
         return JsonResponse({'success': False, 'error': 'Razorpay is not configured on server'}, status=500)
 
+    # Persist the intent before opening checkout.  A signed webhook can now
+    # complete this attempt even if the customer's final browser request dies.
+    payment_attempt = PaymentAttempt.objects.create(
+        user=request.user,
+        slot=slot,
+        payment_mode=resolved_mode,
+        total_amount=total_amount,
+        pay_now_amount=pay_now_amount,
+        due_amount=due_amount,
+    )
     try:
         order = client.order.create({
             'amount': pay_now_amount * 100,
@@ -1125,9 +1207,13 @@ def create_razorpay_order(request):
                 'slot_id': str(slot.id),
                 'user_id': str(request.user.id),
                 'payment_mode': resolved_mode,
+                'payment_attempt_id': str(payment_attempt.id),
             }
         })
     except Exception as exc:
+        payment_attempt.status = 'FAILED'
+        payment_attempt.failure_reason = 'Could not initialize the payment gateway.'
+        payment_attempt.save(update_fields=['status', 'failure_reason', 'updated_at'])
         logger.exception(
             'Failed to create Razorpay order for slot=%s user=%s',
             slot.id,
@@ -1141,9 +1227,13 @@ def create_razorpay_order(request):
             }, status=500)
         return JsonResponse({'success': False, 'error': 'Unable to initialize payment right now'}, status=500)
 
+    payment_attempt.razorpay_order_id = order.get('id')
+    payment_attempt.save(update_fields=['razorpay_order_id', 'updated_at'])
+
     return JsonResponse({
         'success': True,
         'order_id': order.get('id'),
+        'payment_attempt_id': str(payment_attempt.id),
         'key_id': key_id,
         'slot_id': slot.id,
         'payment_mode': resolved_mode,
@@ -1205,87 +1295,49 @@ def verify_razorpay_payment_and_book(request):
         return JsonResponse({'success': False, 'error': 'Slot mismatch for payment'}, status=400)
     if str(order_notes.get('user_id')) != str(request.user.id):
         return JsonResponse({'success': False, 'error': 'User mismatch for payment'}, status=400)
+    # Reject malformed/tampered gateway data before looking up the durable
+    # attempt too; this keeps the payment verification contract explicit.
+    slot_for_amount = get_object_or_404(Slot.objects.select_related('ground'), id=slot_id)
+    expected_paid_amount, _, _ = _payment_amounts(_slot_price_for_slot(slot_for_amount), payment_mode)
+    if int(payment.get('amount') or 0) != expected_paid_amount * 100:
+        return JsonResponse({'success': False, 'error': 'Paid amount mismatch'}, status=400)
+    attempt_id = order_notes.get('payment_attempt_id')
+    try:
+        payment_attempt = PaymentAttempt.objects.get(id=attempt_id, razorpay_order_id=razorpay_order_id, user=request.user)
+    except (PaymentAttempt.DoesNotExist, ValueError, TypeError):
+        logger.error('Paid Razorpay order has no matching payment attempt: order=%s user=%s', razorpay_order_id, request.user.id)
+        return JsonResponse({'success': False, 'error': _payment_support_message()}, status=409)
 
-    attempts = 3
-    for attempt in range(attempts):
-        try:
-            with transaction.atomic():
-                slot = Slot.objects.select_for_update().select_related('ground').get(id=slot_id, ground__is_active=True)
-                if slot.is_booked or Booking.objects.filter(slot=slot, status='BOOKED').exists():
-                    return JsonResponse({'success': False, 'error': 'Slot was booked by someone else. Payment is non-refundable; contact support.'}, status=409)
+    try:
+        booking, issue = _finalize_payment_attempt(
+            payment_attempt.id,
+            payment_id=razorpay_payment_id,
+            payment_amount=payment.get('amount'),
+        )
+    except (OperationalError, IntegrityError):
+        # The attempt remains durable and the signed webhook will retry it.
+        logger.exception('Booking finalization delayed for payment attempt=%s', payment_attempt.id)
+        return JsonResponse({'success': False, 'error': _payment_support_message()}, status=503)
 
-                if _slot_start_datetime(slot) <= timezone.localtime(timezone.now()):
-                    return JsonResponse({'success': False, 'error': 'Slot has already started'}, status=400)
-
-                existing_bookings = Booking.objects.filter(
-                    user=request.user,
-                    slot__ground=slot.ground,
-                    slot__date=slot.date,
-                    status='BOOKED'
-                ).count()
-                if existing_bookings >= 5:
-                    return JsonResponse({'success': False, 'error': 'You can only book up to 5 slots per day per ground.'}, status=400)
-
-                total_amount = _slot_price_for_slot(slot)
-                paid_amount, due_amount, resolved_mode = _payment_amounts(total_amount, payment_mode)
-                expected_amount_paise = paid_amount * 100
-                if int(payment.get('amount') or 0) != expected_amount_paise:
-                    return JsonResponse({'success': False, 'error': 'Paid amount mismatch'}, status=400)
-
-                owner_payout = total_amount
-                payment_status = 'PAID' if due_amount == 0 else 'PARTIALLY_PAID'
-                booking = Booking.objects.create(
-                    user=request.user,
-                    slot=slot,
-                    customer_name=request.user.name,
-                    customer_phone=request.user.phone_number,
-                    total_amount=total_amount,
-                    owner_payout=owner_payout,
-                    booking_source='ONLINE',
-                    payment_mode=resolved_mode,
-                    payment_status=payment_status,
-                    paid_amount=paid_amount,
-                    due_amount=due_amount,
-                    payment_paid_at=timezone.now(),
-                    razorpay_order_id=razorpay_order_id,
-                    razorpay_payment_id=razorpay_payment_id,
-                    razorpay_signature=razorpay_signature,
-                )
-
-                slot.is_booked = True
-                slot.save(update_fields=['is_booked'])
-
-                ActivityLog.objects.create(
-                    user=request.user,
-                    action='BOOKED',
-                    booking=booking,
-                    slot=slot
-                )
-
-                award_booking_rewards(booking)
-                transaction.on_commit(lambda booking_id=booking.id: _queue_owner_booking_notifications(booking_id))
-
-                return JsonResponse({
-                    'success': True,
-                    'booking_id': str(booking.id),
-                    'redirect_url': '/my-bookings/',
-                    'message': 'Booking confirmed. Amount paid is non-refundable.',
-                })
-        except OperationalError:
-            if attempt < attempts - 1:
-                time.sleep(0.1)
-                continue
-            return JsonResponse({'success': False, 'error': 'Database busy, please retry.'}, status=500)
-        except IntegrityError:
-            return JsonResponse({'success': False, 'error': 'Unable to create booking, please retry.'}, status=500)
-
-    return JsonResponse({'success': False, 'error': 'Unable to complete booking'}, status=500)
+    if not booking:
+        return JsonResponse({'success': False, 'error': f'{issue} {_payment_support_message()}'}, status=409)
+    return JsonResponse({
+        'success': True,
+        'booking_id': str(booking.id),
+        'redirect_url': '/my-bookings/',
+        'message': 'Booking confirmed. Amount paid is non-refundable.',
+    })
 
 
 @login_required
 def my_bookings(request):
     # show only active (BOOKED) bookings for the current user
-    bookings = Booking.objects.filter(user=request.user, status='BOOKED').order_by('-created_at')
+    bookings = Booking.objects.filter(user=request.user, status='BOOKED').select_related('slot__ground__owner').order_by('-created_at')
+    payment_issues = PaymentAttempt.objects.filter(
+        user=request.user,
+        status__in=['CAPTURED', 'ACTION_REQUIRED'],
+        booking__isnull=True,
+    ).select_related('slot__ground').order_by('-updated_at')
     now_dt = timezone.localtime(timezone.now())
     today = timezone.localdate()
 
@@ -1305,7 +1357,9 @@ def my_bookings(request):
         bookings_by_date[date].append(booking)
 
     return render(request, 'bookings/my_bookings.html', {
-        'bookings_by_date': bookings_by_date
+        'bookings_by_date': bookings_by_date,
+        'payment_issues': payment_issues,
+        'booking_support_phone': settings.BOOKING_SUPPORT_PHONE,
     })
 
 
@@ -1991,6 +2045,23 @@ def razorpay_webhook(request):
     order_id = payment_entity.get('order_id')
 
     if event_name in {'payment.captured', 'order.paid'} and payment_id:
+        payment_attempt = PaymentAttempt.objects.filter(razorpay_order_id=order_id).first() if order_id else None
+        if payment_attempt:
+            try:
+                booking, issue = _finalize_payment_attempt(
+                    payment_attempt.id,
+                    payment_id=payment_id,
+                    payment_amount=payment_entity.get('amount'),
+                )
+                if not booking:
+                    logger.error('Captured payment needs support attempt=%s: %s', payment_attempt.id, issue)
+            except Exception:
+                # Return 500 so Razorpay retries a transient database failure.
+                logger.exception('Could not finalize captured payment attempt=%s', payment_attempt.id)
+                return HttpResponse(status=500)
+            return HttpResponse(status=200)
+
+        # Compatibility for payments made before durable attempts were deployed.
         booking = (
             Booking.objects
             .filter(razorpay_payment_id=payment_id)

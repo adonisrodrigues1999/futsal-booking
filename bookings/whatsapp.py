@@ -10,6 +10,7 @@ from django.conf import settings
 
 
 logger = logging.getLogger(__name__)
+MAX_SAME_DAY_BOOKINGS_IN_MESSAGE = 8
 
 
 def _normalise_phone(phone):
@@ -70,6 +71,29 @@ def send_test_template(recipient, *, template_name='hello_world', language='en_U
     )
 
 
+def _other_bookings_for_day(booking):
+    """Return a compact same-ground schedule for the owner notification."""
+    other_bookings = list(
+        booking.__class__.objects.filter(
+            slot__ground_id=booking.slot.ground_id,
+            slot__date=booking.slot.date,
+            status='BOOKED',
+        ).exclude(pk=booking.pk).select_related('slot').order_by('slot__start_time')
+    )
+    if not other_bookings:
+        return 'No other confirmed bookings for this date.'
+
+    displayed = other_bookings[:MAX_SAME_DAY_BOOKINGS_IN_MESSAGE]
+    lines = [
+        f'{item.slot.start_time.strftime("%I:%M %p")}–{item.slot.end_time.strftime("%I:%M %p")} — {item.customer_name} — {item.get_payment_status_display()}'
+        for item in displayed
+    ]
+    remaining = len(other_bookings) - len(displayed)
+    if remaining:
+        lines.append(f'Plus {remaining} more confirmed booking(s).')
+    return '\n'.join(lines)
+
+
 def send_owner_booking_update(booking):
     """Send a pre-approved template; failures must never affect a booking."""
     if not getattr(settings, 'WHATSAPP_ENABLED', False):
@@ -93,5 +117,6 @@ def send_owner_booking_update(booking):
             booking.customer_phone,
             booking.get_status_display(),
             booking.get_payment_status_display(),
+            _other_bookings_for_day(booking),
         ],
     )

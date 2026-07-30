@@ -701,7 +701,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }).catch(function(err) {
       recordSupportActivity('payment_verify_failed', err.message || 'Booking verification failed');
       window.hideProcessingOverlay(true);
-      showAppToast(err.message || 'Payment verified but booking failed. Contact support.', 'danger', 4200);
+      showAppToast(err.message || 'Payment is being checked. Contact 8625877270 if it is not confirmed shortly.', 'danger', 5200);
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Proceed to Pay';
     });
