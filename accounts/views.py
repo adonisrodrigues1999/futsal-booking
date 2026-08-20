@@ -1,4 +1,6 @@
 import logging
+import secrets
+import re
 from urllib.parse import quote
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -15,10 +17,13 @@ from django.utils.http import url_has_allowed_host_and_scheme, urlsafe_base64_en
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.forms import SetPasswordForm
 from datetime import timedelta
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Sum, Q
 from django.db.models.functions import Coalesce
 from django import forms
-from .models import User
+from .models import User, CustomerLoginOTP
+from bookings.whatsapp import send_customer_login_otp
+from django.contrib.auth.hashers import check_password, make_password
 from bookings.models import EmailVerification
 from bookings.models import Booking
 from bookings.money import ground_collected_amount_expression, online_collected_amount_expression
@@ -96,6 +101,38 @@ def _post_login_redirect_url(request, user, *, next_url='', slot_id=''):
     if user.role == 'owner':
         return reverse('owner_dashboard')
     return reverse('customer_dashboard')
+
+
+def _normalise_indian_phone(value):
+    digits = re.sub(r'\D', '', value or '')
+    if digits.startswith('91') and len(digits) == 12:
+        digits = digits[2:]
+    return digits if re.fullmatch(r'[6-9]\d{9}', digits) else ''
+
+
+def _request_ip(request):
+    return (request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
+            or request.META.get('REMOTE_ADDR') or None)
+
+
+def _customer_for_verified_phone(phone):
+    """Return the existing customer, or create one only after OTP verification."""
+    user = User.objects.filter(phone_number=phone).first()
+    if user:
+        return user
+    # The existing user schema requires an email. This internal placeholder is
+    # never used for notifications and can be replaced from the profile later.
+    try:
+        with transaction.atomic():
+            user = User(
+                email=f'{phone}@otp.footbook.online', phone_number=phone,
+                name='FootBook Player', role='customer', email_verified=True,
+            )
+            user.set_unusable_password()
+            user.save()
+            return user
+    except IntegrityError:
+        return User.objects.get(phone_number=phone)
 
 
 def _recover_login_after_csrf_failure(request):
@@ -321,109 +358,95 @@ def register(request):
 def login_view(request):
     if request.user.is_authenticated:
         return redirect('home')
-
-    today = timezone.localdate()
-    week_start = today - timedelta(days=6)
-    public_top_grounds = (
-        Booking.objects.filter(status='BOOKED', slot__date__gte=week_start)
-        .values('slot__ground__name')
-        .annotate(bookings_count=Count('id'))
-        .order_by('-bookings_count', 'slot__ground__name')[:5]
-    )
-    public_top_tournaments = (
-        TournamentRegistration.objects.filter(status='REGISTERED', created_at__date__gte=week_start)
-        .values('tournament__title')
-        .annotate(registrations_count=Count('id'))
-        .order_by('-registrations_count', 'tournament__title')[:5]
-    )
-    public_top_players = (
-        User.objects.filter(role='customer')
-        .annotate(total_bookings=Count('booking', filter=Q(booking__status='BOOKED')))
-        .order_by('-total_bookings', 'name')[:5]
-    )
-
-    # Handle identifier pre-fill from register redirect
-    identifier_param = request.GET.get('identifier', '')
     next_url = request.GET.get('next', '')
     slot_id_param = request.GET.get('slot', '')
-
+    context = {'next': next_url, 'slot': slot_id_param, 'otp_sent': False}
     if request.method == 'POST':
-        form = UserLoginForm(request.POST)
+        phone = _normalise_indian_phone(request.POST.get('phone'))
         next_url = request.POST.get('next', '')
-        slot_id = request.POST.get('slot', '')
-
-        if form.is_valid():
-            email = form.cleaned_data.get('email')
-            phone = form.cleaned_data.get('phone')
-            password = form.cleaned_data['password']
-
-            # Try to authenticate with email first, then phone
-            user_obj = None
-            user = None
-            try:
-                if email:
-                    user_obj = User.objects.get(email__iexact=email)
-                    user = authenticate(request, username=user_obj.email, password=password)
-                elif phone:
-                    user_obj = User.objects.get(phone_number=phone)
-                    user = authenticate(request, username=user_obj.email, password=password)
-            except User.DoesNotExist:
-                identifier_value = email or phone or ''
-                messages.info(request, 'No account found with that login. You can register instead.')
-                context = {
-                    'form': form,
-                    'public_top_grounds': public_top_grounds,
-                    'public_top_tournaments': public_top_tournaments,
-                    'public_top_players': public_top_players,
-                    'show_register_prompt': True,
-                    'missing_account_email': identifier_value,
-                    'next': next_url,
-                    'slot': slot_id,
-                }
-                return render(request, 'accounts/login.html', context)
-
-            if user is not None and user_obj is not None:
-                if user.email_verified:
-                    login(request, user)
-                    messages.success(request, f'Welcome back, {user.name}!')
-                    return redirect(_post_login_redirect_url(request, user, next_url=next_url, slot_id=slot_id))
+        slot_id_param = request.POST.get('slot', '')
+        context.update({'next': next_url, 'slot': slot_id_param})
+        if not phone:
+            messages.error(request, 'Enter a valid 10-digit Indian mobile number.')
+        elif not getattr(settings, 'CUSTOMER_WHATSAPP_OTP_ENABLED', True):
+            messages.error(request, 'WhatsApp login is temporarily unavailable. Please use email login.')
+        else:
+            cutoff = timezone.now() - timedelta(minutes=15)
+            if CustomerLoginOTP.objects.filter(phone_number=phone, created_at__gte=cutoff).count() >= 3:
+                messages.error(request, 'Too many OTP requests. Please wait 15 minutes and try again.')
+            else:
+                CustomerLoginOTP.objects.filter(phone_number=phone, used_at__isnull=True).update(used_at=timezone.now())
+                otp = f'{secrets.randbelow(1_000_000):06d}'
+                record = CustomerLoginOTP.objects.create(
+                    phone_number=phone, code_hash=make_password(otp),
+                    expires_at=timezone.now() + timedelta(minutes=settings.CUSTOMER_OTP_EXPIRY_MINUTES),
+                    requested_ip=_request_ip(request),
+                )
+                if send_customer_login_otp(phone, otp):
+                    request.session['footbook_otp_id'] = record.id
+                    context.update({'otp_sent': True, 'phone': phone})
+                    messages.success(request, 'Your OTP has been sent to WhatsApp.')
                 else:
-                    # User exists but email not verified - show resend option
-                    messages.error(request, 'Please verify your email before logging in.')
-                    context = {
-                        'form': form,
-                        'public_top_grounds': public_top_grounds,
-                        'public_top_tournaments': public_top_tournaments,
-                        'public_top_players': public_top_players,
-                        'unverified_email': user_obj.email,
-                        'show_resend_verification': True,
-                        'next': next_url,
-                        'slot': slot_id,
-                    }
-                    return render(request, 'accounts/login.html', context)
-            else:
-                messages.error(request, 'Invalid credentials.')
-            # end if user is not None
-        # end if form.is_valid
-    # end if POST
-    else:
-        form = UserLoginForm()
+                    record.delete()
+                    logger.error('WhatsApp OTP send failed phone_ending=%s', phone[-4:])
+                    messages.error(request, 'We could not send a WhatsApp OTP right now. Please use email login or try again shortly.')
+    return render(request, 'accounts/login.html', context)
 
-        # Pre-fill identifier from GET params
-        if identifier_param:
-            if '@' in identifier_param:
-                form.fields['email'].initial = identifier_param
-            else:
-                form.fields['phone'].initial = identifier_param
 
-    return render(request, 'accounts/login.html', {
-        'form': form,
-        'public_top_grounds': public_top_grounds,
-        'public_top_tournaments': public_top_tournaments,
-        'public_top_players': public_top_players,
-        'next': next_url,
-        'slot': slot_id_param,
-    })
+@ensure_csrf_cookie
+def verify_customer_otp(request):
+    if request.method != 'POST':
+        return redirect('login')
+    phone = _normalise_indian_phone(request.POST.get('phone'))
+    otp = (request.POST.get('otp') or '').strip()
+    otp_id = request.session.get('footbook_otp_id')
+    if not phone or not re.fullmatch(r'\d{6}', otp) or not otp_id:
+        messages.error(request, 'Enter the 6-digit OTP sent to your WhatsApp.')
+        return redirect('login')
+    with transaction.atomic():
+        try:
+            record = CustomerLoginOTP.objects.select_for_update().get(
+                id=otp_id, phone_number=phone, used_at__isnull=True,
+            )
+        except CustomerLoginOTP.DoesNotExist:
+            messages.error(request, 'That OTP is no longer valid. Request a new one.')
+            return redirect('login')
+        if record.expires_at <= timezone.now() or record.attempts >= settings.CUSTOMER_OTP_MAX_ATTEMPTS:
+            record.used_at = timezone.now()
+            record.save(update_fields=['used_at'])
+            messages.error(request, 'That OTP expired. Request a new one.')
+            return redirect('login')
+        record.attempts += 1
+        if not check_password(otp, record.code_hash):
+            record.save(update_fields=['attempts'])
+            messages.error(request, 'Incorrect OTP. Please try again.')
+            return redirect(f'{reverse("login")}?phone={phone}')
+        user = _customer_for_verified_phone(phone)
+        if user.role != 'customer':
+            messages.error(request, 'This number belongs to a staff account. Please use email login.')
+            return redirect('email_login')
+        record.user = user
+        record.used_at = timezone.now()
+        record.save(update_fields=['user', 'used_at', 'attempts'])
+    request.session.pop('footbook_otp_id', None)
+    login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+    messages.success(request, 'You are logged in.')
+    return redirect(_post_login_redirect_url(request, user, next_url=request.POST.get('next', ''), slot_id=request.POST.get('slot', '')))
+
+
+@ensure_csrf_cookie
+def email_login_view(request):
+    """Legacy fallback for customers without WhatsApp and all staff accounts."""
+    form = UserLoginForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        identifier = form.cleaned_data.get('email') or form.cleaned_data.get('phone')
+        user_obj = User.objects.filter(email__iexact=identifier).first() if form.cleaned_data.get('email') else User.objects.filter(phone_number=identifier).first()
+        user = authenticate(request, username=user_obj.email, password=form.cleaned_data['password']) if user_obj else None
+        if user:
+            login(request, user)
+            return redirect(_post_login_redirect_url(request, user, next_url=request.POST.get('next', ''), slot_id=request.POST.get('slot', '')))
+        messages.error(request, 'Invalid email/phone number or password.')
+    return render(request, 'accounts/email_login.html', {'form': form, 'next': request.POST.get('next', request.GET.get('next', '')), 'slot': request.POST.get('slot', request.GET.get('slot', ''))})
 
 
 def resend_verification(request):

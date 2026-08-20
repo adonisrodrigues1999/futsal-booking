@@ -6,10 +6,51 @@ from unittest.mock import patch
 from django.test import TestCase, Client, override_settings
 from django.utils import timezone
 
-from accounts.models import User
+from accounts.models import CustomerLoginOTP, User
 from bookings.models import Booking, Slot
 from grounds.models import Ground
 from bookings.models import EmailVerification
+from django.contrib.auth.hashers import check_password
+
+
+@override_settings(CUSTOMER_WHATSAPP_OTP_ENABLED=True)
+class WhatsAppOTPLoginTests(TestCase):
+    def test_new_customer_can_log_in_with_whatsapp_otp(self):
+        with patch('accounts.views.send_customer_login_otp', return_value=True) as send_otp:
+            response = self.client.post('/accounts/login/', {'phone': '9876543210'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['otp_sent'])
+        record = CustomerLoginOTP.objects.get(phone_number='9876543210')
+        otp = send_otp.call_args.args[1]
+        self.assertTrue(check_password(otp, record.code_hash))
+
+        response = self.client.post('/accounts/login/verify-otp/', {
+            'phone': '9876543210', 'otp': otp,
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], '/accounts/customer-dashboard/')
+        user = User.objects.get(phone_number='9876543210')
+        self.assertEqual(user.role, 'customer')
+        self.assertTrue(user.email_verified)
+
+    def test_wrong_otp_does_not_log_customer_in(self):
+        with patch('accounts.views.send_customer_login_otp', return_value=True):
+            self.client.post('/accounts/login/', {'phone': '9876543210'})
+
+        response = self.client.post('/accounts/login/verify-otp/', {
+            'phone': '9876543210', 'otp': '000000',
+        })
+        self.assertRedirects(response, '/accounts/login/?phone=9876543210')
+        self.assertFalse('_auth_user_id' in self.client.session)
+
+    def test_otp_send_failure_creates_no_customer_or_code(self):
+        with patch('accounts.views.send_customer_login_otp', return_value=False):
+            response = self.client.post('/accounts/login/', {'phone': '9876543210'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(phone_number='9876543210').exists())
+        self.assertFalse(CustomerLoginOTP.objects.filter(phone_number='9876543210').exists())
 
 
 class AdminDashboardSettlementSplitTests(TestCase):

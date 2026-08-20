@@ -99,6 +99,19 @@ def send_test_template(recipient, *, template_name='hello_world', language='en_U
     )
 
 
+def send_customer_login_otp(phone_number, otp):
+    """Send a pre-approved authentication template to a customer."""
+    if not getattr(settings, 'WHATSAPP_ENABLED', False):
+        logger.warning('WhatsApp OTP skipped: WhatsApp is globally disabled')
+        return False
+    return _send_template(
+        recipient=_normalise_phone(phone_number),
+        template_name=getattr(settings, 'WHATSAPP_OTP_TEMPLATE_NAME', ''),
+        language=getattr(settings, 'WHATSAPP_OTP_TEMPLATE_LANGUAGE', 'en'),
+        parameters=[otp],
+    )
+
+
 def _other_bookings_for_day(booking):
     """Return a compact same-ground schedule for the owner notification."""
     other_bookings = list(

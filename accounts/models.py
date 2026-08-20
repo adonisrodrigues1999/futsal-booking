@@ -1,4 +1,5 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 import secrets
@@ -53,3 +54,21 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return f"{self.name} ({self.email})"
+
+
+class CustomerLoginOTP(models.Model):
+    """Short-lived, single-use WhatsApp login code for a customer."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name='login_otps')
+    phone_number = models.CharField(max_length=10, db_index=True)
+    code_hash = models.CharField(max_length=128)
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    used_at = models.DateTimeField(null=True, blank=True)
+    requested_ip = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['phone_number', 'created_at'], name='accounts_cu_phone_n_0f1e74_idx'),
+            models.Index(fields=['expires_at'], name='accounts_cu_expires_19fecc_idx'),
+        ]

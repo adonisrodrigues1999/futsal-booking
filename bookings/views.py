@@ -295,6 +295,8 @@ def _promo_email_allowed_now():
 
 
 def _owner_booking_email(booking, *, event='BOOKING_CREATED'):
+    if not getattr(settings, 'EMAIL_NOTIFICATIONS_ENABLED', False):
+        return
     owner = booking.slot.ground.owner if booking.slot and booking.slot.ground else None
     if not owner or not owner.email:
         return
@@ -398,6 +400,8 @@ def _booking_notification_recipients(booking):
 
 
 def _send_booking_cancelled_email(booking, *, cancelled_count=1):
+    if not getattr(settings, 'EMAIL_NOTIFICATIONS_ENABLED', False):
+        return
     recipients = _booking_notification_recipients(booking)
     if not recipients:
         return
@@ -535,6 +539,8 @@ def _slots_for_operating_date(ground, target_date, *, only_available=False):
 
 
 def _send_email(subject, body, recipients):
+    if not getattr(settings, 'EMAIL_NOTIFICATIONS_ENABLED', False):
+        return
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
     try:
         send_mail(subject, body, from_email, recipients, fail_silently=False)

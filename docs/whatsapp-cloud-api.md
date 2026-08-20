@@ -65,6 +65,25 @@ In Meta's API Setup screen, add and verify a recipient number under **To**. Then
 
 Replace the number with the allow-listed recipient in international digits only. The command sends `hello_world` and does not send a booking notification. Once that works, create and approve `ground_booking_update`, add the App Secret and webhook configuration, enable WhatsApp globally, and turn it on for one owner in Admin Dashboard.
 
+## Customer login OTP template
+
+Create a separate approved **Authentication** template named `footbook_login_otp` (or configure a different name with `WHATSAPP_OTP_TEMPLATE_NAME`). Its body must contain one numbered variable:
+
+```text
+Your FootBook login code is {{1}}. It expires in 10 minutes. Do not share this code with anyone.
+```
+
+Use the generic English locale `en` unless Meta displays a different locale for the approved template. Enable the customer flow only after the template is approved:
+
+```env
+CUSTOMER_WHATSAPP_OTP_ENABLED=true
+WHATSAPP_OTP_TEMPLATE_NAME=footbook_login_otp
+WHATSAPP_OTP_TEMPLATE_LANGUAGE=en
+EMAIL_NOTIFICATIONS_ENABLED=false
+```
+
+FootBook limits each mobile number to three OTP sends in fifteen minutes, expires codes after ten minutes, and locks a code after five incorrect attempts. A customer account is created only after successful OTP verification.
+
 ## Delivery behavior
 
 The booking transaction completes first. Email and WhatsApp work is then submitted to a background executor; failures are logged and do not affect booking creation, payments, or email delivery. This is deliberately lightweight for the current deployment. For durable retries across worker restarts, move `_send_owner_booking_notifications` to Celery/RQ backed by Redis before treating WhatsApp delivery as guaranteed.
