@@ -12,6 +12,7 @@ from bookings.models import Booking, Slot
 from grounds.models import Ground
 from bookings.models import EmailVerification
 from django.contrib.auth.hashers import check_password
+from bookings.whatsapp import send_customer_login_otp
 
 
 @override_settings(CUSTOMER_WHATSAPP_OTP_ENABLED=True)
@@ -98,6 +99,27 @@ class EmailMagicLinkLoginTests(TestCase):
         self.assertEqual(str(self.client.session['_auth_user_id']), str(self.user.id))
         self.user.refresh_from_db()
         self.assertTrue(self.user.email_verified)
+
+
+class WhatsAppTemplatePayloadTests(TestCase):
+    @override_settings(
+        WHATSAPP_ENABLED=True,
+        WHATSAPP_ACCESS_TOKEN='test-token',
+        WHATSAPP_PHONE_NUMBER_ID='123',
+        WHATSAPP_OTP_TEMPLATE_NAME='footbook_login_otp',
+    )
+    @patch('bookings.whatsapp.urlopen')
+    def test_otp_template_includes_its_required_dynamic_url_button_parameter(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.status = 200
+
+        self.assertTrue(send_customer_login_otp('9876543210', '123456'))
+        payload = json.loads(urlopen.call_args.args[0].data.decode('utf-8'))
+        self.assertEqual(payload['template']['components'][0]['parameters'][0]['text'], '123456')
+        self.assertEqual(payload['template']['components'][1], {
+            'type': 'button', 'sub_type': 'url', 'index': '0',
+            'parameters': [{'type': 'text', 'text': '123456'}],
+        })
 
 
 class AdminDashboardSettlementSplitTests(TestCase):

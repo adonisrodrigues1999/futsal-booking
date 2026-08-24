@@ -27,7 +27,7 @@ def _template_text(value):
     return (text or '-').replace('\x00', '')[:MAX_TEMPLATE_PARAMETER_LENGTH]
 
 
-def _send_template(*, recipient, template_name, language, parameters=None):
+def _send_template(*, recipient, template_name, language, parameters=None, url_button_parameters=None):
     """Send a Cloud API template without exposing credentials in logs."""
     token = getattr(settings, 'WHATSAPP_ACCESS_TOKEN', '')
     phone_number_id = getattr(settings, 'WHATSAPP_PHONE_NUMBER_ID', '')
@@ -44,6 +44,19 @@ def _send_template(*, recipient, template_name, language, parameters=None):
             'type': 'body',
             'parameters': [{'type': 'text', 'text': value} for value in safe_parameters],
         }]
+    if url_button_parameters:
+        # Authentication templates commonly use the OTP both in the message
+        # body and in a dynamic URL button.  Meta rejects the whole request if
+        # that button's {{1}} placeholder is omitted (error 131008).
+        template.setdefault('components', []).append({
+            'type': 'button',
+            'sub_type': 'url',
+            'index': '0',
+            'parameters': [
+                {'type': 'text', 'text': _template_text(value)}
+                for value in url_button_parameters
+            ],
+        })
     payload = {
         'messaging_product': 'whatsapp',
         'to': recipient,
@@ -109,6 +122,7 @@ def send_customer_login_otp(phone_number, otp):
         template_name=getattr(settings, 'WHATSAPP_OTP_TEMPLATE_NAME', ''),
         language=getattr(settings, 'WHATSAPP_OTP_TEMPLATE_LANGUAGE', 'en'),
         parameters=[otp],
+        url_button_parameters=[otp],
     )
 
 
