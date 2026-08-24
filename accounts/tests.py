@@ -60,6 +60,13 @@ class WhatsAppOTPLoginTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Login is temporarily unavailable')
 
+    def test_unexpected_otp_failure_is_shown_as_a_recoverable_login_error(self):
+        with patch('accounts.views.send_customer_login_otp', side_effect=RuntimeError('provider unavailable')):
+            response = self.client.post('/accounts/login/', {'phone': '9876543210'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'We could not start WhatsApp login')
+
 
 class AdminDashboardSettlementSplitTests(TestCase):
     def setUp(self):

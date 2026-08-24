@@ -396,6 +396,12 @@ def login_view(request):
                 # never turn a login attempt into an unhelpful server error.
                 logger.exception('WhatsApp OTP login database error phone_ending=%s', phone[-4:])
                 messages.error(request, 'Login is temporarily unavailable. Please try again shortly or use email login.')
+            except Exception:
+                # The WhatsApp provider is external to the authentication flow.
+                # Keep an unexpected provider/configuration failure from exposing
+                # a 500 page to a customer, while retaining the traceback in logs.
+                logger.exception('WhatsApp OTP login failed phone_ending=%s', phone[-4:])
+                messages.error(request, 'We could not start WhatsApp login right now. Please try again shortly or use email login.')
     return render(request, 'accounts/login.html', context)
 
 
