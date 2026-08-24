@@ -18,11 +18,15 @@ from django.contrib.auth.hashers import check_password
 class WhatsAppOTPLoginTests(TestCase):
     def test_new_customer_can_log_in_with_whatsapp_otp(self):
         with patch('accounts.views.send_customer_login_otp', return_value=True) as send_otp:
-            response = self.client.post('/accounts/login/', {'phone': '9876543210'})
+            response = self.client.post(
+                '/accounts/login/', {'phone': '9876543210'},
+                REMOTE_ADDR='103.14.50.224:23331',
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['otp_sent'])
         record = CustomerLoginOTP.objects.get(phone_number='9876543210')
+        self.assertEqual(record.requested_ip, '103.14.50.224')
         otp = send_otp.call_args.args[1]
         self.assertTrue(check_password(otp, record.code_hash))
 
@@ -53,19 +57,47 @@ class WhatsAppOTPLoginTests(TestCase):
         self.assertFalse(User.objects.filter(phone_number='9876543210').exists())
         self.assertFalse(CustomerLoginOTP.objects.filter(phone_number='9876543210').exists())
 
-    def test_otp_database_error_is_shown_as_a_recoverable_login_error(self):
+    def test_otp_database_error_redirects_to_email_sign_in(self):
         with patch('accounts.views.CustomerLoginOTP.objects.filter', side_effect=DatabaseError('database unavailable')):
-            response = self.client.post('/accounts/login/', {'phone': '9876543210'})
+            response = self.client.post('/accounts/login/', {
+                'phone': '9876543210', 'next': '/grounds/12/?date=2026-07-21',
+            })
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Login is temporarily unavailable')
+        self.assertRedirects(response, '/accounts/email-login/?next=/grounds/12/%3Fdate%3D2026-07-21')
 
-    def test_unexpected_otp_failure_is_shown_as_a_recoverable_login_error(self):
+    def test_unexpected_otp_failure_redirects_to_email_sign_in(self):
         with patch('accounts.views.send_customer_login_otp', side_effect=RuntimeError('provider unavailable')):
             response = self.client.post('/accounts/login/', {'phone': '9876543210'})
 
+        self.assertRedirects(response, '/accounts/email-login/')
+
+
+class EmailMagicLinkLoginTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='player@example.com', phone_number='9876543210', name='Player',
+            password='unused-password', role='customer', email_verified=False,
+        )
+
+    def test_email_link_logs_the_user_in_and_returns_to_the_selected_ground(self):
+        next_url = '/grounds/12/?date=2026-07-21'
+        with patch('accounts.views.send_mail') as send_mail:
+            response = self.client.post('/accounts/email-login/', {
+                'email': self.user.email,
+                'next': next_url,
+            })
+
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'We could not start WhatsApp login')
+        self.assertContains(response, 'secure sign-in link')
+        verification = EmailVerification.objects.get(user=self.user)
+        body = send_mail.call_args.args[1]
+        self.assertIn('next=/grounds/12/%3Fdate%3D2026-07-21', body)
+
+        response = self.client.get(f'/accounts/verify-email/{verification.token}/?next=/grounds/12/%3Fdate%3D2026-07-21')
+        self.assertRedirects(response, next_url, fetch_redirect_response=False)
+        self.assertEqual(str(self.client.session['_auth_user_id']), str(self.user.id))
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.email_verified)
 
 
 class AdminDashboardSettlementSplitTests(TestCase):

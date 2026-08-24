@@ -374,6 +374,19 @@ class UserLoginForm(forms.Form):
         return cleaned_data
 
 
+class EmailMagicLinkForm(forms.Form):
+    email = forms.EmailField(
+        widget=forms.EmailInput(attrs={
+            'placeholder': 'Enter your email address',
+            'class': 'form-control',
+            'autocomplete': 'email',
+        })
+    )
+
+    def clean_email(self):
+        return self.cleaned_data['email'].strip().lower()
+
+
 class CustomerProfileForm(forms.ModelForm):
     class Meta:
         model = User

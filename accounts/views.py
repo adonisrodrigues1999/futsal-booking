@@ -1,6 +1,8 @@
 import logging
 import secrets
 import re
+import ipaddress
+import uuid
 from urllib.parse import quote
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -28,7 +30,7 @@ from bookings.models import EmailVerification
 from bookings.models import Booking
 from bookings.money import ground_collected_amount_expression, online_collected_amount_expression
 from bookings.slot_generation import create_initial_slots_for_ground
-from .forms import UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm, GroundOwnerEditForm, GroundCreationForm, CustomerProfileForm
+from .forms import EmailMagicLinkForm, UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm, GroundOwnerEditForm, GroundCreationForm, CustomerProfileForm
 from grounds.models import Ground, Tournament, TournamentRegistration
 
 
@@ -111,8 +113,60 @@ def _normalise_indian_phone(value):
 
 
 def _request_ip(request):
-    return (request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
-            or request.META.get('REMOTE_ADDR') or None)
+    raw_address = (
+        request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
+        or request.META.get('REMOTE_ADDR', '').strip()
+    )
+    if not raw_address:
+        return None
+    try:
+        return str(ipaddress.ip_address(raw_address))
+    except ValueError:
+        # Azure commonly supplies REMOTE_ADDR as IPv4:port.  Keep IPv6 intact
+        # and only remove a port after proving the host is a valid address.
+        if raw_address.count(':') == 1:
+            host, _, _port = raw_address.partition(':')
+            try:
+                return str(ipaddress.ip_address(host))
+            except ValueError:
+                pass
+    logger.warning('Ignoring invalid client IP address for OTP request: %r', raw_address)
+    return None
+
+
+def _email_login_url(*, next_url='', slot_id=''):
+    query_bits = []
+    if next_url:
+        query_bits.append(f'next={quote(next_url)}')
+    if slot_id:
+        query_bits.append(f'slot={quote(str(slot_id))}')
+    return f"{reverse('email_login')}?{'&'.join(query_bits)}" if query_bits else reverse('email_login')
+
+
+def _send_email_login_link(*, request, user, next_url='', slot_id=''):
+    """Create a fresh, single-use link and email it to an existing account."""
+    verification, _ = EmailVerification.objects.get_or_create(user=user)
+    verification.token = uuid.uuid4()
+    verification.is_verified = False
+    verification.save(update_fields=['token', 'is_verified'])
+    verification_url = request.build_absolute_uri(reverse('verify_email', args=[verification.token]))
+    if next_url:
+        verification_url = f'{verification_url}?next={quote(next_url)}'
+        if slot_id:
+            verification_url = f'{verification_url}&slot={quote(str(slot_id))}'
+    elif slot_id:
+        verification_url = f'{verification_url}?slot={quote(str(slot_id))}'
+    send_mail(
+        'Your FootBook sign-in link',
+        (
+            'Use this secure link to sign in to FootBook:\n\n'
+            f'{verification_url}\n\n'
+            'This link signs you in directly. If you did not request it, you can ignore this email.'
+        ),
+        getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None),
+        [user.email],
+        fail_silently=False,
+    )
 
 
 def _customer_for_verified_phone(phone):
@@ -395,13 +449,15 @@ def login_view(request):
                 # A transient database error (or a still-pending migration) must
                 # never turn a login attempt into an unhelpful server error.
                 logger.exception('WhatsApp OTP login database error phone_ending=%s', phone[-4:])
-                messages.error(request, 'Login is temporarily unavailable. Please try again shortly or use email login.')
+                messages.error(request, 'WhatsApp login is temporarily unavailable. We sent you to email sign-in instead.')
+                return redirect(_email_login_url(next_url=next_url, slot_id=slot_id_param))
             except Exception:
                 # The WhatsApp provider is external to the authentication flow.
                 # Keep an unexpected provider/configuration failure from exposing
                 # a 500 page to a customer, while retaining the traceback in logs.
                 logger.exception('WhatsApp OTP login failed phone_ending=%s', phone[-4:])
-                messages.error(request, 'We could not start WhatsApp login right now. Please try again shortly or use email login.')
+                messages.error(request, 'We could not start WhatsApp login. Please continue with email sign-in.')
+                return redirect(_email_login_url(next_url=next_url, slot_id=slot_id_param))
     return render(request, 'accounts/login.html', context)
 
 
@@ -448,17 +504,35 @@ def verify_customer_otp(request):
 
 @ensure_csrf_cookie
 def email_login_view(request):
-    """Legacy fallback for customers without WhatsApp and all staff accounts."""
-    form = UserLoginForm(request.POST or None)
+    """Passwordless email sign-in for customers and staff."""
+    if request.user.is_authenticated:
+        return redirect(_post_login_redirect_url(request, request.user))
+
+    next_url = request.POST.get('next', request.GET.get('next', ''))
+    slot_id = request.POST.get('slot', request.GET.get('slot', ''))
+    form = EmailMagicLinkForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        identifier = form.cleaned_data.get('email') or form.cleaned_data.get('phone')
-        user_obj = User.objects.filter(email__iexact=identifier).first() if form.cleaned_data.get('email') else User.objects.filter(phone_number=identifier).first()
-        user = authenticate(request, username=user_obj.email, password=form.cleaned_data['password']) if user_obj else None
-        if user:
-            login(request, user)
-            return redirect(_post_login_redirect_url(request, user, next_url=request.POST.get('next', ''), slot_id=request.POST.get('slot', '')))
-        messages.error(request, 'Invalid email/phone number or password.')
-    return render(request, 'accounts/email_login.html', {'form': form, 'next': request.POST.get('next', request.GET.get('next', '')), 'slot': request.POST.get('slot', request.GET.get('slot', ''))})
+        user = User.objects.filter(email__iexact=form.cleaned_data['email']).first()
+        if user and user.is_active:
+            try:
+                _send_email_login_link(
+                    request=request, user=user, next_url=next_url, slot_id=slot_id,
+                )
+            except Exception:
+                logger.exception('Email login link failed user_id=%s', user.id)
+                messages.error(request, 'We could not send the sign-in link right now. Please try again shortly.')
+            else:
+                messages.success(request, 'Check your email for a secure sign-in link. It will log you in directly.')
+        else:
+            # Keep the response neutral, while giving a legitimate new customer
+            # a clear route to create the account that owns this email address.
+            messages.info(request, 'If this email has a FootBook account, a sign-in link will arrive shortly. New here? Please register first.')
+    return render(request, 'accounts/email_login.html', {
+        'form': form,
+        'next': next_url,
+        'slot': slot_id,
+        'whatsapp_login_url': f"{reverse('login')}?next={quote(next_url)}" if next_url else reverse('login'),
+    })
 
 
 def resend_verification(request):
@@ -532,7 +606,16 @@ def verify_email(request, token):
             messages.info(request, 'Email already verified. You are now logged in.')
 
         login(request, verification.user, backend='django.contrib.auth.backends.ModelBackend')
-        return redirect('home')
+        next_url = request.GET.get('next', '')
+        slot_id = request.GET.get('slot', '')
+        if not next_url and not slot_id:
+            return redirect('home')
+        return redirect(_post_login_redirect_url(
+            request,
+            verification.user,
+            next_url=next_url,
+            slot_id=slot_id,
+        ))
     except EmailVerification.DoesNotExist:
         messages.error(request, 'Invalid verification link.')
 
