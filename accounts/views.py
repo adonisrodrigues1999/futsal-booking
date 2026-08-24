@@ -17,7 +17,7 @@ from django.utils.http import url_has_allowed_host_and_scheme, urlsafe_base64_en
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.forms import SetPasswordForm
 from datetime import timedelta
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Count, Sum, Q
 from django.db.models.functions import Coalesce
 from django import forms
@@ -371,25 +371,31 @@ def login_view(request):
         elif not getattr(settings, 'CUSTOMER_WHATSAPP_OTP_ENABLED', True):
             messages.error(request, 'WhatsApp login is temporarily unavailable. Please use email login.')
         else:
-            cutoff = timezone.now() - timedelta(minutes=15)
-            if CustomerLoginOTP.objects.filter(phone_number=phone, created_at__gte=cutoff).count() >= 3:
-                messages.error(request, 'Too many OTP requests. Please wait 15 minutes and try again.')
-            else:
-                CustomerLoginOTP.objects.filter(phone_number=phone, used_at__isnull=True).update(used_at=timezone.now())
-                otp = f'{secrets.randbelow(1_000_000):06d}'
-                record = CustomerLoginOTP.objects.create(
-                    phone_number=phone, code_hash=make_password(otp),
-                    expires_at=timezone.now() + timedelta(minutes=settings.CUSTOMER_OTP_EXPIRY_MINUTES),
-                    requested_ip=_request_ip(request),
-                )
-                if send_customer_login_otp(phone, otp):
-                    request.session['footbook_otp_id'] = record.id
-                    context.update({'otp_sent': True, 'phone': phone})
-                    messages.success(request, 'Your OTP has been sent to WhatsApp.')
+            try:
+                cutoff = timezone.now() - timedelta(minutes=15)
+                if CustomerLoginOTP.objects.filter(phone_number=phone, created_at__gte=cutoff).count() >= 3:
+                    messages.error(request, 'Too many OTP requests. Please wait 15 minutes and try again.')
                 else:
-                    record.delete()
-                    logger.error('WhatsApp OTP send failed phone_ending=%s', phone[-4:])
-                    messages.error(request, 'We could not send a WhatsApp OTP right now. Please use email login or try again shortly.')
+                    CustomerLoginOTP.objects.filter(phone_number=phone, used_at__isnull=True).update(used_at=timezone.now())
+                    otp = f'{secrets.randbelow(1_000_000):06d}'
+                    record = CustomerLoginOTP.objects.create(
+                        phone_number=phone, code_hash=make_password(otp),
+                        expires_at=timezone.now() + timedelta(minutes=settings.CUSTOMER_OTP_EXPIRY_MINUTES),
+                        requested_ip=_request_ip(request),
+                    )
+                    if send_customer_login_otp(phone, otp):
+                        request.session['footbook_otp_id'] = record.id
+                        context.update({'otp_sent': True, 'phone': phone})
+                        messages.success(request, 'Your OTP has been sent to WhatsApp.')
+                    else:
+                        record.delete()
+                        logger.error('WhatsApp OTP send failed phone_ending=%s', phone[-4:])
+                        messages.error(request, 'We could not send a WhatsApp OTP right now. Please use email login or try again shortly.')
+            except DatabaseError:
+                # A transient database error (or a still-pending migration) must
+                # never turn a login attempt into an unhelpful server error.
+                logger.exception('WhatsApp OTP login database error phone_ending=%s', phone[-4:])
+                messages.error(request, 'Login is temporarily unavailable. Please try again shortly or use email login.')
     return render(request, 'accounts/login.html', context)
 
 

@@ -4,6 +4,7 @@ from datetime import time, timedelta
 from unittest.mock import patch
 
 from django.test import TestCase, Client, override_settings
+from django.db import DatabaseError
 from django.utils import timezone
 
 from accounts.models import CustomerLoginOTP, User
@@ -51,6 +52,13 @@ class WhatsAppOTPLoginTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(User.objects.filter(phone_number='9876543210').exists())
         self.assertFalse(CustomerLoginOTP.objects.filter(phone_number='9876543210').exists())
+
+    def test_otp_database_error_is_shown_as_a_recoverable_login_error(self):
+        with patch('accounts.views.CustomerLoginOTP.objects.filter', side_effect=DatabaseError('database unavailable')):
+            response = self.client.post('/accounts/login/', {'phone': '9876543210'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Login is temporarily unavailable')
 
 
 class AdminDashboardSettlementSplitTests(TestCase):
