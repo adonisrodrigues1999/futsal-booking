@@ -444,7 +444,7 @@ def login_view(request):
                     else:
                         record.delete()
                         logger.error('WhatsApp OTP send failed phone_ending=%s', phone[-4:])
-                        messages.error(request, 'We could not send a WhatsApp OTP right now. Please use email login or try again shortly.')
+                        messages.error(request, 'We could not send a WhatsApp OTP right now. Please use the email sign-in link or try again shortly.')
             except DatabaseError:
                 # A transient database error (or a still-pending migration) must
                 # never turn a login attempt into an unhelpful server error.
