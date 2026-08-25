@@ -20,7 +20,7 @@ class WhatsAppOTPLoginTests(TestCase):
     def test_new_customer_can_log_in_with_whatsapp_otp(self):
         with patch('accounts.views.send_customer_login_otp', return_value=True) as send_otp:
             response = self.client.post(
-                '/accounts/login/', {'phone': '9876543210'},
+                '/accounts/login/', {'phone': '9876543210', 'name': 'New Player'},
                 REMOTE_ADDR='103.14.50.224:23331',
             )
 
@@ -38,11 +38,12 @@ class WhatsAppOTPLoginTests(TestCase):
         self.assertEqual(response['Location'], '/accounts/customer-dashboard/')
         user = User.objects.get(phone_number='9876543210')
         self.assertEqual(user.role, 'customer')
+        self.assertEqual(user.name, 'New Player')
         self.assertTrue(user.email_verified)
 
     def test_wrong_otp_does_not_log_customer_in(self):
         with patch('accounts.views.send_customer_login_otp', return_value=True):
-            self.client.post('/accounts/login/', {'phone': '9876543210'})
+            self.client.post('/accounts/login/', {'phone': '9876543210', 'name': 'New Player'})
 
         response = self.client.post('/accounts/login/verify-otp/', {
             'phone': '9876543210', 'otp': '000000',
@@ -52,7 +53,7 @@ class WhatsAppOTPLoginTests(TestCase):
 
     def test_otp_send_failure_creates_no_customer_or_code(self):
         with patch('accounts.views.send_customer_login_otp', return_value=False):
-            response = self.client.post('/accounts/login/', {'phone': '9876543210'})
+            response = self.client.post('/accounts/login/', {'phone': '9876543210', 'name': 'New Player'})
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(User.objects.filter(phone_number='9876543210').exists())
@@ -61,7 +62,7 @@ class WhatsAppOTPLoginTests(TestCase):
     def test_otp_database_error_stays_on_whatsapp_login(self):
         with patch('accounts.views.CustomerLoginOTP.objects.filter', side_effect=DatabaseError('database unavailable')):
             response = self.client.post('/accounts/login/', {
-                'phone': '9876543210', 'next': '/grounds/12/?date=2026-07-21',
+                'phone': '9876543210', 'name': 'New Player', 'next': '/grounds/12/?date=2026-07-21',
             })
 
         self.assertEqual(response.status_code, 200)
@@ -69,14 +70,14 @@ class WhatsAppOTPLoginTests(TestCase):
 
     def test_unexpected_otp_failure_stays_on_whatsapp_login(self):
         with patch('accounts.views.send_customer_login_otp', side_effect=RuntimeError('provider unavailable')):
-            response = self.client.post('/accounts/login/', {'phone': '9876543210'})
+            response = self.client.post('/accounts/login/', {'phone': '9876543210', 'name': 'New Player'})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'We could not start WhatsApp login')
 
     def test_successful_otp_never_redirects_back_to_an_email_login_url(self):
         with patch('accounts.views.send_customer_login_otp', return_value=True) as send_otp:
-            self.client.post('/accounts/login/', {'phone': '9876543210'})
+            self.client.post('/accounts/login/', {'phone': '9876543210', 'name': 'New Player'})
         otp = send_otp.call_args.args[1]
 
         response = self.client.post('/accounts/login/verify-otp/', {
@@ -91,7 +92,7 @@ class WhatsAppOTPLoginTests(TestCase):
             password='unused-password', role='owner', email_verified=True,
         )
         with patch('accounts.views.send_customer_login_otp', return_value=True) as send_otp:
-            self.client.post('/accounts/login/', {'phone': owner.phone_number})
+            self.client.post('/accounts/login/', {'phone': owner.phone_number, 'name': 'Updated Owner'})
         otp = send_otp.call_args.args[1]
 
         response = self.client.post('/accounts/login/verify-otp/', {
@@ -100,6 +101,14 @@ class WhatsAppOTPLoginTests(TestCase):
 
         self.assertRedirects(response, '/dashboard/owner/', fetch_redirect_response=False)
         self.assertEqual(str(self.client.session['_auth_user_id']), str(owner.id))
+        owner.refresh_from_db()
+        self.assertEqual(owner.name, 'Updated Owner')
+
+    def test_whatsapp_login_requires_a_name(self):
+        response = self.client.post('/accounts/login/', {'phone': '9876543210'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Enter your name')
 
     def test_login_page_includes_public_available_bookings_panel(self):
         response = self.client.get('/accounts/login/')
@@ -118,6 +127,7 @@ class EmailMagicLinkLoginTests(TestCase):
         next_url = '/grounds/12/?date=2026-07-21'
         with patch('accounts.views.send_mail') as send_mail:
             response = self.client.post('/accounts/email-login/', {
+                'name': 'Email Player',
                 'email': self.user.email,
                 'next': next_url,
             })
@@ -126,13 +136,15 @@ class EmailMagicLinkLoginTests(TestCase):
         self.assertContains(response, 'secure sign-in link')
         verification = EmailVerification.objects.get(user=self.user)
         body = send_mail.call_args.args[1]
+        self.assertIn('name=Email%20Player', body)
         self.assertIn('next=/grounds/12/%3Fdate%3D2026-07-21', body)
 
-        response = self.client.get(f'/accounts/verify-email/{verification.token}/?next=/grounds/12/%3Fdate%3D2026-07-21')
+        response = self.client.get(f'/accounts/verify-email/{verification.token}/?name=Email%20Player&next=/grounds/12/%3Fdate%3D2026-07-21')
         self.assertRedirects(response, next_url, fetch_redirect_response=False)
         self.assertEqual(str(self.client.session['_auth_user_id']), str(self.user.id))
         self.user.refresh_from_db()
         self.assertTrue(self.user.email_verified)
+        self.assertEqual(self.user.name, 'Email Player')
 
 
 class WhatsAppTemplatePayloadTests(TestCase):

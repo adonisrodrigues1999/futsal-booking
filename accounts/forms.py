@@ -375,6 +375,14 @@ class UserLoginForm(forms.Form):
 
 
 class EmailMagicLinkForm(forms.Form):
+    name = forms.CharField(
+        max_length=100,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'Enter your name',
+            'class': 'form-control',
+            'autocomplete': 'name',
+        })
+    )
     email = forms.EmailField(
         widget=forms.EmailInput(attrs={
             'placeholder': 'Enter your email address',
@@ -385,6 +393,12 @@ class EmailMagicLinkForm(forms.Form):
 
     def clean_email(self):
         return self.cleaned_data['email'].strip().lower()
+
+    def clean_name(self):
+        name = ' '.join(self.cleaned_data['name'].split())
+        if len(name) < 2:
+            raise forms.ValidationError('Enter your name (at least 2 characters).')
+        return name
 
 
 class CustomerProfileForm(forms.ModelForm):

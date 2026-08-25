@@ -2,10 +2,11 @@
 {% block title %}Email Login{% endblock %}
 {% block content %}
 <div class="row justify-content-center py-4"><div class="col-md-7 col-lg-5"><div class="page-shell">
-  <h3 class="text-center mb-2">Sign in with email</h3><p class="text-center text-muted">Enter your email and we’ll send a secure sign-in link. No password needed.</p>
+  <h3 class="text-center mb-2">Sign in with email</h3><p class="text-center text-muted">Enter your name and email and we’ll send a secure sign-in link. No password needed.</p>
   {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}{% endif %}
   <form method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}">
-    <div class="mb-3"><label class="form-label">Email address</label>{{ form.email }}</div>
+    <div class="mb-3"><label class="form-label">Your name</label>{{ form.name }}{% if form.name.errors %}<div class="text-danger small">{{ form.name.errors|striptags }}</div>{% endif %}</div>
+    <div class="mb-3"><label class="form-label">Email address</label>{{ form.email }}{% if form.email.errors %}<div class="text-danger small">{{ form.email.errors|striptags }}</div>{% endif %}</div>
     {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
     <button class="btn btn-outline-primary w-100" type="submit">Email me a sign-in link</button>
   </form><div class="text-center mt-3 small"><a href="{{ whatsapp_login_url }}">Use WhatsApp OTP instead</a></div>

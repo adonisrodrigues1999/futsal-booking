@@ -16,16 +16,19 @@
         <form method="post" action="{% url 'verify_customer_otp' %}">
           {% csrf_token %}
           <input type="hidden" name="phone" value="{{ phone }}">
+          <input type="hidden" name="name" value="{{ name }}">
           <input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}">
           <div class="mb-3"><label class="form-label">WhatsApp OTP sent to +91 {{ phone }}</label>
             <input class="form-control form-control-lg text-center" name="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="Enter 6-digit OTP" required autofocus>
           </div>
           <button class="btn btn-success btn-lg w-100" type="submit">Verify WhatsApp OTP & continue</button>
         </form>
-        <form method="post" class="text-center mt-3">{% csrf_token %}<input type="hidden" name="phone" value="{{ phone }}"><input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}"><button class="btn btn-link" type="submit">Resend OTP</button></form>
+        <form method="post" class="text-center mt-3">{% csrf_token %}<input type="hidden" name="phone" value="{{ phone }}"><input type="hidden" name="name" value="{{ name }}"><input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}"><button class="btn btn-link" type="submit">Resend OTP</button></form>
       {% else %}
         <form method="post">{% csrf_token %}
           <input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}">
+          <label class="form-label" for="name">Your name</label>
+          <input class="form-control form-control-lg mb-3" id="name" name="name" type="text" autocomplete="name" maxlength="100" placeholder="Enter your name" required>
           <label class="form-label" for="phone">Mobile number</label>
           <div class="input-group input-group-lg mb-2"><span class="input-group-text">+91</span><input class="form-control" id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit mobile number" required autofocus></div>
           <p class="form-text mb-4">OTP will arrive on WhatsApp. New customers are set up automatically.</p>

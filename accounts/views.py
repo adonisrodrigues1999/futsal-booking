@@ -113,6 +113,11 @@ def _normalise_indian_phone(value):
     return digits if re.fullmatch(r'[6-9]\d{9}', digits) else ''
 
 
+def _normalise_customer_name(value):
+    name = ' '.join((value or '').split())
+    return name if 2 <= len(name) <= 100 else ''
+
+
 def _request_ip(request):
     raw_address = (
         request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
@@ -144,19 +149,21 @@ def _email_login_url(*, next_url='', slot_id=''):
     return f"{reverse('email_login')}?{'&'.join(query_bits)}" if query_bits else reverse('email_login')
 
 
-def _send_email_login_link(*, request, user, next_url='', slot_id=''):
+def _send_email_login_link(*, request, user, name, next_url='', slot_id=''):
     """Create a fresh, single-use link and email it to an existing account."""
     verification, _ = EmailVerification.objects.get_or_create(user=user)
     verification.token = uuid.uuid4()
     verification.is_verified = False
     verification.save(update_fields=['token', 'is_verified'])
     verification_url = request.build_absolute_uri(reverse('verify_email', args=[verification.token]))
+    query_bits = [f'name={quote(name)}']
     if next_url:
-        verification_url = f'{verification_url}?next={quote(next_url)}'
+        query_bits.append(f'next={quote(next_url)}')
         if slot_id:
-            verification_url = f'{verification_url}&slot={quote(str(slot_id))}'
+            query_bits.append(f'slot={quote(str(slot_id))}')
     elif slot_id:
-        verification_url = f'{verification_url}?slot={quote(str(slot_id))}'
+        query_bits.append(f'slot={quote(str(slot_id))}')
+    verification_url = f"{verification_url}?{'&'.join(query_bits)}"
     send_mail(
         'Your FootBook sign-in link',
         (
@@ -170,10 +177,13 @@ def _send_email_login_link(*, request, user, next_url='', slot_id=''):
     )
 
 
-def _customer_for_verified_phone(phone):
+def _customer_for_verified_phone(phone, name):
     """Return the existing customer, or create one only after OTP verification."""
     user = User.objects.filter(phone_number=phone).first()
     if user:
+        if user.name != name:
+            user.name = name
+            user.save(update_fields=['name'])
         return user
     # The existing user schema requires an email. This internal placeholder is
     # never used for notifications and can be replaced from the profile later.
@@ -181,7 +191,7 @@ def _customer_for_verified_phone(phone):
         with transaction.atomic():
             user = User(
                 email=f'{phone}@otp.footbook.online', phone_number=phone,
-                name='FootBook Player', role='customer', email_verified=True,
+                name=name, role='customer', email_verified=True,
             )
             user.set_unusable_password()
             user.save()
@@ -418,10 +428,13 @@ def login_view(request):
     context = {'next': next_url, 'slot': slot_id_param, 'otp_sent': False}
     if request.method == 'POST':
         phone = _normalise_indian_phone(request.POST.get('phone'))
+        name = _normalise_customer_name(request.POST.get('name'))
         next_url = request.POST.get('next', '')
         slot_id_param = request.POST.get('slot', '')
         context.update({'next': next_url, 'slot': slot_id_param})
-        if not phone:
+        if not name:
+            messages.error(request, 'Enter your name (at least 2 characters).')
+        elif not phone:
             messages.error(request, 'Enter a valid 10-digit Indian mobile number.')
         elif not getattr(settings, 'CUSTOMER_WHATSAPP_OTP_ENABLED', True):
             messages.error(request, 'WhatsApp login is temporarily unavailable. Please use email login.')
@@ -440,7 +453,8 @@ def login_view(request):
                     )
                     if send_customer_login_otp(phone, otp):
                         request.session['footbook_otp_id'] = record.id
-                        context.update({'otp_sent': True, 'phone': phone})
+                        request.session['footbook_otp_name'] = name
+                        context.update({'otp_sent': True, 'phone': phone, 'name': name})
                         messages.success(request, 'Your OTP has been sent to WhatsApp.')
                     else:
                         record.delete()
@@ -467,7 +481,8 @@ def verify_customer_otp(request):
     phone = _normalise_indian_phone(request.POST.get('phone'))
     otp = (request.POST.get('otp') or '').strip()
     otp_id = request.session.get('footbook_otp_id')
-    if not phone or not re.fullmatch(r'\d{6}', otp) or not otp_id:
+    name = _normalise_customer_name(request.session.get('footbook_otp_name'))
+    if not phone or not name or not re.fullmatch(r'\d{6}', otp) or not otp_id:
         messages.error(request, 'Enter the 6-digit OTP sent to your WhatsApp.')
         return redirect('login')
     with transaction.atomic():
@@ -488,11 +503,12 @@ def verify_customer_otp(request):
             record.save(update_fields=['attempts'])
             messages.error(request, 'Incorrect OTP. Please try again.')
             return redirect(f'{reverse("login")}?phone={phone}')
-        user = _customer_for_verified_phone(phone)
+        user = _customer_for_verified_phone(phone, name)
         record.user = user
         record.used_at = timezone.now()
         record.save(update_fields=['user', 'used_at', 'attempts'])
     request.session.pop('footbook_otp_id', None)
+    request.session.pop('footbook_otp_name', None)
     login(request, user, backend='django.contrib.auth.backends.ModelBackend')
     messages.success(request, 'You are logged in.')
     return redirect(_post_login_redirect_url(request, user, next_url=request.POST.get('next', ''), slot_id=request.POST.get('slot', '')))
@@ -512,7 +528,8 @@ def email_login_view(request):
         if user and user.is_active:
             try:
                 _send_email_login_link(
-                    request=request, user=user, next_url=next_url, slot_id=slot_id,
+                    request=request, user=user, name=form.cleaned_data['name'],
+                    next_url=next_url, slot_id=slot_id,
                 )
             except Exception:
                 logger.exception('Email login link failed user_id=%s', user.id)
@@ -601,6 +618,10 @@ def verify_email(request, token):
         else:
             messages.info(request, 'Email already verified. You are now logged in.')
 
+        name = _normalise_customer_name(request.GET.get('name'))
+        if name and verification.user.name != name:
+            verification.user.name = name
+            verification.user.save(update_fields=['name'])
         login(request, verification.user, backend='django.contrib.auth.backends.ModelBackend')
         next_url = request.GET.get('next', '')
         slot_id = request.GET.get('slot', '')
