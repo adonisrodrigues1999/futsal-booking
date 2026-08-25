@@ -1,6 +1,7 @@
 import logging
 import hashlib
 import hmac
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -2649,6 +2650,21 @@ def owner_manual_booking(request):
             if single_slot:
                 slot_ids = [single_slot]
         slot_ids = [s for s in slot_ids if s]
+        try:
+            slot_ids = [str(int(slot_id)) for slot_id in slot_ids]
+        except (TypeError, ValueError):
+            messages.error(request, 'One or more selected slots are invalid.')
+            return redirect('/owner/manual-booking/')
+        normalised_phone = re.sub(r'\D', '', phone)
+        if normalised_phone.startswith('91') and len(normalised_phone) == 12:
+            normalised_phone = normalised_phone[2:]
+        if not name:
+            messages.error(request, 'Enter the customer name before creating a manual booking.')
+            return redirect('/owner/manual-booking/')
+        if not re.fullmatch(r'[6-9]\d{9}', normalised_phone):
+            messages.error(request, 'Enter a valid 10-digit Indian customer phone number.')
+            return redirect('/owner/manual-booking/')
+        phone = normalised_phone
         repeat_enabled = request.POST.get('repeat_enabled') == 'on'
         try:
             repeat_every_weeks = int(request.POST.get('repeat_every_weeks') or 2)

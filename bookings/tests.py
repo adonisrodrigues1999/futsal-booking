@@ -143,6 +143,39 @@ class BookingFlowTests(TestCase):
         booking = Booking.objects.get(slot=slot, status='BOOKED')
         self.assertEqual(booking.total_amount, booking.owner_payout)
 
+    def test_manual_booking_rejects_missing_customer_details(self):
+        slot = Slot.objects.create(
+            ground=self.ground,
+            date=timezone.localdate() + timedelta(days=1),
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            is_booked=False,
+        )
+        self.client.force_login(self.owner)
+
+        response = self.client.post('/owner/manual-booking/', {
+            'slot': str(slot.id), 'name': '', 'phone': '9999911111',
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Enter the customer name')
+        self.assertFalse(Booking.objects.filter(slot=slot).exists())
+
+        response = self.client.post('/owner/manual-booking/', {
+            'slot': str(slot.id), 'name': 'Walk-in', 'phone': 'invalid',
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'valid 10-digit Indian')
+        self.assertFalse(Booking.objects.filter(slot=slot).exists())
+
+    def test_manual_booking_rejects_malformed_slot_id_without_a_server_error(self):
+        self.client.force_login(self.owner)
+        response = self.client.post('/owner/manual-booking/', {
+            'slot': 'not-a-slot', 'name': 'Walk-in', 'phone': '9999911111',
+        }, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'selected slots are invalid')
+
     def test_manual_booking_can_repeat_every_two_weeks(self):
         slot = Slot.objects.create(
             ground=self.ground,
