@@ -58,19 +58,37 @@ class WhatsAppOTPLoginTests(TestCase):
         self.assertFalse(User.objects.filter(phone_number='9876543210').exists())
         self.assertFalse(CustomerLoginOTP.objects.filter(phone_number='9876543210').exists())
 
-    def test_otp_database_error_redirects_to_email_sign_in(self):
+    def test_otp_database_error_stays_on_whatsapp_login(self):
         with patch('accounts.views.CustomerLoginOTP.objects.filter', side_effect=DatabaseError('database unavailable')):
             response = self.client.post('/accounts/login/', {
                 'phone': '9876543210', 'next': '/grounds/12/?date=2026-07-21',
             })
 
-        self.assertRedirects(response, '/accounts/email-login/?next=/grounds/12/%3Fdate%3D2026-07-21')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'WhatsApp login is temporarily unavailable')
 
-    def test_unexpected_otp_failure_redirects_to_email_sign_in(self):
+    def test_unexpected_otp_failure_stays_on_whatsapp_login(self):
         with patch('accounts.views.send_customer_login_otp', side_effect=RuntimeError('provider unavailable')):
             response = self.client.post('/accounts/login/', {'phone': '9876543210'})
 
-        self.assertRedirects(response, '/accounts/email-login/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'We could not start WhatsApp login')
+
+    def test_successful_otp_never_redirects_back_to_an_email_login_url(self):
+        with patch('accounts.views.send_customer_login_otp', return_value=True) as send_otp:
+            self.client.post('/accounts/login/', {'phone': '9876543210'})
+        otp = send_otp.call_args.args[1]
+
+        response = self.client.post('/accounts/login/verify-otp/', {
+            'phone': '9876543210', 'otp': otp,
+            'next': '/accounts/email-login/',
+        })
+        self.assertRedirects(response, '/accounts/customer-dashboard/', fetch_redirect_response=False)
+
+    def test_login_page_includes_public_available_bookings_panel(self):
+        response = self.client.get('/accounts/login/')
+        self.assertContains(response, 'Available bookings')
+        self.assertContains(response, 'login-availability.js')
 
 
 class EmailMagicLinkLoginTests(TestCase):

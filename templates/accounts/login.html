@@ -1,4 +1,5 @@
 {% extends 'base/base.html' %}
+{% load static %}
 {% block title %}Login to FootBook{% endblock %}
 {% block content %}
 <div class="row justify-content-center py-4">
@@ -33,6 +34,18 @@
       {% endif %}
       <div class="text-center mt-4 small text-muted">Already received your WhatsApp OTP? Verify it above — no email is needed.<br><a href="{% url 'email_login' %}?next={{ next|urlencode }}&slot={{ slot|urlencode }}">Can’t use WhatsApp? Choose email sign-in instead</a></div>
     </div>
+    <section class="page-shell mt-4" aria-labelledby="login-availability-heading">
+      <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+        <div>
+          <h3 class="h5 mb-1" id="login-availability-heading">Available bookings</h3>
+          <p class="text-muted small mb-0">Browse open slots before you sign in.</p>
+        </div>
+        <input type="date" id="login-slots-date" class="form-control form-control-sm" aria-label="Choose booking date">
+      </div>
+      <div id="login-slots-status" class="small text-muted" role="status">Loading available slots…</div>
+      <div id="login-slots-list" class="list-group list-group-flush mt-2"></div>
+    </section>
   </div>
 </div>
+<script src="{% static 'js/login-availability.js' %}"></script>
 {% endblock %}

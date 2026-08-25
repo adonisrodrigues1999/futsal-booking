@@ -95,7 +95,8 @@ def _post_login_redirect_url(request, user, *, next_url='', slot_id=''):
             logger.exception("Unable to build slot redirect for login slot_id=%s", slot_id)
 
     safe_next = _safe_next_url(request, next_url)
-    if safe_next:
+    login_paths = {reverse('login'), reverse('email_login')}
+    if safe_next and safe_next.split('?', 1)[0] not in login_paths:
         return safe_next
 
     if user.role == 'admin':
@@ -449,15 +450,13 @@ def login_view(request):
                 # A transient database error (or a still-pending migration) must
                 # never turn a login attempt into an unhelpful server error.
                 logger.exception('WhatsApp OTP login database error phone_ending=%s', phone[-4:])
-                messages.error(request, 'WhatsApp login is temporarily unavailable. We sent you to email sign-in instead.')
-                return redirect(_email_login_url(next_url=next_url, slot_id=slot_id_param))
+                messages.error(request, 'WhatsApp login is temporarily unavailable. Please try again shortly.')
             except Exception:
                 # The WhatsApp provider is external to the authentication flow.
                 # Keep an unexpected provider/configuration failure from exposing
                 # a 500 page to a customer, while retaining the traceback in logs.
                 logger.exception('WhatsApp OTP login failed phone_ending=%s', phone[-4:])
-                messages.error(request, 'We could not start WhatsApp login. Please continue with email sign-in.')
-                return redirect(_email_login_url(next_url=next_url, slot_id=slot_id_param))
+                messages.error(request, 'We could not start WhatsApp login. Please try again shortly.')
     return render(request, 'accounts/login.html', context)
 
 
