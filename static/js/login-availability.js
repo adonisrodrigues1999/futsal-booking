@@ -1,60 +1,104 @@
 (() => {
   const dateInput = document.getElementById('login-slots-date');
+  const groundSelect = document.getElementById('login-slots-ground');
   const status = document.getElementById('login-slots-status');
   const list = document.getElementById('login-slots-list');
-  if (!dateInput || !status || !list) return;
+  if (!dateInput || !groundSelect || !status || !list) return;
+  let availableSlots = [];
 
   const localDate = new Date();
   const today = [localDate.getFullYear(), String(localDate.getMonth() + 1).padStart(2, '0'), String(localDate.getDate()).padStart(2, '0')].join('-');
   dateInput.min = today;
   dateInput.value = today;
 
-  function renderSlots(slots, date) {
+  function populateGrounds(slots) {
+    const grounds = new Map();
+    slots.forEach((slot) => {
+      if (!grounds.has(String(slot.ground_id))) {
+        grounds.set(String(slot.ground_id), {
+          name: slot.ground_name,
+          location: slot.ground_location,
+        });
+      }
+    });
+    groundSelect.replaceChildren();
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = grounds.size ? 'Choose a ground' : 'No grounds available';
+    groundSelect.append(placeholder);
+    grounds.forEach((ground, id) => {
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = `${ground.name} — ${ground.location}`;
+      groundSelect.append(option);
+    });
+    groundSelect.disabled = !grounds.size;
+  }
+
+  function renderSlots() {
     list.replaceChildren();
-    if (!slots.length) {
-      status.textContent = 'No open slots found for this date. Try another date.';
+    const groundId = groundSelect.value;
+    if (!groundId) {
+      status.textContent = availableSlots.length ? 'Choose a ground to view its available slots.' : 'No open slots found for this date. Try another date.';
       return;
     }
-    status.textContent = `${slots.length} open slot${slots.length === 1 ? '' : 's'} found.`;
-    slots.slice(0, 12).forEach((slot) => {
+    const slots = availableSlots.filter((slot) => String(slot.ground_id) === groundId);
+    const date = dateInput.value;
+    if (!slots.length) {
+      status.textContent = 'No open slots found for this ground on this date.';
+      return;
+    }
+    status.textContent = `${slots.length} open slot${slots.length === 1 ? '' : 's'} available.`;
+    slots.forEach((slot) => {
+      const column = document.createElement('div');
+      column.className = 'col';
       const link = document.createElement('a');
-      link.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-2';
+      link.className = 'btn btn-outline-success w-100 text-start d-flex justify-content-between align-items-center gap-2';
       link.href = `/accounts/login/?next=${encodeURIComponent(`/grounds/${slot.ground_id}/?date=${date}`)}`;
       const details = document.createElement('span');
-      const groundName = document.createElement('strong');
-      groundName.textContent = slot.ground_name;
+      const slotTime = document.createElement('strong');
+      slotTime.textContent = slot.time;
       const slotMeta = document.createElement('span');
       slotMeta.className = 'd-block small text-muted';
-      slotMeta.textContent = `${slot.ground_location} · ${slot.time}`;
-      details.append(groundName, slotMeta);
+      slotMeta.textContent = 'Book this slot';
+      details.append(slotTime, slotMeta);
       const price = document.createElement('span');
       price.className = 'badge text-bg-success rounded-pill';
       price.textContent = `₹${slot.price}`;
       link.append(details, price);
-      list.append(link);
+      column.append(link);
+      list.append(column);
     });
-    if (slots.length > 12) {
-      const more = document.createElement('div');
-      more.className = 'small text-muted pt-2';
-      more.textContent = `Showing the first 12 of ${slots.length} open slots. Choose a date to refine the list.`;
-      list.append(more);
-    }
   }
 
   async function loadSlots() {
     const date = dateInput.value;
     status.textContent = 'Loading available slots…';
     list.replaceChildren();
+    groundSelect.disabled = true;
+    groundSelect.replaceChildren();
+    const loading = document.createElement('option');
+    loading.textContent = 'Loading grounds…';
+    groundSelect.append(loading);
     try {
       const response = await fetch(`/slots/search/?date=${encodeURIComponent(date)}`, { credentials: 'same-origin' });
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Unable to load slots');
-      renderSlots(payload.slots || [], date);
+      availableSlots = payload.slots || [];
+      populateGrounds(availableSlots);
+      renderSlots();
     } catch (_) {
+      availableSlots = [];
+      groundSelect.disabled = true;
+      groundSelect.replaceChildren();
+      const unavailable = document.createElement('option');
+      unavailable.textContent = 'Grounds unavailable';
+      groundSelect.append(unavailable);
       status.textContent = 'Availability could not be loaded right now. Please try again shortly.';
     }
   }
 
   dateInput.addEventListener('change', loadSlots);
+  groundSelect.addEventListener('change', renderSlots);
   loadSlots();
 })();

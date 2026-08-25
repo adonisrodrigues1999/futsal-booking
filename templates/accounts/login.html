@@ -35,15 +35,26 @@
       <div class="text-center mt-4 small text-muted">Already received your WhatsApp OTP? Verify it above — no email is needed.<br><a href="{% url 'email_login' %}?next={{ next|urlencode }}&slot={{ slot|urlencode }}">Can’t use WhatsApp? Choose email sign-in instead</a></div>
     </div>
     <section class="page-shell mt-4" aria-labelledby="login-availability-heading">
-      <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+      <div class="mb-3">
         <div>
           <h3 class="h5 mb-1" id="login-availability-heading">Available bookings</h3>
-          <p class="text-muted small mb-0">Browse open slots before you sign in.</p>
+          <p class="text-muted small mb-0">Choose a date and ground to see its open slots.</p>
         </div>
-        <input type="date" id="login-slots-date" class="form-control form-control-sm" aria-label="Choose booking date">
+      </div>
+      <div class="row g-2">
+        <div class="col-sm-5">
+          <label class="form-label small mb-1" for="login-slots-date">1. Date</label>
+          <input type="date" id="login-slots-date" class="form-control" aria-label="Choose booking date">
+        </div>
+        <div class="col-sm-7">
+          <label class="form-label small mb-1" for="login-slots-ground">2. Ground</label>
+          <select id="login-slots-ground" class="form-select" aria-label="Choose ground" disabled>
+            <option value="">Choose a date first</option>
+          </select>
+        </div>
       </div>
       <div id="login-slots-status" class="small text-muted" role="status">Loading available slots…</div>
-      <div id="login-slots-list" class="list-group list-group-flush mt-2"></div>
+      <div id="login-slots-list" class="row row-cols-2 row-cols-sm-3 g-2 mt-1"></div>
     </section>
   </div>
 </div>
