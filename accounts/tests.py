@@ -85,6 +85,22 @@ class WhatsAppOTPLoginTests(TestCase):
         })
         self.assertRedirects(response, '/accounts/customer-dashboard/', fetch_redirect_response=False)
 
+    def test_existing_owner_can_log_in_with_whatsapp_otp(self):
+        owner = User.objects.create_user(
+            email='owner@example.com', phone_number='9123456789', name='Ground Owner',
+            password='unused-password', role='owner', email_verified=True,
+        )
+        with patch('accounts.views.send_customer_login_otp', return_value=True) as send_otp:
+            self.client.post('/accounts/login/', {'phone': owner.phone_number})
+        otp = send_otp.call_args.args[1]
+
+        response = self.client.post('/accounts/login/verify-otp/', {
+            'phone': owner.phone_number, 'otp': otp,
+        })
+
+        self.assertRedirects(response, '/dashboard/owner/', fetch_redirect_response=False)
+        self.assertEqual(str(self.client.session['_auth_user_id']), str(owner.id))
+
     def test_login_page_includes_public_available_bookings_panel(self):
         response = self.client.get('/accounts/login/')
         self.assertContains(response, 'Available bookings')

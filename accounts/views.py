@@ -489,9 +489,6 @@ def verify_customer_otp(request):
             messages.error(request, 'Incorrect OTP. Please try again.')
             return redirect(f'{reverse("login")}?phone={phone}')
         user = _customer_for_verified_phone(phone)
-        if user.role != 'customer':
-            messages.error(request, 'This number belongs to a staff account. Please use email login.')
-            return redirect('email_login')
         record.user = user
         record.used_at = timezone.now()
         record.save(update_fields=['user', 'used_at', 'attempts'])
