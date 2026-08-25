@@ -21,7 +21,12 @@
       link.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-2';
       link.href = `/accounts/login/?next=${encodeURIComponent(`/grounds/${slot.ground_id}/?date=${date}`)}`;
       const details = document.createElement('span');
-      details.innerHTML = `<strong>${slot.ground_name}</strong><span class="d-block small text-muted">${slot.ground_location} · ${slot.time}</span>`;
+      const groundName = document.createElement('strong');
+      groundName.textContent = slot.ground_name;
+      const slotMeta = document.createElement('span');
+      slotMeta.className = 'd-block small text-muted';
+      slotMeta.textContent = `${slot.ground_location} · ${slot.time}`;
+      details.append(groundName, slotMeta);
       const price = document.createElement('span');
       price.className = 'badge text-bg-success rounded-pill';
       price.textContent = `₹${slot.price}`;
