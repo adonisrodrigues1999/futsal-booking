@@ -13,10 +13,10 @@
       <button class="btn btn-success btn-lg w-100">Verify OTP and create account</button>
     </form>
   {% else %}
-    <form method="post">{% csrf_token %}<input type="hidden" name="mode" value="{{ mode }}"><input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}">
+    <form method="post" data-inline-loading="true" data-inline-loading-label="{% if mode == 'email' %}Sending link...{% else %}Sending OTP...{% endif %}">{% csrf_token %}<input type="hidden" name="mode" value="{{ mode }}"><input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}">
       <div class="mb-3"><label class="form-label">Your name</label>{{ form.name }}{% if form.name.errors %}<div class="text-danger small">{{ form.name.errors|striptags }}</div>{% endif %}</div>
       <div class="mb-3"><label class="form-label">{% if mode == 'email' %}Email address{% else %}Mobile number{% endif %}</label>{% if mode == 'email' %}{{ form.email }}{% if form.email.errors %}<div class="text-danger small">{{ form.email.errors|striptags }}</div>{% endif %}{% else %}<div class="input-group"><span class="input-group-text">+91</span>{{ form.phone }}</div>{% if form.phone.errors %}<div class="text-danger small">{{ form.phone.errors|striptags }}</div>{% endif %}{% endif %}</div>
-      <button class="btn btn-primary w-100" type="submit">{% if mode == 'email' %}Email me a verification link{% else %}Send WhatsApp OTP{% endif %}</button>
+      <button class="btn btn-primary w-100" type="submit" data-inline-submit-button><span class="btn-label">{% if mode == 'email' %}Email me a verification link{% else %}Send WhatsApp OTP{% endif %}</span><span class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true" data-inline-spinner></span></button>
     </form>
   {% endif %}
   <div class="text-center mt-3 small">Already have an account? {% if mode == 'email' %}<a href="{% url 'email_login' %}?next={{ next|urlencode }}&slot={{ slot|urlencode }}">Sign in with email</a>{% else %}<a href="{% url 'login' %}?next={{ next|urlencode }}&slot={{ slot|urlencode }}">Sign in with mobile</a>{% endif %}</div>

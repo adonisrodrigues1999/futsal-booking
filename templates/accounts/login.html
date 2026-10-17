@@ -22,14 +22,14 @@
           </div>
           <button class="btn btn-success btn-lg w-100" type="submit">Verify WhatsApp OTP & continue</button>
         </form>
-        <form method="post" class="text-center mt-3">{% csrf_token %}<input type="hidden" name="phone" value="{{ phone }}"><input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}"><button class="btn btn-link" type="submit">Resend OTP</button></form>
+        <form method="post" class="text-center mt-3" data-inline-loading="true" data-inline-loading-label="Sending OTP...">{% csrf_token %}<input type="hidden" name="phone" value="{{ phone }}"><input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}"><button class="btn btn-link" type="submit" data-inline-submit-button><span class="btn-label">Resend OTP</span><span class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true" data-inline-spinner></span></button></form>
       {% else %}
-        <form method="post">{% csrf_token %}
+        <form method="post" data-inline-loading="true" data-inline-loading-label="Sending OTP...">{% csrf_token %}
           <input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}">
           <label class="form-label" for="phone">Mobile number</label>
           <div class="input-group input-group-lg mb-2"><span class="input-group-text">+91</span><input class="form-control" id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit mobile number" required autofocus></div>
           <p class="form-text mb-4">OTP will arrive on WhatsApp.</p>
-          <button class="btn btn-success btn-lg w-100" type="submit">Get WhatsApp OTP</button>
+          <button class="btn btn-success btn-lg w-100" type="submit" data-inline-submit-button><span class="btn-label">Get WhatsApp OTP</span><span class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true" data-inline-spinner></span></button>
         </form>
       {% endif %}
       {% if signup_redirect_url %}<script>setTimeout(function(){ window.location.href = "{{ signup_redirect_url|escapejs }}"; }, 3000);</script>{% endif %}

@@ -112,36 +112,22 @@
                 <div class="border rounded p-3 mb-3">
                   <div class="form-check mb-2">
                     <input class="form-check-input" type="checkbox" id="repeat_enabled" name="repeat_enabled" {% if manual_repeat_enabled %}checked{% endif %}>
-                    <label class="form-check-label" for="repeat_enabled">Repeat booking</label>
-                  </div>
-                  <div class="mb-3 repeat-booking-fields d-none">
-                    <label class="form-label small mb-2">Repeat on weekdays</label>
-                    <div class="d-flex flex-wrap gap-2">
-                      {% for weekday_value, weekday_label in weekday_options %}
-                        <label class="btn btn-outline-secondary btn-sm">
-                          <input type="checkbox" class="btn-check" name="repeat_weekdays" value="{{ weekday_value }}" {% if manual_repeat_weekdays and weekday_value in manual_repeat_weekdays %}checked{% endif %}>
-                          {{ weekday_label }}
-                        </label>
-                      {% endfor %}
-                    </div>
-                    <div class="small text-muted mt-2">Example: choose Tue, Wed, and Sat for the same time slot each week.</div>
+                    <label class="form-check-label fw-semibold" for="repeat_enabled">Repeat these same slots</label>
                   </div>
                   <div class="row g-2 repeat-booking-fields d-none">
                     <div class="col-6">
-                      <label class="form-label small" for="repeat_every_weeks">Repeat every</label>
-                        <select name="repeat_every_weeks" id="repeat_every_weeks" class="form-select form-select-sm">
-                        <option value="1" {% if manual_repeat_every_weeks == 1 %}selected{% endif %}>Every week</option>
+                      <label class="form-label small" for="repeat_every_weeks">Repeat</label>
+                      <select name="repeat_every_weeks" id="repeat_every_weeks" class="form-select form-select-sm">
+                        <option value="1" {% if manual_repeat_every_weeks == 1 %}selected{% endif %}>Weekly</option>
                         <option value="2" {% if manual_repeat_every_weeks == 2 %}selected{% endif %}>Every 2 weeks</option>
                       </select>
                     </div>
                     <div class="col-6">
-                      <label class="form-label small" for="repeat_occurrences">Occurrences</label>
+                      <label class="form-label small" for="repeat_occurrences">Book this many times</label>
                       <input type="number" min="1" max="52" value="{{ manual_repeat_occurrences|default:1 }}" name="repeat_occurrences" id="repeat_occurrences" class="form-control form-control-sm">
                     </div>
                   </div>
-                  <div class="small text-muted mt-2 repeat-booking-fields d-none">
-                    Use this for training sessions like alternate Sundays, or for a fixed weekly schedule.
-                  </div>
+                  <div class="small text-muted mt-2 repeat-booking-fields d-none">The first booking is included in the total.</div>
                 </div>
                 {% if manual_booking_preview and manual_booking_preview.conflicts %}
                   <div class="alert alert-warning">
