@@ -17,15 +17,16 @@ from bookings.whatsapp import send_customer_login_otp
 
 @override_settings(CUSTOMER_WHATSAPP_OTP_ENABLED=True)
 class WhatsAppOTPLoginTests(TestCase):
-    def test_new_customer_can_log_in_with_whatsapp_otp(self):
+    def test_new_customer_is_created_only_after_whatsapp_otp_verification(self):
         with patch('accounts.views.send_customer_login_otp', return_value=True) as send_otp:
             response = self.client.post(
-                '/accounts/login/', {'phone': '9876543210', 'name': 'New Player'},
+                '/accounts/register/', {'mode': 'mobile', 'phone': '9876543210', 'name': 'New Player'},
                 REMOTE_ADDR='103.14.50.224:23331',
             )
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['otp_sent'])
+        self.assertFalse(User.objects.filter(phone_number='9876543210').exists())
         record = CustomerLoginOTP.objects.get(phone_number='9876543210')
         self.assertEqual(record.requested_ip, '103.14.50.224')
         otp = send_otp.call_args.args[1]
@@ -43,7 +44,7 @@ class WhatsAppOTPLoginTests(TestCase):
 
     def test_wrong_otp_does_not_log_customer_in(self):
         with patch('accounts.views.send_customer_login_otp', return_value=True):
-            self.client.post('/accounts/login/', {'phone': '9876543210', 'name': 'New Player'})
+            self.client.post('/accounts/register/', {'mode': 'mobile', 'phone': '9876543210', 'name': 'New Player'})
 
         response = self.client.post('/accounts/login/verify-otp/', {
             'phone': '9876543210', 'otp': '000000',
@@ -53,31 +54,33 @@ class WhatsAppOTPLoginTests(TestCase):
 
     def test_otp_send_failure_creates_no_customer_or_code(self):
         with patch('accounts.views.send_customer_login_otp', return_value=False):
-            response = self.client.post('/accounts/login/', {'phone': '9876543210', 'name': 'New Player'})
+            response = self.client.post('/accounts/register/', {'mode': 'mobile', 'phone': '9876543210', 'name': 'New Player'})
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(User.objects.filter(phone_number='9876543210').exists())
         self.assertFalse(CustomerLoginOTP.objects.filter(phone_number='9876543210').exists())
 
     def test_otp_database_error_stays_on_whatsapp_login(self):
+        User.objects.create_user(email='db@example.com', phone_number='9876543210', name='Player', password='x', role='customer')
         with patch('accounts.views.CustomerLoginOTP.objects.filter', side_effect=DatabaseError('database unavailable')):
             response = self.client.post('/accounts/login/', {
-                'phone': '9876543210', 'name': 'New Player', 'next': '/grounds/12/?date=2026-07-21',
+                'phone': '9876543210', 'next': '/grounds/12/?date=2026-07-21',
             })
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'WhatsApp login is temporarily unavailable')
 
     def test_unexpected_otp_failure_stays_on_whatsapp_login(self):
+        User.objects.create_user(email='provider@example.com', phone_number='9876543210', name='Player', password='x', role='customer')
         with patch('accounts.views.send_customer_login_otp', side_effect=RuntimeError('provider unavailable')):
-            response = self.client.post('/accounts/login/', {'phone': '9876543210', 'name': 'New Player'})
+            response = self.client.post('/accounts/login/', {'phone': '9876543210'})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'We could not start WhatsApp login')
 
     def test_successful_otp_never_redirects_back_to_an_email_login_url(self):
         with patch('accounts.views.send_customer_login_otp', return_value=True) as send_otp:
-            self.client.post('/accounts/login/', {'phone': '9876543210', 'name': 'New Player'})
+            self.client.post('/accounts/register/', {'mode': 'mobile', 'phone': '9876543210', 'name': 'New Player'})
         otp = send_otp.call_args.args[1]
 
         response = self.client.post('/accounts/login/verify-otp/', {
@@ -92,7 +95,7 @@ class WhatsAppOTPLoginTests(TestCase):
             password='unused-password', role='owner', email_verified=True,
         )
         with patch('accounts.views.send_customer_login_otp', return_value=True) as send_otp:
-            self.client.post('/accounts/login/', {'phone': owner.phone_number, 'name': 'Updated Owner'})
+            self.client.post('/accounts/login/', {'phone': owner.phone_number})
         otp = send_otp.call_args.args[1]
 
         response = self.client.post('/accounts/login/verify-otp/', {
@@ -102,13 +105,15 @@ class WhatsAppOTPLoginTests(TestCase):
         self.assertRedirects(response, '/dashboard/owner/', fetch_redirect_response=False)
         self.assertEqual(str(self.client.session['_auth_user_id']), str(owner.id))
         owner.refresh_from_db()
-        self.assertEqual(owner.name, 'Updated Owner')
+        self.assertEqual(owner.name, 'Ground Owner')
 
-    def test_whatsapp_login_requires_a_name(self):
-        response = self.client.post('/accounts/login/', {'phone': '9876543210'})
+    def test_whatsapp_login_does_not_require_a_name(self):
+        User.objects.create_user(email='login@example.com', phone_number='9876543210', name='Player', password='x', role='customer')
+        with patch('accounts.views.send_customer_login_otp', return_value=True):
+            response = self.client.post('/accounts/login/', {'phone': '9876543210'})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Enter your name')
+        self.assertTrue(response.context['otp_sent'])
 
     def test_login_page_includes_public_available_bookings_panel(self):
         response = self.client.get('/accounts/login/')
@@ -127,7 +132,6 @@ class EmailMagicLinkLoginTests(TestCase):
         next_url = '/grounds/12/?date=2026-07-21'
         with patch('accounts.views.send_mail') as send_mail:
             response = self.client.post('/accounts/email-login/', {
-                'name': 'Email Player',
                 'email': self.user.email,
                 'next': next_url,
             })
@@ -136,15 +140,14 @@ class EmailMagicLinkLoginTests(TestCase):
         self.assertContains(response, 'secure sign-in link')
         verification = EmailVerification.objects.get(user=self.user)
         body = send_mail.call_args.args[1]
-        self.assertIn('name=Email%20Player', body)
         self.assertIn('next=/grounds/12/%3Fdate%3D2026-07-21', body)
 
-        response = self.client.get(f'/accounts/verify-email/{verification.token}/?name=Email%20Player&next=/grounds/12/%3Fdate%3D2026-07-21')
+        response = self.client.get(f'/accounts/verify-email/{verification.token}/?next=/grounds/12/%3Fdate%3D2026-07-21')
         self.assertRedirects(response, next_url, fetch_redirect_response=False)
         self.assertEqual(str(self.client.session['_auth_user_id']), str(self.user.id))
         self.user.refresh_from_db()
         self.assertTrue(self.user.email_verified)
-        self.assertEqual(self.user.name, 'Email Player')
+        self.assertEqual(self.user.name, 'Player')
 
 
 class WhatsAppTemplatePayloadTests(TestCase):
@@ -507,20 +510,17 @@ class AdminGroundCrudTests(TestCase):
 @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
 class RegistrationResilienceTests(TestCase):
     @patch('accounts.views.send_mail', side_effect=Exception('SMTP down'))
-    def test_register_succeeds_when_email_sending_fails(self, mocked_send_mail):
+    def test_email_signup_does_not_create_an_account_when_email_sending_fails(self, mocked_send_mail):
         response = self.client.post('/accounts/register/', {
+            'mode': 'email',
             'email': 'newuser@example.com',
-            'phone_number': '9999912345',
             'name': 'New User',
-            'password': 'password123',
-            'password_confirm': 'password123',
         })
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(User.objects.filter(email='newuser@example.com').exists())
-        self.assertTrue(EmailVerification.objects.filter(user__email='newuser@example.com').exists())
-        self.assertContains(response, 'wa.me/918625877270')
-        self.assertContains(response, 'newuser%40example.com')
+        self.assertFalse(User.objects.filter(email='newuser@example.com').exists())
+        self.assertFalse(EmailVerification.objects.filter(user__email='newuser@example.com').exists())
+        self.assertContains(response, 'could not send the verification link')
 
     def test_register_page_hides_referral_code_field(self):
         response = self.client.get('/accounts/register/')

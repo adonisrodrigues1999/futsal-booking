@@ -8,6 +8,7 @@ urlpatterns = [
     path('email-login/', views.email_login_view, name='email_login'),
     path('logout/', views.logout_view, name='logout'),
     path('verify-email/<str:token>/', views.verify_email, name='verify_email'),
+    path('verify-signup-email/<str:token>/', views.verify_email_signup, name='verify_email_signup'),
     path('resend-verification/', views.resend_verification, name='resend_verification'),
     path('password-reset/', views.password_reset_request, name='password_reset'),
     path('password-reset/done/', views.password_reset_done, name='password_reset_done'),

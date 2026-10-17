@@ -26,11 +26,12 @@ from django import forms
 from .models import User, CustomerLoginOTP
 from bookings.whatsapp import send_customer_login_otp
 from django.contrib.auth.hashers import check_password, make_password
+from django.core import signing
 from bookings.models import EmailVerification
 from bookings.models import Booking
 from bookings.money import ground_collected_amount_expression, online_collected_amount_expression
 from bookings.slot_generation import create_initial_slots_for_ground
-from .forms import EmailMagicLinkForm, UserRegistrationForm, UserLoginForm, GroundOwnerCreationForm, GroundOwnerEditForm, GroundCreationForm, CustomerProfileForm
+from .forms import EmailMagicLinkForm, UserLoginForm, MobileSignupForm, EmailSignupForm, GroundOwnerCreationForm, GroundOwnerEditForm, GroundCreationForm, CustomerProfileForm
 from grounds.models import Ground, Tournament, TournamentRegistration
 
 
@@ -149,21 +150,31 @@ def _email_login_url(*, next_url='', slot_id=''):
     return f"{reverse('email_login')}?{'&'.join(query_bits)}" if query_bits else reverse('email_login')
 
 
-def _send_email_login_link(*, request, user, name, next_url='', slot_id=''):
+def _whatsapp_login_url(*, next_url='', slot_id=''):
+    query_bits = []
+    if next_url:
+        query_bits.append(f'next={quote(next_url)}')
+    if slot_id:
+        query_bits.append(f'slot={quote(str(slot_id))}')
+    return f"{reverse('login')}?{'&'.join(query_bits)}" if query_bits else reverse('login')
+
+
+def _send_email_login_link(*, request, user, next_url='', slot_id=''):
     """Create a fresh, single-use link and email it to an existing account."""
     verification, _ = EmailVerification.objects.get_or_create(user=user)
     verification.token = uuid.uuid4()
     verification.is_verified = False
     verification.save(update_fields=['token', 'is_verified'])
     verification_url = request.build_absolute_uri(reverse('verify_email', args=[verification.token]))
-    query_bits = [f'name={quote(name)}']
+    query_bits = []
     if next_url:
         query_bits.append(f'next={quote(next_url)}')
         if slot_id:
             query_bits.append(f'slot={quote(str(slot_id))}')
     elif slot_id:
         query_bits.append(f'slot={quote(str(slot_id))}')
-    verification_url = f"{verification_url}?{'&'.join(query_bits)}"
+    if query_bits:
+        verification_url = f"{verification_url}?{'&'.join(query_bits)}"
     send_mail(
         'Your FootBook sign-in link',
         (
@@ -177,16 +188,10 @@ def _send_email_login_link(*, request, user, name, next_url='', slot_id=''):
     )
 
 
-def _customer_for_verified_phone(phone, name):
-    """Return the existing customer, or create one only after OTP verification."""
-    user = User.objects.filter(phone_number=phone).first()
-    if user:
-        if user.name != name:
-            user.name = name
-            user.save(update_fields=['name'])
-        return user
-    # The existing user schema requires an email. This internal placeholder is
-    # never used for notifications and can be replaced from the profile later.
+def _create_customer_for_verified_phone(phone, name):
+    """Create a mobile customer after, and only after, OTP verification."""
+    # The existing schema requires an email. This internal placeholder is never
+    # used for notifications and can be replaced from the profile later.
     try:
         with transaction.atomic():
             user = User(
@@ -198,6 +203,26 @@ def _customer_for_verified_phone(phone, name):
             return user
     except IntegrityError:
         return User.objects.get(phone_number=phone)
+
+
+def _placeholder_phone_number():
+    """The legacy User schema requires a phone for email-only customers."""
+    while True:
+        phone = f'9{secrets.randbelow(1_000_000_000):09d}'
+        if not User.objects.filter(phone_number=phone).exists():
+            return phone
+
+
+def _signup_url(mode, *, next_url='', slot_id='', identifier=''):
+    query_bits = [f'mode={quote(mode)}']
+    if identifier:
+        field = 'phone' if mode == 'mobile' else 'email'
+        query_bits.append(f'{field}={quote(identifier)}')
+    if next_url:
+        query_bits.append(f'next={quote(next_url)}')
+    if slot_id:
+        query_bits.append(f'slot={quote(str(slot_id))}')
+    return f"{reverse('register')}?{'&'.join(query_bits)}"
 
 
 def _recover_login_after_csrf_failure(request):
@@ -302,121 +327,56 @@ def csrf_failure(request, reason=""):
 def register(request):
     if request.user.is_authenticated:
         return redirect('home')
+    mode = request.POST.get('mode') or request.GET.get('mode') or 'mobile'
+    if mode not in {'mobile', 'email'}:
+        mode = 'mobile'
+    next_url = request.POST.get('next', request.GET.get('next', ''))
+    slot_id = request.POST.get('slot', request.GET.get('slot', ''))
+    form_class = MobileSignupForm if mode == 'mobile' else EmailSignupForm
+    initial = {'phone' if mode == 'mobile' else 'email': request.GET.get('phone' if mode == 'mobile' else 'email', '')}
+    form = form_class(request.POST or None, initial=initial)
 
-    if request.method == 'POST':
-        # Normalise raw values before form validation so we catch duplicates early.
-        raw_email = (request.POST.get('email') or '').strip().lower()
-        raw_phone = (request.POST.get('phone_number') or '').strip()
-        if raw_phone.startswith('+91'):
-            raw_phone = raw_phone[3:]
-        elif raw_phone.startswith('91') and len(raw_phone) > 10:
-            raw_phone = raw_phone[2:]
-
-        if raw_email:
-            existing = User.objects.filter(email__iexact=raw_email).first()
-            if existing:
-                if existing.email_verified:
-                    messages.info(
-                        request,
-                        'An account with this email already exists and is verified. Please login instead.'
-                    )
-                else:
-                    messages.info(
-                        request,
-                        'An account with this email already exists but is not yet verified. '
-                        'Please check your inbox for the verification link or login to resend it.'
-                    )
-                return redirect(f"{reverse('login')}?identifier={raw_email}")
-
-        if raw_phone:
-            if User.objects.filter(phone_number=raw_phone).exists():
-                messages.info(
-                    request,
-                    'An account with this phone number already exists. Please login instead.'
-                )
-                return redirect(f"{reverse('login')}?identifier={raw_phone}")
-
-        form = UserRegistrationForm(request.POST)
-        if form.is_valid():
-            email = form.cleaned_data.get('email')
-            phone = form.cleaned_data.get('phone_number')
-
-            user = form.save(commit=False)
-            user.email_verified = False
-            user.save()
-
-            # Create email verification token
-            verification = EmailVerification.objects.create(user=user)
-
-            # Send verification email
-            verification_url = request.build_absolute_uri(
-                reverse('verify_email', args=[verification.token])
-            )
-            from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
-            email_sent = False
-            logger.info(
-                "Register verification email attempt backend=%s from=%s to=%s",
-                getattr(settings, 'EMAIL_BACKEND', 'unknown'),
-                from_email,
-                user.email,
-            )
-            try:
-                send_mail(
-                    'Verify your email - FootBook',
-                    f'Click the link to verify your email: {verification_url}',
-                    from_email,
-                    [user.email],
-                    fail_silently=False,
-                )
-                email_sent = True
-                logger.info("Register verification email sent to %s", user.email)
-            except Exception:
-                logger.exception("Register verification email failed for %s", user.email)
-                messages.warning(
-                    request,
-                    'Registration succeeded, but the verification email could not be sent right now. '
-                    'You can use WhatsApp support if needed.'
-                )
-
-            whatsapp_support_link = _whatsapp_support_link(
-                email=user.email,
-                verification_url=verification_url,
-            )
-
-            # Instead of redirecting immediately, render the register page
-            # and set a flag so the frontend shows a prominent popup and
-            # then redirects the user to the login page.
-            if email_sent:
-                messages.success(
-                    request,
-                    'Registration successful! Please check your email to verify your account. '
-                    'Also check your spam or junk folder if you do not see it in your inbox.'
-                )
+    if request.method == 'POST' and form.is_valid():
+        name = form.cleaned_data['name']
+        if mode == 'mobile':
+            phone = _normalise_indian_phone(form.cleaned_data['phone'])
+            if not phone:
+                form.add_error('phone', 'Enter a valid 10-digit Indian mobile number.')
+            elif User.objects.filter(phone_number=phone).exists():
+                messages.info(request, 'This mobile number is already registered. Please log in.')
+                return redirect(f"{reverse('login')}?phone={quote(phone)}")
             else:
-                messages.warning(
-                    request,
-                    'Registration successful! We could not send the verification email right now. '
-                    'You can use WhatsApp support to get verified, or try logging in to resend the verification.'
+                otp = f'{secrets.randbelow(1_000_000):06d}'
+                record = CustomerLoginOTP.objects.create(
+                    phone_number=phone, code_hash=make_password(otp),
+                    expires_at=timezone.now() + timedelta(minutes=settings.CUSTOMER_OTP_EXPIRY_MINUTES),
+                    requested_ip=_request_ip(request),
                 )
-            form = UserRegistrationForm()
-            return render(request, 'accounts/register.html', {
-                'form': form,
-                'show_verification_popup': True,
-                'show_whatsapp_fallback': not email_sent,
-                'whatsapp_support_link': whatsapp_support_link,
-                'verification_message': (
-                    'Registration successful! Please check your email to verify your account. '
-                    'Also check your spam or junk folder if you do not see it in your inbox.'
-                )
-            })
-    else:
-        initial = {}
-        email_param = request.GET.get('email', '')
-        if email_param:
-            initial['email'] = email_param
-        form = UserRegistrationForm(initial=initial)
+                if send_customer_login_otp(phone, otp):
+                    request.session['footbook_otp_id'] = record.id
+                    request.session['footbook_otp_signup'] = {'name': name, 'phone': phone}
+                    return render(request, 'accounts/register.html', {
+                        'form': form_class(initial={'phone': phone}), 'mode': mode, 'otp_sent': True,
+                        'phone': phone, 'next': next_url, 'slot': slot_id,
+                    })
+                record.delete()
+                messages.error(request, 'We could not send a WhatsApp OTP right now. Please try again shortly.')
+        else:
+            email = form.cleaned_data['email']
+            if User.objects.filter(email__iexact=email).exists():
+                messages.info(request, 'This email is already registered. Please sign in.')
+                return redirect(_email_login_url(next_url=next_url, slot_id=slot_id))
+            token = signing.dumps({'name': name, 'email': email, 'next': next_url, 'slot': slot_id}, salt='accounts.email-signup')
+            verification_url = request.build_absolute_uri(reverse('verify_email_signup', args=[token]))
+            try:
+                send_mail('Verify your FootBook account', f'Click this secure link to create your FootBook account and sign in:\n\n{verification_url}', getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None), [email], fail_silently=False)
+            except Exception:
+                logger.exception('Email signup link failed for %s', email)
+                messages.error(request, 'We could not send the verification link right now. Please try again shortly.')
+            else:
+                messages.success(request, 'Check your email for a secure verification link. Your account will be created when you open it.')
 
-    return render(request, 'accounts/register.html', {'form': form})
+    return render(request, 'accounts/register.html', {'form': form, 'mode': mode, 'next': next_url, 'slot': slot_id})
 
 
 @ensure_csrf_cookie
@@ -428,14 +388,14 @@ def login_view(request):
     context = {'next': next_url, 'slot': slot_id_param, 'otp_sent': False}
     if request.method == 'POST':
         phone = _normalise_indian_phone(request.POST.get('phone'))
-        name = _normalise_customer_name(request.POST.get('name'))
         next_url = request.POST.get('next', '')
         slot_id_param = request.POST.get('slot', '')
         context.update({'next': next_url, 'slot': slot_id_param})
-        if not name:
-            messages.error(request, 'Enter your name (at least 2 characters).')
-        elif not phone:
+        if not phone:
             messages.error(request, 'Enter a valid 10-digit Indian mobile number.')
+        elif not User.objects.filter(phone_number=phone, is_active=True).exists():
+            messages.info(request, 'This mobile number is not registered with FootBook.')
+            context['signup_redirect_url'] = _signup_url('mobile', next_url=next_url, slot_id=slot_id_param, identifier=phone)
         elif not getattr(settings, 'CUSTOMER_WHATSAPP_OTP_ENABLED', True):
             messages.error(request, 'WhatsApp login is temporarily unavailable. Please use email login.')
         else:
@@ -447,14 +407,14 @@ def login_view(request):
                     CustomerLoginOTP.objects.filter(phone_number=phone, used_at__isnull=True).update(used_at=timezone.now())
                     otp = f'{secrets.randbelow(1_000_000):06d}'
                     record = CustomerLoginOTP.objects.create(
-                        phone_number=phone, code_hash=make_password(otp),
+                        user=User.objects.get(phone_number=phone), phone_number=phone, code_hash=make_password(otp),
                         expires_at=timezone.now() + timedelta(minutes=settings.CUSTOMER_OTP_EXPIRY_MINUTES),
                         requested_ip=_request_ip(request),
                     )
                     if send_customer_login_otp(phone, otp):
                         request.session['footbook_otp_id'] = record.id
-                        request.session['footbook_otp_name'] = name
-                        context.update({'otp_sent': True, 'phone': phone, 'name': name})
+                        request.session.pop('footbook_otp_signup', None)
+                        context.update({'otp_sent': True, 'phone': phone})
                         messages.success(request, 'Your OTP has been sent to WhatsApp.')
                     else:
                         record.delete()
@@ -481,8 +441,8 @@ def verify_customer_otp(request):
     phone = _normalise_indian_phone(request.POST.get('phone'))
     otp = (request.POST.get('otp') or '').strip()
     otp_id = request.session.get('footbook_otp_id')
-    name = _normalise_customer_name(request.session.get('footbook_otp_name'))
-    if not phone or not name or not re.fullmatch(r'\d{6}', otp) or not otp_id:
+    signup = request.session.get('footbook_otp_signup')
+    if not phone or not re.fullmatch(r'\d{6}', otp) or not otp_id:
         messages.error(request, 'Enter the 6-digit OTP sent to your WhatsApp.')
         return redirect('login')
     with transaction.atomic():
@@ -503,12 +463,18 @@ def verify_customer_otp(request):
             record.save(update_fields=['attempts'])
             messages.error(request, 'Incorrect OTP. Please try again.')
             return redirect(f'{reverse("login")}?phone={phone}')
-        user = _customer_for_verified_phone(phone, name)
+        if signup and signup.get('phone') == phone:
+            user = _create_customer_for_verified_phone(phone, _normalise_customer_name(signup.get('name')))
+        else:
+            user = record.user
+        if user is None:
+            messages.error(request, 'That OTP is no longer valid. Request a new one.')
+            return redirect('login')
         record.user = user
         record.used_at = timezone.now()
         record.save(update_fields=['user', 'used_at', 'attempts'])
     request.session.pop('footbook_otp_id', None)
-    request.session.pop('footbook_otp_name', None)
+    request.session.pop('footbook_otp_signup', None)
     login(request, user, backend='django.contrib.auth.backends.ModelBackend')
     messages.success(request, 'You are logged in.')
     return redirect(_post_login_redirect_url(request, user, next_url=request.POST.get('next', ''), slot_id=request.POST.get('slot', '')))
@@ -528,7 +494,7 @@ def email_login_view(request):
         if user and user.is_active:
             try:
                 _send_email_login_link(
-                    request=request, user=user, name=form.cleaned_data['name'],
+                    request=request, user=user,
                     next_url=next_url, slot_id=slot_id,
                 )
             except Exception:
@@ -537,14 +503,18 @@ def email_login_view(request):
             else:
                 messages.success(request, 'Check your email for a secure sign-in link. It will log you in directly.')
         else:
-            # Keep the response neutral, while giving a legitimate new customer
-            # a clear route to create the account that owns this email address.
-            messages.info(request, 'If this email has a FootBook account, a sign-in link will arrive shortly. New here? Please register first.')
+            messages.info(request, 'This email is not registered with FootBook.')
+            signup_redirect_url = _signup_url('email', next_url=next_url, slot_id=slot_id, identifier=form.cleaned_data['email'])
+            return render(request, 'accounts/email_login.html', {
+                'form': form, 'next': next_url, 'slot': slot_id,
+                'whatsapp_login_url': _whatsapp_login_url(next_url=next_url, slot_id=slot_id),
+                'signup_redirect_url': signup_redirect_url,
+            })
     return render(request, 'accounts/email_login.html', {
         'form': form,
         'next': next_url,
         'slot': slot_id,
-        'whatsapp_login_url': f"{reverse('login')}?next={quote(next_url)}" if next_url else reverse('login'),
+        'whatsapp_login_url': _whatsapp_login_url(next_url=next_url, slot_id=slot_id),
     })
 
 
@@ -618,10 +588,6 @@ def verify_email(request, token):
         else:
             messages.info(request, 'Email already verified. You are now logged in.')
 
-        name = _normalise_customer_name(request.GET.get('name'))
-        if name and verification.user.name != name:
-            verification.user.name = name
-            verification.user.save(update_fields=['name'])
         login(request, verification.user, backend='django.contrib.auth.backends.ModelBackend')
         next_url = request.GET.get('next', '')
         slot_id = request.GET.get('slot', '')
@@ -637,6 +603,38 @@ def verify_email(request, token):
         messages.error(request, 'Invalid verification link.')
 
     return redirect('login')
+
+
+def verify_email_signup(request, token):
+    """Create an email signup account only once its signed email link is opened."""
+    try:
+        data = signing.loads(token, salt='accounts.email-signup', max_age=60 * 60 * 24)
+        name = _normalise_customer_name(data.get('name'))
+        email = (data.get('email') or '').strip().lower()
+        if not name or not email:
+            raise signing.BadSignature
+    except signing.BadSignature:
+        messages.error(request, 'This verification link is invalid or has expired. Please sign up again.')
+        return redirect(_signup_url('email'))
+
+    with transaction.atomic():
+        user = User.objects.filter(email__iexact=email).first()
+        if user is None:
+            user = User(
+                email=email, phone_number=_placeholder_phone_number(), name=name,
+                role='customer', email_verified=True,
+            )
+            user.set_unusable_password()
+            user.save()
+        elif not user.is_active:
+            messages.error(request, 'This account is not available for sign-in.')
+            return redirect('login')
+
+    login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+    messages.success(request, 'Your FootBook account is ready. You are now logged in.')
+    return redirect(_post_login_redirect_url(
+        request, user, next_url=data.get('next', ''), slot_id=data.get('slot', ''),
+    ))
 
 
 class PasswordResetRequestForm(forms.Form):

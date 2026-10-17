@@ -137,6 +137,7 @@ class BookingFlowTests(TestCase):
             'slot': str(slot.id),
             'name': 'Walkin User',
             'phone': '9999911111',
+            'confirm_booking': '1',
         })
         self.assertEqual(response.status_code, 302)
 
@@ -162,9 +163,9 @@ class BookingFlowTests(TestCase):
 
         response = self.client.post('/owner/manual-booking/', {
             'slot': str(slot.id), 'name': 'Walk-in', 'phone': 'invalid',
-        }, follow=True)
+        })
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'valid 10-digit Indian')
+        self.assertContains(response, 'Review Manual Booking')
         self.assertFalse(Booking.objects.filter(slot=slot).exists())
 
     def test_manual_booking_rejects_malformed_slot_id_without_a_server_error(self):
@@ -192,6 +193,7 @@ class BookingFlowTests(TestCase):
             'repeat_enabled': 'on',
             'repeat_every_weeks': '2',
             'repeat_occurrences': '2',
+            'confirm_booking': '1',
         })
         self.assertEqual(response.status_code, 302)
 
@@ -221,6 +223,7 @@ class BookingFlowTests(TestCase):
             'repeat_every_weeks': '1',
             'repeat_occurrences': '2',
             'repeat_weekdays': ['1', '2', '5'],
+            'confirm_booking': '1',
         })
         self.assertEqual(response.status_code, 302)
 
@@ -846,6 +849,7 @@ class BookingFlowTests(TestCase):
         self.assertFalse(Booking.objects.filter(customer_name='Training Group', booking_source='MANUAL').exists())
 
         confirm_payload = dict(payload)
+        confirm_payload['confirm_booking'] = '1'
         confirm_payload['confirm_conflicts'] = '1'
         confirm_response = self.client.post('/owner/manual-booking/', confirm_payload)
         self.assertEqual(confirm_response.status_code, 302)

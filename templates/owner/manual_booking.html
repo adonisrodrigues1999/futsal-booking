@@ -65,9 +65,7 @@
       {% csrf_token %}
       <input type="hidden" name="ground" value="{{ selected_ground.id }}">
       <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
-      {% if manual_booking_preview %}
-        <input type="hidden" name="confirm_conflicts" value="1">
-      {% endif %}
+      <input type="hidden" name="confirm_booking" id="confirm_booking" value="">
       <div class="card-body">
         <div class="row g-4">
           <div class="col-lg-7">
@@ -109,7 +107,7 @@
                 </div>
                 <div class="mb-3">
                   <label for="phone" class="form-label">Phone Number</label>
-                  <input type="tel" name="phone" id="phone" class="form-control" placeholder="10-digit phone number" value="{{ manual_phone|default:'' }}" required>
+                  <input type="tel" name="phone" id="phone" class="form-control" placeholder="Enter phone number" value="{{ manual_phone|default:'' }}" required>
                 </div>
                 <div class="border rounded p-3 mb-3">
                   <div class="form-check mb-2">
@@ -153,7 +151,7 @@
                         <li>{{ conflict.label }}</li>
                       {% endfor %}
                     </ul>
-                    <div class="mt-2">If you continue, FootBook will create only the available slots and skip the booked ones.</div>
+                    <div class="mt-2">You can choose to skip these slots when you confirm.</div>
                   </div>
                 {% endif %}
                 <div class="p-3 bg-light rounded">
@@ -195,30 +193,37 @@
         <div class="review-summary-grid">
           <div class="review-summary-item">
             <div class="small text-muted">Ground</div>
-            <div class="fw-semibold" id="review-ground"></div>
+            <div class="fw-semibold" id="review-ground">{% if manual_booking_preview %}{{ selected_ground.name }}{% endif %}</div>
           </div>
           <div class="review-summary-item">
             <div class="small text-muted">Date</div>
-            <div class="fw-semibold" id="review-date"></div>
+            <div class="fw-semibold" id="review-date">{% if manual_booking_preview %}{{ selected_date|format_date_with_day }}{% endif %}</div>
           </div>
           <div class="review-summary-item">
             <div class="small text-muted">Customer</div>
-            <div class="fw-semibold" id="review-name"></div>
+            <div class="fw-semibold" id="review-name">{% if manual_booking_preview %}{{ manual_booking_preview.name }}{% endif %}</div>
           </div>
           <div class="review-summary-item">
             <div class="small text-muted">Phone</div>
-            <div class="fw-semibold" id="review-phone"></div>
+            <div class="fw-semibold" id="review-phone">{% if manual_booking_preview %}{{ manual_booking_preview.phone }}{% endif %}</div>
           </div>
           <div class="review-summary-item review-summary-item-wide">
             <div class="small text-muted">Selected Slots</div>
-            <div class="fw-semibold" id="review-slots"></div>
+            <div class="fw-semibold" id="review-slots">{% if manual_booking_preview %}{% for slot in manual_booking_preview.slots %}<div>{{ slot.label }} — ₹{{ slot.amount }}</div>{% empty %}No available slots remain.{% endfor %}{% endif %}</div>
           </div>
           <div class="review-summary-item">
             <div class="small text-muted">Total Amount</div>
-            <div class="fw-semibold text-success" id="review-total"></div>
+            <div class="fw-semibold text-success" id="review-total">{% if manual_booking_preview %}₹{{ manual_booking_preview.total_amount }}{% endif %}</div>
           </div>
         </div>
-        <div class="alert alert-light border mt-3 mb-0 py-2 small" id="review-repeat"></div>
+        <div class="alert alert-light border mt-3 mb-0 py-2 small" id="review-repeat">{% if manual_booking_preview.repeat_enabled %}Repeat booking: {{ manual_booking_preview.repeat_occurrences }} occurrence(s), every {{ manual_booking_preview.repeat_every_weeks }} week(s).{% else %}Single booking only.{% endif %}</div>
+        {% if manual_booking_preview and manual_booking_preview.conflicts %}
+          <div class="alert alert-warning mt-3 mb-0">
+            <div class="fw-semibold">{{ manual_booking_preview.conflicts|length }} slot(s) are already booked.</div>
+            <div class="small mb-2">Confirming will create the available slots only.</div>
+            <label class="form-check"><input class="form-check-input" type="checkbox" id="confirm-conflicts-choice"> <span class="form-check-label">Skip the booked slots and continue</span></label>
+          </div>
+        {% endif %}
       </div>
       <div class="modal-footer border-0 pt-0">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Edit</button>
@@ -386,12 +391,34 @@
       }, true);
 
       reviewConfirmBtn.addEventListener('click', function() {
+        const conflictChoice = document.getElementById('confirm-conflicts-choice');
+        if (conflictChoice && !conflictChoice.checked) {
+          conflictChoice.focus();
+          return;
+        }
+        const confirmField = document.getElementById('confirm_booking');
+        if (confirmField) confirmField.value = '1';
+        if (conflictChoice) {
+          let conflictField = manualForm.querySelector('input[name="confirm_conflicts"]');
+          if (!conflictField) {
+            conflictField = document.createElement('input');
+            conflictField.type = 'hidden';
+            conflictField.name = 'confirm_conflicts';
+            manualForm.appendChild(conflictField);
+          }
+          conflictField.value = '1';
+        }
+        manualForm.dataset.manualConfirmed = '1';
         reviewModal.hide();
         if (typeof window.showProcessingOverlay === 'function') {
           window.showProcessingOverlay('Submitting booking...', 'Finalizing the manual booking');
         }
         manualForm.submit();
       });
+
+      {% if manual_booking_preview %}
+        reviewModal.show();
+      {% endif %}
     }
 
     updateSummary();

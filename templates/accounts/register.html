@@ -1,146 +1,24 @@
 {% extends 'base/base.html' %}
-{% block title %}Register{% endblock %}
-
+{% block title %}Create a FootBook account{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-10 col-lg-8">
-    <div class="page-shell">
-      <h4 class="text-center mb-4">Create Your FootBook Account</h4>
-
-      {% if messages %}
-        {% for message in messages %}
-          <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-          </div>
-        {% endfor %}
-      {% endif %}
-
-      <form method="post">
-        {% csrf_token %}
-
-        <div class="row">
-          <div class="col-md-6 mb-3">
-            <label for="{{ form.name.id_for_label }}" class="form-label">Full Name</label>
-            {{ form.name }}
-            {% if form.name.errors %}
-              <div class="text-danger small">{% for error in form.name.errors %}{{ error }}{% endfor %}</div>
-            {% endif %}
-          </div>
-          <div class="col-md-6 mb-3">
-            <label for="{{ form.email.id_for_label }}" class="form-label">Email Address</label>
-            {{ form.email }}
-            {% if form.email.errors %}
-              <div class="text-danger small">{% for error in form.email.errors %}{{ error }}{% endfor %}</div>
-            {% endif %}
-            <div class="form-text">Verification link will be sent to this email. Check inbox or spam folder.</div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-md-6 mb-3">
-            <label for="{{ form.phone_number.id_for_label }}" class="form-label">Phone Number</label>
-            {{ form.phone_number }}
-            {% if form.phone_number.errors %}
-              <div class="text-danger small">{% for error in form.phone_number.errors %}{{ error }}{% endfor %}</div>
-            {% endif %}
-            {% if form.phone_number.help_text %}
-              <div class="form-text">{{ form.phone_number.help_text }}</div>
-            {% endif %}
-          </div>
-        </div>
-
-        <div class="card border-0 bg-light p-3 mb-3">
-          <h6 class="mb-3">Alert Preferences</h6>
-          <div class="row g-2 small">
-            <div class="col-md-6 form-check">{{ form.notify_price_drops }} <label class="form-check-label" for="{{ form.notify_price_drops.id_for_label }}">Price drop alerts</label></div>
-            <div class="col-md-6 form-check">{{ form.notify_last_minute }} <label class="form-check-label" for="{{ form.notify_last_minute.id_for_label }}">Last-minute opening alerts</label></div>
-            <div class="col-md-6 form-check">{{ form.notify_nearby_tournaments }} <label class="form-check-label" for="{{ form.notify_nearby_tournaments.id_for_label }}">Nearby tournament alerts</label></div>
-            <div class="col-md-6 form-check">{{ form.email_alerts }} <label class="form-check-label" for="{{ form.email_alerts.id_for_label }}">Email alerts</label></div>
-            <div class="col-md-6 form-check">{{ form.push_alerts }} <label class="form-check-label" for="{{ form.push_alerts.id_for_label }}">Push alerts</label></div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-md-6 mb-3">
-            <label for="id_password" class="form-label">Password</label>
-            <div class="input-group">
-              <input type="password" name="password" id="id_password" class="form-control" required aria-describedby="pw-toggle">
-              <button class="btn btn-outline-secondary" data-toggle="pw-toggle" data-target="#id_password" id="pw-toggle">Show</button>
-            </div>
-            <div class="mt-2 password-hint">Use at least 6 characters with numbers or symbols.</div>
-            <div class="mt-2 strength-bar"><div id="pw-strength-level" class="strength-level"></div></div>
-            {% if form.password.errors %}
-              <div class="text-danger small">{% for error in form.password.errors %}{{ error }}{% endfor %}</div>
-            {% endif %}
-          </div>
-
-          <div class="col-md-6 mb-3">
-            <label for="id_password_confirm" class="form-label">Confirm Password</label>
-            <div class="input-group">
-              <input type="password" name="password_confirm" id="id_password_confirm" class="form-control" required aria-describedby="pw-toggle-confirm">
-              <button class="btn btn-outline-secondary" data-toggle="pw-toggle" data-target="#id_password_confirm" id="pw-toggle-confirm">Show</button>
-            </div>
-            {% if form.password_confirm.errors %}
-              <div class="text-danger small">{% for error in form.password_confirm.errors %}{{ error }}{% endfor %}</div>
-            {% endif %}
-          </div>
-        </div>
-
-        <div class="mb-3 form-check">
-          <input type="checkbox" class="form-check-input" id="terms" required>
-          <label class="form-check-label" for="terms">
-            I agree to the <a href="{% url 'terms_conditions' %}" target="_blank" rel="noopener">Terms & Conditions</a>
-          </label>
-        </div>
-
-        <div class="d-grid">
-          <button type="submit" class="btn btn-primary">Create Account</button>
-        </div>
-      </form>
-
-      <div class="text-center mt-3 small">
-        <p class="mb-0">Already have an account? <a href="{% url 'login' %}">Login here</a></p>
-      </div>
-    </div>
-  </div>
-</div>
-{% if show_verification_popup %}
-  <div id="verificationModal" class="verification-popup-shell" role="dialog" aria-modal="true">
-    <div class="verification-popup-card">
-      <div class="modal-body p-4 text-center">
-        <div class="verification-popup-badge mb-2">Almost there</div>
-        <h4 class="mb-3">Registration Successful</h4>
-        <p class="mb-3 verification-popup-copy">
-          <span class="verification-highlight">Check your mail for verification</span>
-          <span class="d-block mt-2">{{ verification_message }}</span>
-        </p>
-        {% if show_whatsapp_fallback %}
-          <p class="mb-3">
-            If the email still does not arrive, send the same details on WhatsApp for manual help.
-          </p>
-          <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center mb-3">
-            <a href="{{ whatsapp_support_link }}" target="_blank" rel="noopener" class="btn btn-success">
-              Send WhatsApp Message
-            </a>
-          </div>
-        {% endif %}
-        <div class="d-flex justify-content-center">
-          <button id="verify-ok" class="btn btn-primary">Go to Login</button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <script>
-    (function(){
-      var btn = document.getElementById('verify-ok');
-      if(btn){
-        btn.addEventListener('click', function(){
-          window.location.href = "{% url 'login' %}";
-        });
-      }
-    })();
-  </script>
-{% endif %}
-
+<div class="row justify-content-center py-4"><div class="col-md-7 col-lg-5"><div class="page-shell">
+  <h3 class="text-center mb-2">Create your FootBook account</h3>
+  <p class="text-center text-muted">{% if mode == 'email' %}We’ll create your account when you click the verification link.{% else %}We’ll create your account after you verify your WhatsApp OTP.{% endif %}</p>
+  {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}{% endif %}
+  <div class="text-center small mb-3">{% if mode == 'email' %}<a href="{% url 'register' %}?mode=mobile&next={{ next|urlencode }}&slot={{ slot|urlencode }}">Sign up with mobile instead</a>{% else %}<a href="{% url 'register' %}?mode=email&next={{ next|urlencode }}&slot={{ slot|urlencode }}">Sign up with email instead</a>{% endif %}</div>
+  {% if otp_sent %}
+    <form method="post" action="{% url 'verify_customer_otp' %}">{% csrf_token %}
+      <input type="hidden" name="phone" value="{{ phone }}"><input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}">
+      <div class="mb-3"><label class="form-label">WhatsApp OTP sent to +91 {{ phone }}</label><input class="form-control form-control-lg text-center" name="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="Enter 6-digit OTP" required autofocus></div>
+      <button class="btn btn-success btn-lg w-100">Verify OTP and create account</button>
+    </form>
+  {% else %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="mode" value="{{ mode }}"><input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="slot" value="{{ slot }}">
+      <div class="mb-3"><label class="form-label">Your name</label>{{ form.name }}{% if form.name.errors %}<div class="text-danger small">{{ form.name.errors|striptags }}</div>{% endif %}</div>
+      <div class="mb-3"><label class="form-label">{% if mode == 'email' %}Email address{% else %}Mobile number{% endif %}</label>{% if mode == 'email' %}{{ form.email }}{% if form.email.errors %}<div class="text-danger small">{{ form.email.errors|striptags }}</div>{% endif %}{% else %}<div class="input-group"><span class="input-group-text">+91</span>{{ form.phone }}</div>{% if form.phone.errors %}<div class="text-danger small">{{ form.phone.errors|striptags }}</div>{% endif %}{% endif %}</div>
+      <button class="btn btn-primary w-100" type="submit">{% if mode == 'email' %}Email me a verification link{% else %}Send WhatsApp OTP{% endif %}</button>
+    </form>
+  {% endif %}
+  <div class="text-center mt-3 small">Already have an account? {% if mode == 'email' %}<a href="{% url 'email_login' %}?next={{ next|urlencode }}&slot={{ slot|urlencode }}">Sign in with email</a>{% else %}<a href="{% url 'login' %}?next={{ next|urlencode }}&slot={{ slot|urlencode }}">Sign in with mobile</a>{% endif %}</div>
+</div></div></div>
 {% endblock %}

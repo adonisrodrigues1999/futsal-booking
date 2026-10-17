@@ -2655,16 +2655,12 @@ def owner_manual_booking(request):
         except (TypeError, ValueError):
             messages.error(request, 'One or more selected slots are invalid.')
             return redirect('/owner/manual-booking/')
-        normalised_phone = re.sub(r'\D', '', phone)
-        if normalised_phone.startswith('91') and len(normalised_phone) == 12:
-            normalised_phone = normalised_phone[2:]
         if not name:
             messages.error(request, 'Enter the customer name before creating a manual booking.')
             return redirect('/owner/manual-booking/')
-        if not re.fullmatch(r'[6-9]\d{9}', normalised_phone):
-            messages.error(request, 'Enter a valid 10-digit Indian customer phone number.')
+        if not phone:
+            messages.error(request, 'Enter the customer phone number before creating a manual booking.')
             return redirect('/owner/manual-booking/')
-        phone = normalised_phone
         repeat_enabled = request.POST.get('repeat_enabled') == 'on'
         try:
             repeat_every_weeks = int(request.POST.get('repeat_every_weeks') or 2)
@@ -2684,6 +2680,7 @@ def owner_manual_booking(request):
                 repeat_weekdays.append(weekday)
         repeat_weekdays = sorted(repeat_weekdays)
         confirm_conflicts = request.POST.get('confirm_conflicts') == '1'
+        confirm_booking = request.POST.get('confirm_booking') == '1'
         repeat_every_weeks = max(1, min(repeat_every_weeks, 12))
         repeat_occurrences = max(1, min(repeat_occurrences, 52))
         skip_creation = False
@@ -2741,7 +2738,7 @@ def owner_manual_booking(request):
                                 continue
                             target_rows.append((target_slot, occurrence_index * max(len(slot_weekdays), 1) + weekday_index))
 
-                if conflict_rows and not confirm_conflicts:
+                if conflict_rows and (not confirm_booking or not confirm_conflicts):
                     manual_booking_preview = {
                         'name': name,
                         'phone': phone,
@@ -2751,6 +2748,14 @@ def owner_manual_booking(request):
                         'repeat_occurrences': repeat_occurrences,
                         'repeat_weekdays': repeat_weekdays,
                         'conflicts': conflict_rows,
+                        'slots': [
+                            {
+                                'label': f"{slot.date.strftime('%a, %b %d, %Y')} · {slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}",
+                                'amount': _slot_price_for_slot(slot),
+                            }
+                            for slot, _ in target_rows
+                        ],
+                        'total_amount': sum(_slot_price_for_slot(slot) for slot, _ in target_rows),
                     }
                     messages.warning(
                         request,
@@ -2774,6 +2779,27 @@ def owner_manual_booking(request):
                         skip_creation = True
                     messages.error(request, 'No available slots found for booking.')
                     return redirect('/owner/manual-booking/')
+
+                if not confirm_booking and not skip_creation:
+                    manual_booking_preview = {
+                        'name': name,
+                        'phone': phone,
+                        'slot_ids': [str(value) for value in slot_ids],
+                        'repeat_enabled': repeat_enabled,
+                        'repeat_every_weeks': repeat_every_weeks,
+                        'repeat_occurrences': repeat_occurrences,
+                        'repeat_weekdays': repeat_weekdays,
+                        'conflicts': conflict_rows,
+                        'slots': [
+                            {
+                                'label': f"{slot.date.strftime('%a, %b %d, %Y')} · {slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}",
+                                'amount': _slot_price_for_slot(slot),
+                            }
+                            for slot, _ in target_rows
+                        ],
+                        'total_amount': sum(_slot_price_for_slot(slot) for slot, _ in target_rows),
+                    }
+                    skip_creation = True
 
                 if not skip_creation:
                     series_group = uuid.uuid4() if repeat_enabled and repeat_occurrences > 1 else None
@@ -2818,15 +2844,17 @@ def owner_manual_booking(request):
             messages.error(request, 'Invalid slot selected.')
             return redirect('/owner/manual-booking/')
 
-        if manual_booking_preview and not confirm_conflicts:
+        if manual_booking_preview and not confirm_booking:
             pass
+        elif manual_booking_preview and not confirm_conflicts:
+            messages.warning(request, 'Confirm that booked recurring slots should be skipped before creating the available bookings.')
         elif repeat_enabled and repeat_occurrences > 1:
             messages.success(request, f'Recurring manual booking created for {repeat_occurrences} occurrences.')
         else:
             messages.success(request, 'Manual booking created')
-        if confirm_conflicts and conflict_rows:
+        if confirm_booking and confirm_conflicts and conflict_rows:
             messages.warning(request, f'Skipped {len(conflict_rows)} already-booked recurring slot(s).')
-        if not manual_booking_preview or confirm_conflicts:
+        if not manual_booking_preview or (confirm_booking and confirm_conflicts):
             return redirect('/dashboard/owner/')
 
         manual_name = name
@@ -2838,8 +2866,8 @@ def owner_manual_booking(request):
         manual_repeat_weekdays = repeat_weekdays
 
     # GET handling: filter slots if ground+date provided
-    ground_id = request.GET.get('ground')
-    date_str = request.GET.get('date')
+    ground_id = request.GET.get('ground') or (str(selected_ground.id) if selected_ground else '')
+    date_str = request.GET.get('date') or (selected_date.isoformat() if selected_date else '')
     if ground_id:
         try:
             selected_ground = Ground.objects.get(id=ground_id, owner=owner, is_active=True)
